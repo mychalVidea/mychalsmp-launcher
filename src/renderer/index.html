@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="cs">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MYCHAL SMP Launcher</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <!-- Top Frameless Titlebar / Header -->
+    <header class="titlebar">
+        <div class="titlebar-drag">
+            <div class="brand">
+                <img src="assets/server-icon.png" alt="Server Icon" class="server-pixel-icon">
+                <span class="brand-title">MYCHAL<span>SMP</span></span>
+                <span class="brand-badge">26.x</span>
+            </div>
+
+            <!-- Greeting Banner -->
+            <div class="user-greeting-chip" id="userGreetingChip">
+                <img src="https://minotar.net/avatar/Steve/24" alt="Head" class="greeting-avatar" id="greetingAvatar">
+                <span class="greeting-text">Welcome back, <strong id="greetingNick">Steve</strong>!</span>
+            </div>
+
+            <!-- Network Status Chip -->
+            <div class="network-status-chip" id="networkChip">
+                <span class="status-dot" id="networkDot"></span>
+                <span class="status-text" id="networkText">mychalsmp.xyz • Připojuji...</span>
+            </div>
+
+            <!-- Auto Update Chip -->
+            <div class="update-status-chip" id="updateChip" style="display: none;">
+                <span class="update-dot"></span>
+                <span class="update-text" id="updateText">Nová verze k dispozici</span>
+                <button type="button" class="btn-update-chip" id="btnUpdateChip">Aktualizovat</button>
+            </div>
+        </div>
+
+        <div class="window-controls">
+            <button class="win-btn win-min" id="btnMinimize" title="Minimalizovat">
+                <svg width="10" height="1" viewBox="0 0 10 1">
+                    <rect width="10" height="1" fill="currentColor" />
+                </svg>
+            </button>
+            <button class="win-btn win-max" id="btnMaximize" title="Maximalizovat">
+                <svg width="10" height="10" viewBox="0 0 10 10">
+                    <rect width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.2" />
+                </svg>
+            </button>
+            <button class="win-btn win-close" id="btnClose" title="Zavřít">
+                <svg width="10" height="10" viewBox="0 0 10 10">
+                    <path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" stroke-width="1.2" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Compact Shell -->
+    <div class="app-layout">
+        <!-- Compact Vertical Icon Sidebar (Inspired by Dawn Client) -->
+        <aside class="sidebar-compact">
+            <div class="sidebar-nav-top">
+                <button class="nav-icon-btn active" data-tab="play" title="Domů & Profily">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                </button>
+                <button class="nav-icon-btn" data-tab="versions" title="Instalátory verzí 26.x">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                </button>
+                <button class="nav-icon-btn" data-tab="mods" title="Modrinth Katalog & Mody">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                        </path>
+                    </svg>
+                </button>
+                <button class="nav-icon-btn" data-tab="character" title="Postava & Skin">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                </button>
+                <button class="nav-icon-btn" data-tab="servers" title="Servery & Quick Play">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path
+                            d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z">
+                        </path>
+                    </svg>
+                </button>
+                <button class="nav-icon-btn" data-tab="settings" title="Nastavení & Java 25/21">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Bottom Fast Launch Trigger Button -->
+            <div class="sidebar-nav-bottom">
+                <button class="nav-play-trigger" id="sidebarPlayBtn" title="Spustit aktivní profil">
+                    <span>▶</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Viewport -->
+        <main class="content-viewport">
+
+            <!-- ══════════════════════════════════════════════════════════════════
+                 TAB 1: PLAY (DASHBOARD & LAST PLAYED PROFILES)
+            ══════════════════════════════════════════════════════════════════ -->
+            <section class="tab-pane active" id="tab-play">
+                <div class="dashboard-split">
+                    <!-- Left Area: Hero & Profiles -->
+                    <div class="dash-left">
+                        <!-- Hero Stage Banner -->
+                        <div class="hero-character-stage">
+                            <div class="stage-bg-overlay"></div>
+                            <div class="stage-character">
+                                <img src="https://minotar.net/armor/body/Steve/180.png" alt="Skin" id="heroSkinImg"
+                                    class="stage-skin">
+                                <div class="stage-nick-pill" id="stageNickPill">
+                                    <span id="heroNickLabel">Steve</span>
+                                    <button class="stage-edit-btn" id="btnEditNickFromHero"
+                                        title="Změnit postavu">✎</button>
+                                </div>
+                            </div>
+                            <div class="stage-caption">
+                                <div class="stage-badge">OFICIÁLNÍ SÍŤ MYCHAL SMP</div>
+                                <h1 class="stage-title">MYCHAL <span>SMP</span></h1>
+                                <p class="stage-subtitle">Rychlý start Minecraftu s optimalizací Sodium a přímým
+                                    napojením na síť.</p>
+                                <div class="version-pills-row">
+                                    <span class="v-pill active" title="Doporučená síťová verze">26.2 (Doporučeno)</span>
+                                    <span class="v-pill" title="Nejnovější aktivní vydání">26.3 (Nejnovější)</span>
+                                    <span class="v-pill" title="Legacy verze">26.1.2</span>
+                                    <span class="v-pill v-pill-future" title="V přípravě">26.4 (Prosinec)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Last Played Profiles List (Dawn Client Inspiration) -->
+                        <div class="profiles-section">
+                            <div class="section-title-row">
+                                <div class="section-heading">
+                                    <span class="clock-icon">🕒</span>
+                                    <span>Naposledy hrané profily</span>
+                                </div>
+                                <div class="edition-badges">
+                                    <span class="edition-badge active">Java Edition</span>
+                                </div>
+                            </div>
+
+                            <div class="profile-cards-list" id="profileCardsList">
+                                <!-- Profile Card 1: Minecraft 26.3 -->
+                                <div class="profile-row-card" data-profile-id="minecraft-26.3">
+                                    <div class="profile-icon-box frost-icon">✨</div>
+                                    <div class="profile-details">
+                                        <div class="profile-title-line">
+                                            <span class="p-name">Minecraft 26.3</span>
+                                            <span class="p-badge p-latest">Nejnovější 26.3</span>
+                                        </div>
+                                        <div class="p-meta">26.3 • Zatím nehráno</div>
+                                    </div>
+                                    <div class="profile-actions">
+                                        <button class="mc-btn mc-btn-green btn-launch-profile"
+                                            data-profile-id="minecraft-26.3">
+                                            <span>▶ Hrát</span>
+                                        </button>
+                                        <button class="mc-btn mc-btn-secondary btn-profile-settings"
+                                            title="Nastavení profilu">⚙</button>
+                                    </div>
+                                </div>
+
+                                <!-- Profile Card 2: Minecraft 26.2 -->
+                                <div class="profile-row-card active-profile" data-profile-id="minecraft-26.2">
+                                    <div class="profile-icon-box sword-icon">⚔️</div>
+                                    <div class="profile-details">
+                                        <div class="profile-title-line">
+                                            <span class="p-name">Minecraft 26.2</span>
+                                            <span class="p-badge p-recommended">Doporučeno 26.2</span>
+                                        </div>
+                                        <div class="p-meta">26.2 • Zatím nehráno</div>
+                                    </div>
+                                    <div class="profile-actions">
+                                        <button class="btn-upgrade-profile" data-profile-id="minecraft-26.2"
+                                            title="Upgradovat tento profil na novou verzi">
+                                            ⚡ Upgrade
+                                        </button>
+                                        <button class="mc-btn mc-btn-green btn-launch-profile"
+                                            data-profile-id="minecraft-26.2">
+                                            <span>▶ Hrát</span>
+                                        </button>
+                                        <button class="mc-btn mc-btn-secondary btn-profile-settings"
+                                            title="Nastavení profilu">⚙</button>
+                                    </div>
+                                </div>
+
+                                <!-- Profile Card 3: Minecraft 26.1.2 -->
+                                <div class="profile-row-card" data-profile-id="minecraft-26.1.2">
+                                    <div class="profile-icon-box chest-icon">📦</div>
+                                    <div class="profile-details">
+                                        <div class="profile-title-line">
+                                            <span class="p-name">Minecraft 26.1.2</span>
+                                            <span class="p-badge p-vanilla">Verze 26.1.2</span>
+                                        </div>
+                                        <div class="p-meta">26.1.2 • Zatím nehráno</div>
+                                    </div>
+                                    <div class="profile-actions">
+                                        <button class="btn-upgrade-profile" data-profile-id="minecraft-26.1.2"
+                                            title="Upgradovat tento profil na novou verzi">
+                                            ⚡ Upgrade
+                                        </button>
+                                        <button class="mc-btn mc-btn-green btn-launch-profile"
+                                            data-profile-id="minecraft-26.1.2">
+                                            <span>▶ Hrát</span>
+                                        </button>
+                                        <button class="mc-btn mc-btn-secondary btn-profile-settings"
+                                            title="Nastavení profilu">⚙</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bottom Action Buttons -->
+                            <div class="dash-bottom-actions">
+                                <button class="mc-btn mc-btn-primary" id="btnManageProfiles">
+                                    <span>📦 Spravovat verze 26.x</span>
+                                </button>
+                                <button class="mc-btn mc-btn-secondary" id="btnImportProfileModalOpen">
+                                    <span>📥 Importovat profil</span>
+                                </button>
+                                <button class="mc-btn mc-btn-secondary" id="btnAddModsShortcut">
+                                    <span>+ Procházet mody (Modrinth)</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Launch Progress Display -->
+                        <div class="progress-container" id="progressContainer">
+                            <div class="progress-info">
+                                <span class="progress-status-text" id="progressText">Příprava herních souborů...</span>
+                                <div class="progress-right-side">
+                                    <span class="progress-percent" id="progressPercent">0%</span>
+                                    <button class="btn-cancel-progress" id="btnCancelDownload"
+                                        title="Zrušit stahování / spuštění">✕ Zrušit</button>
+                                </div>
+                            </div>
+                            <div class="progress-track">
+                                <div class="progress-bar" id="progressBar"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Area: Featured Server Banner & Quick Play Tracker -->
+                    <div class="dash-right">
+                        <!-- Featured Big Server Banner: MYCHAL SMP -->
+                        <div class="server-banner-card">
+                            <div class="server-banner-header">
+                                <img src="assets/server-icon.png" alt="Server Icon" class="banner-server-icon">
+                                <div class="banner-server-info">
+                                    <div class="banner-server-title">MYCHAL <span>SMP</span></div>
+                                    <div class="banner-server-ip">mychalsmp.xyz</div>
+                                </div>
+                            </div>
+                            <div class="banner-telemetry-row">
+                                <div class="banner-stat">
+                                    <span class="stat-lbl">HRÁČI</span>
+                                    <span class="stat-val stat-green" id="serverPlayersCount">-- / 100</span>
+                                </div>
+                                <div class="banner-stat">
+                                    <span class="stat-lbl">ODEZVA</span>
+                                    <span class="stat-val" id="serverPingVal">-- ms</span>
+                                </div>
+                                <div class="banner-stat">
+                                    <span class="stat-lbl">VERZE</span>
+                                    <span class="stat-val stat-blue">26.2</span>
+                                </div>
+                            </div>
+                            <button class="mc-btn mc-btn-quickplay" id="btnQuickPlayMychal">
+                                <span>⚡ PŘIPOJIT SE (QUICK PLAY)</span>
+                            </button>
+                            <div id="wardenBlockedAlert" class="warden-blocked-banner" style="display: none;">
+                                <div class="warden-banner-content">
+                                    <span class="warden-banner-icon">🛡️</span>
+                                    <div class="warden-banner-text">
+                                        <strong>Quick Play zablokován</strong>
+                                        <span id="wardenBlockedCountText">Nalezeny nepovolené módy</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-warden-action" id="btnOpenWardenModal">Zobrazit & Vyřešit</button>
+                            </div>
+                        </div>
+
+                        <!-- Server Tracker / History List -->
+                        <div class="tracker-card">
+                            <div class="tracker-header">
+                                <span>Moje servery & Historie</span>
+                                <button class="btn-text-action" id="btnAddCustomServer">+ Přidat</button>
+                            </div>
+
+                            <div class="tracked-servers-list" id="trackedServersList">
+                                <!-- Official Server -->
+                                <div class="tracked-server-item">
+                                    <img src="assets/server-icon.png" class="item-server-icon">
+                                    <div class="item-info">
+                                        <div class="item-name">MYCHAL SMP (Oficiální)</div>
+                                        <div class="item-ip">mychalsmp.xyz</div>
+                                    </div>
+                                    <button class="btn-quick-join" data-server="mychalsmp.xyz" title="Rychlé připojení">
+                                        ▶ Join
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- System Telemetry & Console Card -->
+                        <div class="side-console-card">
+                            <div class="side-console-header">
+                                <span>Java & Systém</span>
+                                <span class="java-badge" id="sideJavaBadge">Java 25 (LTS)</span>
+                            </div>
+                            <div class="side-console-text" id="sideConsoleStatus">
+                                Klient je připraven. Kliknutím na Hrát spustíš instanci s optimalizacemi.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════════════════
+                 TAB 2: VERSIONS & INSTALLERS (26.1.2, 26.2, 26.3, 26.4)
+            ══════════════════════════════════════════════════════════════════ -->
+            <section class="tab-pane" id="tab-versions">
+                <div class="pane-header">
+                    <h2>Instalátory & Správa verzí 26.x</h2>
+                    <p>Podpora nového značení verzí Minecraftu (rok.kvartál). Nainstaluj verze pro offline hraní nebo
+                        přepínej profily.</p>
+                </div>
+
+                <div class="version-installers-grid">
+                    <!-- Version 26.2: Recommended -->
+                    <div class="version-card v-card-recommended">
+                        <div class="v-card-top">
+                            <div class="v-tag v-tag-blue">DOPORUČENÁ VERZE</div>
+                            <span class="v-status-badge" id="vStatus262">Kontrola...</span>
+                        </div>
+                        <h3 class="v-card-title">Minecraft 26.2</h3>
+                        <p class="v-card-desc">Doporučená síťová verze pro server mychalsmp.xyz. Začíná čistě, mody nebo modloader (Fabric, Forge, NeoForge) si můžeš zvolit sám.</p>
+                        <div class="v-card-meta">
+                            <span>Verze: <strong>26.2</strong></span>
+                            <span>Java: <strong>Java 25 / 21</strong></span>
+                        </div>
+                        <div class="v-card-actions">
+                            <button class="mc-btn mc-btn-green btn-install-v" data-version="26.2" data-loader="vanilla">
+                                <span>▶ Hrát / Nainstalovat 26.2</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Version 26.3: Latest Release -->
+                    <div class="version-card">
+                        <div class="v-card-top">
+                            <div class="v-tag v-tag-green">NEJNOVĚJŠÍ VYDÁNÍ</div>
+                            <span class="v-status-badge" id="vStatus263">Kontrola...</span>
+                        </div>
+                        <h3 class="v-card-title">Minecraft 26.3</h3>
+                        <p class="v-card-desc">Nejnovější oficiální vydání hry. Začíná čistě, mody nebo modloader (Fabric, Forge, NeoForge) si můžeš zvolit sám.</p>
+                        <div class="v-card-meta">
+                            <span>Verze: <strong>26.3</strong></span>
+                            <span>Java: <strong>Java 25 (Doporučeno)</strong></span>
+                        </div>
+                        <div class="v-card-actions">
+                            <button class="mc-btn mc-btn-green btn-install-v" data-version="26.3" data-loader="vanilla">
+                                <span>▶ Hrát / Nainstalovat 26.3</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Version 26.1.2: Legacy -->
+                    <div class="version-card">
+                        <div class="v-card-top">
+                            <div class="v-tag">LEGACY VERZE</div>
+                            <span class="v-status-badge" id="vStatus2612">Kontrola...</span>
+                        </div>
+                        <h3 class="v-card-title">Minecraft 26.1.2</h3>
+                        <p class="v-card-desc">Starší vydání hry pro předchozí světy. Čistá instalace bez zbytečností.</p>
+                        <div class="v-card-meta">
+                            <span>Verze: <strong>26.1.2</strong></span>
+                            <span>Java: <strong>Java 21+</strong></span>
+                        </div>
+                        <div class="v-card-actions">
+                            <button class="mc-btn mc-btn-secondary btn-install-v" data-version="26.1.2"
+                                data-loader="vanilla">
+                                <span>▶ Hrát / Nainstalovat 26.1.2</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Version 26.4: Upcoming Teaser -->
+                    <div class="version-card v-card-future">
+                        <div class="v-card-top">
+                            <div class="v-tag v-tag-purple">PŘIPRAVUJE SE (PROSINEC 2026)</div>
+                            <span class="v-status-badge">Snapshoty</span>
+                        </div>
+                        <h3 class="v-card-title">Minecraft 26.4 (Zimní Update)</h3>
+                        <p class="v-card-desc">Předběžná podpora pro nadcházející zimní update. Síť MYCHAL SMP bude
+                            aktualizována po vydání plné verze.</p>
+                        <div class="v-card-meta">
+                            <span>Plánované vydání: <strong>Prosinec 2026</strong></span>
+                        </div>
+                        <div class="v-card-actions">
+                            <button class="mc-btn mc-btn-secondary" disabled>
+                                <span>Již brzy</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════════════════
+                 TAB 3: MODS & MODRINTH BROWSER (Inspired by Screenshot 2)
+            ══════════════════════════════════════════════════════════════════ -->
+            <section class="tab-pane" id="tab-mods">
+                <!-- Modrinth Header & Search -->
+                <div class="mods-catalog-header">
+                    <div class="catalog-subtabs">
+                        <button class="mod-tab-btn active" data-mod-type="mod">Mody</button>
+                        <button class="mod-tab-btn" data-mod-type="resourcepack">Resource Packy</button>
+                        <button class="mod-tab-btn" data-mod-type="shader">Shadery</button>
+                    </div>
+
+                    <div class="catalog-search-wrapper">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="modSearchInput"
+                            placeholder="Hledat v katalogu Modrinth (Sodium, Iris, Lithium, AppleSkin...)..."
+                            class="catalog-search-input">
+                    </div>
+                </div>
+
+                <div class="mods-browser-layout">
+                    <!-- Left Filter Column -->
+                    <aside class="mods-filters-col">
+                        <div class="filter-group">
+                            <div class="filter-group-title">Verze hry</div>
+                            <label class="filter-label">
+                                <input type="radio" name="filterVersion" value="26.2" checked>
+                                <span>26.2 (Doporučeno)</span>
+                            </label>
+                            <label class="filter-label">
+                                <input type="radio" name="filterVersion" value="26.3">
+                                <span>26.3 (Nejnovější)</span>
+                            </label>
+                            <label class="filter-label">
+                                <input type="radio" name="filterVersion" value="26.1.2">
+                                <span>26.1.2</span>
+                            </label>
+                        </div>
+
+                        <div class="filter-group">
+                            <div class="filter-group-title">Mod Loader</div>
+                            <label class="filter-label">
+                                <input type="radio" name="filterLoader" value="fabric" checked>
+                                <span>Fabric</span>
+                            </label>
+                            <label class="filter-label">
+                                <input type="radio" name="filterLoader" value="neoforge">
+                                <span>NeoForge</span>
+                            </label>
+                            <label class="filter-label">
+                                <input type="radio" name="filterLoader" value="forge">
+                                <span>Forge</span>
+                            </label>
+                        </div>
+
+                        <div class="filter-group">
+                            <div class="filter-group-title">Kategorie</div>
+                            <label class="filter-label">
+                                <input type="radio" name="filterCategory" value="" checked>
+                                <span>Všechny</span>
+                            </label>
+                            <label class="filter-label">
+                                <input type="radio" name="filterCategory" value="optimization">
+                                <span>⚡ Optimalizace (FPS)</span>
+                            </label>
+                            <label class="filter-label">
+                                <input type="radio" name="filterCategory" value="utility">
+                                <span>🛠️ Utility & HUD</span>
+                            </label>
+                            <label class="filter-label">
+                                <input type="radio" name="filterCategory" value="adventure">
+                                <span>🗺️ Mapy & Svět</span>
+                            </label>
+                        </div>
+                    </aside>
+
+                    <!-- Right Mod Cards List -->
+                    <div class="mods-cards-container" id="modsCardsList">
+                        <div class="mods-loading">Načítám mody z Modrinth...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════════════════
+                 TAB 4: CHARACTER & SKIN
+            ══════════════════════════════════════════════════════════════════ -->
+            <section class="tab-pane" id="tab-character">
+                <div class="pane-header">
+                    <h2>Správa postavy & Skinu</h2>
+                    <p>Správa skinů a plášťů. Pro Microsoft účty se změny ukládají přímo na tvůj Mojang účet. Pro offline hráče je skin trvale uložen v launcheru.</p>
+                </div>
+
+                <div class="character-grid">
+                    <!-- Left: Interactive Character Stage -->
+                    <div class="skin-stage-card">
+                        <div class="skin-canvas-wrapper" id="skinCanvasWrapper">
+                            <canvas id="skinCanvas3D" class="skin-3d-canvas"></canvas>
+                            <canvas id="skinCanvas2D" width="128" height="256" class="skin-2d-canvas" style="display:none;"></canvas>
+                            <img src="https://minotar.net/armor/body/Steve/220.png" alt="Skin 2D" id="skinPreviewImg"
+                                class="skin-2d-render" style="display:none;">
+                        </div>
+                        <div class="skin-caption" id="skinCaption">3D Náhled (Otáčej tažením myši)</div>
+                        <div id="skinAccountTypeBadge" class="skin-badge-pill">Offline Profil</div>
+
+                        <!-- 3D Character Toolbar -->
+                        <div class="viewer-3d-toolbar">
+                            <button type="button" class="btn-3d-tool active" id="btn3DFrontView" title="Pohled zepředu">
+                                <span>Předek</span>
+                            </button>
+                            <button type="button" class="btn-3d-tool" id="btn3DBackView" title="Otočit o 180° – prohlédnout plášť">
+                                <span>Plášť (Záda)</span>
+                            </button>
+                            <button type="button" class="btn-3d-tool" id="btn3DRotateToggle" title="Plynulé automatické otáčení 360°">
+                                <span>🔄 360°</span>
+                            </button>
+                            <button type="button" class="btn-3d-tool" id="btn3DElytraToggle" title="Přepnout zobrazení Plášť vs. Elytra">
+                                <span id="label3DElytra">🪽 Elytra</span>
+                            </button>
+                            <button type="button" class="btn-3d-tool" id="btn3DFlyingToggle" title="Přepnout do pozice létání">
+                                <span id="label3DFlying">🚀 Létání</span>
+                            </button>
+                        </div>
+
+                        <div class="skin-variant-picker">
+                            <span class="variant-label">Model těla:</span>
+                            <div class="variant-btns">
+                                <button type="button" class="btn-variant-toggle active" id="btnVariantClassic" data-variant="classic">Classic (4px)</button>
+                                <button type="button" class="btn-variant-toggle" id="btnVariantSlim" data-variant="slim">Slim (3px)</button>
+                            </div>
+                        </div>
+
+                        <div id="equippedCapeBadge" class="equipped-cape-badge" style="display: none;">
+                            <span>🧥 Plášť: <strong id="equippedCapeName">Žádný</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Right: Account & Skin/Cape Settings -->
+                    <div class="skin-form-card">
+                        <div class="form-group">
+                            <label for="inputNick">Herní přezdívka (Nick)</label>
+                            <input type="text" id="inputNick" class="input-text" placeholder="Zadej herní nick..."
+                                maxlength="16">
+                            <span class="input-hint">Přezdívka se použije při vstupu na server a pro tvůj profil.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Typ účtu</label>
+                            <div class="auth-toggle-group">
+                                <button class="btn-auth-type active" id="authOfflineBtn">
+                                    <strong>Offline</strong>
+                                </button>
+                                <button class="btn-auth-type" id="authMicrosoftBtn">
+                                    <strong>Microsoft</strong>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- MICROSOFT ACCOUNT MANAGEMENT PANEL -->
+                        <div id="panelMicrosoftSkin" class="skin-account-panel" style="display: none;">
+                            <div class="panel-section-title">
+                                <span>☁️ Oficiální Mojang správa (Uloží se na účet)</span>
+                            </div>
+                            <p class="panel-desc">Skin i plášť nahraný zde se okamžitě propíše na tvůj oficiální Minecraft účet a uvidí ho všichni hráči.</p>
+
+                            <div class="form-actions-row">
+                                <button class="mc-btn mc-btn-green" id="btnUploadMojangSkin">
+                                    <span>☁️ Nahrát skin na Mojang účet</span>
+                                </button>
+                                <button class="mc-btn mc-btn-secondary" id="btnResetMojangSkin" title="Vrátí základní Steve/Alex skin">
+                                    <span>🔄 Resetovat skin</span>
+                                </button>
+                            </div>
+
+                            <div class="mojang-capes-section">
+                                <div class="capes-header">
+                                    <label>Tvé oficiální Mojang pláště:</label>
+                                    <button class="btn-text-action" id="btnRefreshMojangCapes">🔄 Obnovit</button>
+                                </div>
+                                <div class="capes-selector-grid" id="mojangCapesList">
+                                    <div class="cape-loading-hint">Načítání plášťů z Mojangu...</div>
+                                </div>
+                                <button class="mc-btn mc-btn-secondary btn-hide-cape" id="btnHideMojangCape">
+                                    <span>✕ Sundat / Skrýt plášť</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- OFFLINE / WAREZ ACCOUNT PANEL -->
+                        <div id="panelOfflineSkin" class="skin-account-panel">
+                            <div class="offline-skin-notice">
+                                <span class="notice-icon">ℹ️</span>
+                                <div>
+                                    <strong>Vlastní skin pro offline režim:</strong><br>
+                                    Tvůj offline skin a plášť jsou uloženy v launcheru a uvidíš je u sebe bez ohledu na to, jaký nick si zadáš. Přepíší se pouze pokud se přihlásíš přes Microsoft účet.
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Vlastní offline skin (.png)</label>
+                                <div class="file-picker-row">
+                                    <button class="mc-btn mc-btn-secondary" id="btnSelectSkinFile">📁 Vybrat soubor skinu</button>
+                                    <span id="offlineSkinPathLabel" class="skin-file-label">Výchozí skin</span>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Vlastní offline plášť (.png)</label>
+                                <div class="file-picker-row">
+                                    <button class="mc-btn mc-btn-secondary" id="btnSelectCapeFile">🧥 Vybrat soubor pláště</button>
+                                    <button class="mc-btn mc-btn-secondary" id="btnRemoveOfflineCape" title="Odebrat plášť">✕</button>
+                                    <span id="offlineCapePathLabel" class="skin-file-label">Žádný plášť</span>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button class="mc-btn mc-btn-green" id="btnSaveCharacter">Uložit postavu & nastavení</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════════════════
+                 TAB 5: SERVERS & QUICK PLAY TRACKER
+            ══════════════════════════════════════════════════════════════════ -->
+            <section class="tab-pane" id="tab-servers">
+                <div class="pane-header">
+                    <h2>Servery sítě & Historie připojení</h2>
+                    <p>Trackování serverů na které se připojuješ s podporou přímého 1-click Quick Play spuštění.</p>
+                </div>
+
+                <div class="servers-full-list" id="serversFullList">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════════════════
+                 TAB 6: SETTINGS (JAVA 25/21, RAM, LINUX STABILITY)
+            ══════════════════════════════════════════════════════════════════ -->
+            <section class="tab-pane" id="tab-settings">
+                <div class="pane-header">
+                    <h2>Nastavení klienta & Javy 25/21</h2>
+                    <p>Optimalizace paměti RAM a JVM parametrů navržené pro maximální stabilitu na Linuxu (jako Prism) i
+                        Windows 11.</p>
+                </div>
+
+                <div class="settings-card">
+                    <div class="form-group">
+                        <div class="setting-title-row">
+                            <label for="ramSlider">Alokace operační paměti RAM (Maximální)</label>
+                            <span class="setting-value-badge" id="ramValueBadge">4 GB</span>
+                        </div>
+                        <input type="range" id="ramSlider" min="2" max="16" step="1" value="4" class="slider">
+                        <div class="slider-marks">
+                            <span>2 GB</span>
+                            <span>4 GB (Doporučeno)</span>
+                            <span>8 GB</span>
+                            <span>16 GB</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="javaPathInput">Cesta k instalaci Java Runtime (Java 25 / 21)</label>
+                        <div class="input-with-button">
+                            <input type="text" id="javaPathInput" class="input-text"
+                                placeholder="Automaticky: Java 25 (LTS)...">
+                            <button class="mc-btn mc-btn-secondary" id="btnDetectJava">Detekovat Javu</button>
+                        </div>
+                        <div class="java-detected-pills" id="javaDetectedList"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Rozlišení herního okna</label>
+                        <div class="resolution-options">
+                            <label class="radio-label">
+                                <input type="radio" name="res" value="1280x720" checked>
+                                <span>1280 × 720 (Standard HD)</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="res" value="1920x1080">
+                                <span>1920 × 1080 (Full HD)</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="res" value="fullscreen">
+                                <span>Celá obrazovka (Fullscreen)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Přímé Quick Play připojení</label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autoConnectCheck" checked>
+                            <span>Při kliknutí na Hrát se připojit přímo na <strong>mychalsmp.xyz</strong></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-bottom-actions">
+                        <button class="mc-btn mc-btn-secondary" id="btnOpenGameDir">📂 Otevřít složku hry
+                            (.mychalsmp)</button>
+                        <button class="mc-btn mc-btn-green" id="btnSaveSettings">Uložit nastavení</button>
+                    </div>
+
+                    <!-- Danger Zone: Reset launcher data -->
+                    <div class="danger-zone-card">
+                        <div class="danger-zone-info">
+                            <span class="danger-zone-title">⚠️ Tovární reset launcheru</span>
+                            <span class="danger-zone-desc">Smaže veškerá lokální data, stažené verze, profily a resetuje
+                                konfiguraci launcheru.</span>
+                        </div>
+                        <button class="btn-danger-reset" id="btnResetLauncherData">
+                            🗑️ Smazat data launcheru (Reset)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Game Console -->
+                <div class="console-card">
+                    <div class="console-header">
+                        <span>Herní konzole & Logy</span>
+                        <button class="btn-mini" id="btnClearLog">Vymazat log</button>
+                    </div>
+                    <pre class="console-body" id="consoleOutput">Čekám na spuštění hry...</pre>
+                </div>
+            </section>
+        </main>
+        <!-- Modal 1: Import Profilu -->
+        <div class="launcher-modal-overlay" id="modalImportProfile" style="display: none;">
+            <div class="launcher-modal-card">
+                <div class="modal-header">
+                    <div class="modal-title-box">
+                        <span class="modal-icon">📥</span>
+                        <h3>Importovat profil z jiného launcheru</h3>
+                    </div>
+                    <button class="modal-close-btn" id="btnCloseImportModal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-desc">
+                        Vyber složku profilu či instance z Prism Launcheru, CurseForge, Modrinth App nebo .minecraft.
+                        Launcher automaticky přenese tvé nastavení hry, modifikace, konfigurace a texture packy bez
+                        nutnosti začínat od nuly.
+                    </p>
+                    <div class="import-browse-zone" id="importBrowseZone">
+                        <button class="mc-btn mc-btn-primary" id="btnSelectImportFolder">
+                            <span>📁 Procházet a vybrat složku instance</span>
+                        </button>
+                        <div class="import-path-label" id="importPathLabel">Zatím nebyla vybrána žádná složka</div>
+                    </div>
+
+                    <!-- Scanned details section -->
+                    <div class="scanned-instance-preview" id="scannedInstancePreview" style="display: none;">
+                        <div class="form-group">
+                            <label>Název importovaného profilu</label>
+                            <input type="text" class="text-input" id="importProfileNameInput"
+                                placeholder="Název profilu">
+                        </div>
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label>Verze Minecraftu</label>
+                                <select class="text-input select-input" id="importVersionSelect">
+                                    <option value="26.2">Minecraft 26.2 (Doporučeno MYCHAL SMP)</option>
+                                    <option value="26.3">Minecraft 26.3 (Nejnovější)</option>
+                                    <option value="26.1.2">Minecraft 26.1.2</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Mod Loader</label>
+                                <select class="text-input select-input" id="importLoaderSelect">
+                                    <option value="vanilla">Vanilla</option>
+                                    <option value="fabric">Fabric</option>
+                                    <option value="forge">Forge</option>
+                                    <option value="neoforge">NeoForge</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="scanned-stats-pills" id="scannedStatsPills"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="mc-btn mc-btn-secondary" id="btnCancelImport">Zrušit</button>
+                    <button class="mc-btn mc-btn-green" id="btnConfirmImport" disabled>
+                        <span>✓ Dokončit import profilu</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal 2: Upgrade Profilu -->
+        <div class="launcher-modal-overlay" id="modalUpgradeProfile" style="display: none;">
+            <div class="launcher-modal-card">
+                <div class="modal-header">
+                    <div class="modal-title-box">
+                        <span class="modal-icon">⚡</span>
+                        <h3>Upgrade profilu na novou verzi</h3>
+                    </div>
+                    <button class="modal-close-btn" id="btnCloseUpgradeModal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-desc">
+                        Vytvoří nový profil s novější verzí hry, překopíruje veškeré tvé nastavení hry (ovládání,
+                        citlivost myši, video nastavení), konfigurace módů i texture packy. Launcher se navíc pokusí
+                        automaticky vyhledat a stáhnout kompatibilní novější verze tvých módů z Modrinthu!
+                    </p>
+                    <div class="upgrade-source-badge" id="upgradeSourceProfileName">Zdrojový profil: MYCHAL SMP 26.2
+                    </div>
+
+                    <div class="form-group" style="margin-top: 14px;">
+                        <label>Cílová verze Minecraftu</label>
+                        <select class="text-input select-input" id="upgradeTargetVersionSelect">
+                            <option value="26.3">Minecraft 26.3 (Nejnovější jádro 26.3)</option>
+                            <option value="26.2">Minecraft 26.2 (Doporučená verze)</option>
+                        </select>
+                    </div>
+
+                    <div class="upgrade-checkboxes">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="checkUpgradeOptions" checked>
+                            <span>Překopírovat nastavení hry (ovládání, video, zvuk, citlivost)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="checkUpgradeConfig" checked>
+                            <span>Překopírovat nastavení a konfigurace módů (složka config/)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="checkUpgradePacks" checked>
+                            <span>Překopírovat texture packy a shadery (resourcepacks/)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="checkUpgradeMods" checked>
+                            <span>Automaticky vyhledat a aktualizovat módy pro novou verzi na Modrinthu</span>
+                        </label>
+                    </div>
+
+                    <!-- Live Upgrade Progress Status -->
+                    <div class="upgrade-progress-area" id="upgradeProgressArea" style="display: none;">
+                        <div class="upgrade-spinner-row">
+                            <span class="upgrade-spinner">⏳</span>
+                            <span class="upgrade-status-text" id="upgradeStatusText">Probíhá upgrade profilu...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="mc-btn mc-btn-secondary" id="btnCancelUpgrade">Zrušit</button>
+                    <button class="mc-btn mc-btn-green" id="btnConfirmUpgrade">
+                        <span>🚀 Spustit upgrade</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal 3: Souhrn Upgradu -->
+        <div class="launcher-modal-overlay" id="modalUpgradeResult" style="display: none;">
+            <div class="launcher-modal-card">
+                <div class="modal-header">
+                    <div class="modal-title-box">
+                        <span class="modal-icon">🎉</span>
+                        <h3>Upgrade byl úspěšně dokončen!</h3>
+                    </div>
+                    <button class="modal-close-btn" id="btnCloseResultModal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="result-summary-box" id="upgradeResultSummaryText"></div>
+                    <div class="result-mods-lists" id="upgradeResultModsList"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="mc-btn mc-btn-green" id="btnFinishUpgradeResult">
+                        <span>Skvělé, rozumím</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal 4: Nastavení Profilu (Profile Settings) -->
+        <div class="launcher-modal-overlay" id="modalProfileSettings" style="display: none;">
+            <div class="launcher-modal-card">
+                <div class="modal-header">
+                    <div class="modal-title-box">
+                        <span class="modal-icon">⚙</span>
+                        <h3 id="profileSettingsModalTitle">Nastavení profilu</h3>
+                    </div>
+                    <button class="modal-close-btn" id="btnCloseProfileSettingsModal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Název profilu</label>
+                        <input type="text" class="text-input" id="profileSettingsNameInput">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Mod Loader</label>
+                        <select class="text-input select-input" id="profileSettingsLoaderSelect">
+                            <option value="vanilla">Vanilla</option>
+                            <option value="fabric">Fabric</option>
+                            <option value="forge">Forge</option>
+                            <option value="neoforge">NeoForge</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Přidělená operační paměť RAM pro tento profil</label>
+                        <div class="ram-slider-row" style="display: flex; align-items: center; gap: 12px;">
+                            <input type="range" min="2" max="16" step="1" value="4" class="slider" id="profileRamSlider"
+                                style="flex: 1;">
+                            <span class="badge-accent" id="profileRamValueBadge"
+                                style="background: rgba(10, 103, 229, 0.2); color: #38bdf8; border: 1px solid rgba(10, 103, 229, 0.4); padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px;">4
+                                GB</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Složky a soubory tohoto profilu</label>
+                        <div class="profile-folders-quick-grid"
+                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder=""
+                                style="padding: 8px; font-size: 11px;">📂 Celá složka</button>
+                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="mods"
+                                style="padding: 8px; font-size: 11px;">📁 mods/</button>
+                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="config"
+                                style="padding: 8px; font-size: 11px;">📁 config/</button>
+                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                                data-subfolder="resourcepacks" style="padding: 8px; font-size: 11px;">🎨
+                                textury/</button>
+                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                                data-subfolder="shaderpacks" style="padding: 8px; font-size: 11px;">✨ shadery/</button>
+                        </div>
+                    </div>
+
+                    <div class="profile-delete-section" id="profileDeleteSection"
+                        style="margin-top: 10px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: flex-end;">
+                        <button class="btn-danger-reset" id="btnDeleteCurrentProfile"
+                            style="padding: 6px 12px; font-size: 12px;">
+                            🗑️ Smazat profil
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="mc-btn mc-btn-secondary" id="btnCancelProfileSettings">Zrušit</button>
+                    <button class="mc-btn mc-btn-green" id="btnSaveProfileSettings">
+                        <span>✓ Uložit změny</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MOD SAFETY WARNING MODAL -->
+        <div class="custom-modal-overlay" id="wardenModal" style="display: none;">
+            <div class="custom-modal-box warden-modal-box">
+                <div class="modal-head">
+                    <div class="modal-title-with-icon">
+                        <span class="icon-danger-shield">🛡️</span>
+                        <div>
+                            <h3>Bezpečnostní kontrola modifikací</h3>
+                            <p class="modal-subtitle">Ochrana účtu před porušením pravidel na mychalsmp.xyz</p>
+                        </div>
+                    </div>
+                    <button class="modal-close-x" id="btnCloseWardenModal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="warden-warning-notice">
+                        <p>V aktivním profilu byly nalezeny modifikace, které nejsou na síti MYCHAL SMP povoleny. Před připojením k serveru je nutné tyto módy zakázat nebo odebrat.</p>
+                        <p class="warden-allowed-hint">💡 <em>Poznámka: Replay Mod, optimalizace (Sodium, Iris) a estetické doplňky jsou povoleny.</em></p>
+                    </div>
+                    <div class="illegal-mods-list-title">Nepovolené modifikace v aktivním profilu:</div>
+                    <div class="illegal-mods-list" id="wardenIllegalModsList">
+                        <!-- Dynamicky vloženo -->
+                    </div>
+                </div>
+                <div class="modal-foot">
+                    <button class="mc-btn mc-btn-secondary" id="btnIgnoreWardenClose">Ponechat (Nespouštět Quick Play)</button>
+                    <button class="mc-btn mc-btn-green" id="btnCleanIllegalMods">
+                        <span>🧹 Zakázat tyto módy a odemknout Quick Play</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- AUTO-UPDATE MODAL -->
+        <div class="custom-modal-overlay" id="updateModal" style="display: none;">
+            <div class="custom-modal-box" style="max-width: 500px;">
+                <div class="modal-head">
+                    <div class="modal-title-with-icon">
+                        <span style="font-size: 26px;">🚀</span>
+                        <div>
+                            <h3 id="updateModalTitle">Dostupná nová verze</h3>
+                            <p class="modal-subtitle" id="updateModalSubtitle">MYCHAL SMP Launcher</p>
+                        </div>
+                    </div>
+                    <button class="modal-close-x" id="btnCloseUpdateModal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5; margin-bottom: 12px;" id="updateModalDesc">
+                        Byla vydána nová verze launcheru. Chceš ji nyní stáhnout a nainstalovat?
+                    </p>
+                    <div id="updateReleaseNotes" style="max-height: 140px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; font-size: 12px; color: #cbd5e1; white-space: pre-wrap; display: none;"></div>
+                </div>
+                <div class="modal-foot">
+                    <button class="mc-btn mc-btn-secondary" id="btnDismissUpdate">Později</button>
+                    <button class="mc-btn mc-btn-green" id="btnConfirmUpdate">
+                        <span>⬇️ Aktualizovat nyní</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notification Container -->
+        <div class="toast-container" id="toastContainer"></div>
+
+        <script src="js/lib/skinview3d.bundle.js"></script>
+        <script src="js/app.js"></script>
+</body>
+
+</html>

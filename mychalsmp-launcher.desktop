@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=MYCHAL SMP Launcher
+Comment=Oficiální Minecraft launcher sítě MYCHAL SMP s 1-click připojením
+Exec=/opt/mychalsmp-launcher/mychalsmp-launcher %U
+Icon=mychalsmp-launcher
+Terminal=false
+Type=Application
+Categories=Game;ActionGame;AdventureGame;
+StartupWMClass=xyz.mychalsmp.launcher
+MimeType=x-scheme-handler/mychalsmp;

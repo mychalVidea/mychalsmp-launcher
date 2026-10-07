@@ -1,0 +1,28 @@
+{
+  "name": "mychalsmp-launcher",
+  "version": "1.0.0",
+  "description": "Oficiální multiplatformní launcher pro síť MYCHAL SMP s optimalizovaným klientem pro Windows 11 a Linux",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "build:linux": "electron-builder --linux deb rpm tar.gz",
+    "build:win": "electron-builder --win nsis portable",
+    "build:all": "electron-builder -wl",
+    "pack": "electron-builder --dir"
+  },
+  "homepage": "https://mychalsmp.xyz",
+  "author": "mychalVidea <admin@mychalsmp.xyz>",
+  "license": "MIT",
+  "dependencies": {
+    "minecraft-launcher-core": "^3.18.2",
+    "minecraft-server-util": "^5.4.4",
+    "msmc": "^5.0.5",
+    "skinview3d": "^3.4.2"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.5"
+  }
+}
