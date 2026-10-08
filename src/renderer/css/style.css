@@ -2939,3 +2939,354 @@ body {
     border-radius: 4px;
 }
 
+/* ── Custom Modal Overlay & Box (Update Modal, Crash Modal) ────────── */
+.custom-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(3, 4, 10, 0.86);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 20px;
+    box-sizing: border-box;
+    animation: modalOverlayFadeIn 0.22s ease-out;
+}
+
+@keyframes modalOverlayFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.custom-modal-box {
+    background: #111422;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    width: 100%;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(10, 103, 229, 0.2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: modalPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: #161827;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modal-title-with-icon {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.modal-title-with-icon h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.modal-subtitle {
+    margin: 2px 0 0 0;
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.modal-close-x {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.modal-close-x:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    background: #161827;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.update-progress-track {
+    width: 100%;
+    height: 8px;
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.update-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0a67e5, #38bdf8);
+    border-radius: 999px;
+    transition: width 0.2s ease-out;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+/* ── Satisfying Boot Splash Screen ─────────────────────────────────── */
+.boot-splash-container {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #060810;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    user-select: none;
+    transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), filter 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.boot-splash-container.boot-splash-exit {
+    opacity: 0;
+    transform: scale(1.08);
+    filter: blur(14px);
+    pointer-events: none;
+}
+
+.boot-splash-ambient-glow {
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(10, 103, 229, 0.22) 0%, rgba(56, 189, 248, 0.06) 45%, transparent 70%);
+    filter: blur(40px);
+    pointer-events: none;
+    animation: ambientGlowPulse 3s ease-in-out infinite alternate;
+}
+
+@keyframes ambientGlowPulse {
+    from { transform: scale(0.92); opacity: 0.7; }
+    to { transform: scale(1.1); opacity: 1; }
+}
+
+.boot-splash-beam {
+    position: absolute;
+    width: 120px;
+    height: 100%;
+    top: 0;
+    background: linear-gradient(180deg, transparent 0%, rgba(10, 103, 229, 0.08) 40%, rgba(56, 189, 248, 0.15) 70%, transparent 100%);
+    pointer-events: none;
+    opacity: 0.7;
+    filter: blur(18px);
+}
+
+.boot-splash-center {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    z-index: 2;
+}
+
+.boot-splash-core {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+}
+
+.boot-hologram-ring {
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 2px dashed rgba(56, 189, 248, 0.45);
+    box-shadow: 0 0 25px rgba(10, 103, 229, 0.35);
+    animation: hologramSpin 8s linear infinite;
+}
+
+@keyframes hologramSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.boot-hologram-ring-inner {
+    position: absolute;
+    width: 94px;
+    height: 94px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(10, 103, 229, 0.6);
+    animation: hologramPulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes hologramPulse {
+    from { transform: scale(0.94); opacity: 0.6; }
+    to { transform: scale(1.06); opacity: 1; }
+}
+
+.boot-splash-logo {
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+    object-fit: contain;
+    box-shadow: 0 0 30px rgba(10, 103, 229, 0.6);
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+    z-index: 3;
+    animation: logoFloat 2.5s ease-in-out infinite;
+}
+
+@keyframes logoFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+}
+
+.boot-splash-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    color: #ffffff;
+    margin: 0 0 6px 0;
+    text-transform: uppercase;
+    text-shadow: 0 0 24px rgba(10, 103, 229, 0.6);
+}
+
+.boot-splash-title span {
+    color: #38bdf8;
+}
+
+.boot-splash-tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    margin-bottom: 26px;
+    opacity: 0.85;
+}
+
+.boot-progress-box {
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.boot-progress-bar {
+    width: 100%;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.boot-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #0a67e5, #38bdf8);
+    border-radius: 999px;
+    box-shadow: 0 0 12px #38bdf8;
+    transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.boot-progress-text {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+/* ── Live Server Preview Card & Custom Server Icon ─────────────────── */
+.server-live-preview-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #0c0e17;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-top: 6px;
+}
+
+.server-preview-icon-wrapper {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+}
+
+.server-preview-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: #161827;
+}
+
+.server-preview-cross-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    font-size: 11px;
+    background: #1c0b0b;
+    border: 1px solid #ef4444;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.server-preview-details {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.server-preview-status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.server-offline-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(245, 21, 21, 0.12);
+    border: 1px solid rgba(245, 21, 21, 0.35);
+    color: #f87171;
+}
+

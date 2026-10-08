@@ -74,6 +74,9 @@ contextBridge.exposeInMainWorld('api', {
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     applyUpdate: (assetUrl) => ipcRenderer.invoke('apply-update', assetUrl),
     restartLauncher: () => ipcRenderer.invoke('restart-launcher'),
+    onUpdateProgress: (callback) => {
+        ipcRenderer.on('update-progress', (event, data) => callback(data));
+    },
     getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
     openGameDir: () => ipcRenderer.send('open-game-dir'),
     openUrl: (url) => ipcRenderer.send('open-url', url),

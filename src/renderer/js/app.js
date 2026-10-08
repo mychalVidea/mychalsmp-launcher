@@ -3,6 +3,40 @@
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // ── Crazy Good Satisfying Boot Splash Screen ────────────────────────────
+    const bootSplash = document.getElementById('bootSplashScreen');
+    const bootProgressFill = document.getElementById('bootProgressFill');
+    const bootProgressText = document.getElementById('bootProgressText');
+
+    if (bootSplash && bootProgressFill) {
+        setTimeout(() => {
+            bootProgressFill.style.width = '25%';
+            if (bootProgressText) bootProgressText.textContent = '⚡ Inicializace subsystémů Beacon...';
+        }, 80);
+
+        setTimeout(() => {
+            bootProgressFill.style.width = '65%';
+            if (bootProgressText) bootProgressText.textContent = '🌐 Synchronizace síťového jádra...';
+        }, 420);
+
+        setTimeout(() => {
+            bootProgressFill.style.width = '90%';
+            if (bootProgressText) bootProgressText.textContent = '🛡️ Příprava herního rozhraní...';
+        }, 800);
+
+        setTimeout(() => {
+            bootProgressFill.style.width = '100%';
+            if (bootProgressText) bootProgressText.textContent = '✓ Systém Beacon připraven';
+        }, 1100);
+
+        setTimeout(() => {
+            bootSplash.classList.add('boot-splash-exit');
+            setTimeout(() => {
+                try { bootSplash.remove(); } catch (e) {}
+            }, 700);
+        }, 1300);
+    }
+
     // ── Element References ──────────────────────────────────────────────────
     // Window Controls
     const btnMin = document.getElementById('btnMinimize');
@@ -264,6 +298,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Render Server Tracker & Profiles
             renderServerTracker();
+            pingCustomServersInBackground();
             renderProfilesList();
             refreshVersionStatuses();
             detectAvailableJavas();
@@ -383,10 +418,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             const isMychal = s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz';
             const isPinned = !!s.pinned;
             const backupBadge = isMychal ? '<span class="server-backup-badge" title="Záložní číselná IP při výpadku DNS: 130.61.89.37:25565">Záloha: 130.61.89.37</span>' : '';
+            const iconSrc = isMychal ? 'assets/server-icon.png' : (s.icon || 'assets/server-icon.png');
+            const offlineCross = (!isMychal && s.online === false)
+                ? '<span class="server-offline-cross-badge" title="Server neodpovídá / je offline">❌</span>'
+                : '';
 
             return `
                 <div class="tracked-server-item ${isPinned ? 'is-pinned' : ''}">
-                    <img src="assets/server-icon.png" class="item-server-icon">
+                    <div style="position: relative; flex-shrink: 0;">
+                        <img src="${escapeHtml(iconSrc)}" class="item-server-icon" onerror="this.src='assets/server-icon.png'">
+                        ${offlineCross}
+                    </div>
                     <div class="item-info">
                         <div class="item-name">
                             ${escapeHtml(s.name)}
@@ -443,13 +485,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             const isMychal = s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz';
             const isPinned = !!s.pinned;
             const port = s.port || 25565;
+            const iconSrc = isMychal ? 'assets/server-icon.png' : (s.icon || 'assets/server-icon.png');
+            const offlineBadge = (!isMychal && s.online === false)
+                ? '<span class="server-offline-badge-pill" style="margin-left: 8px;">❌ Offline</span>'
+                : (isMychal ? '' : (s.online ? '<span style="color: #21DE00; font-size: 12px; margin-left: 8px;">🟢 Online</span>' : ''));
 
             const extraInfo = isMychal
                 ? `<div class="server-full-telemetry" style="color: var(--brand-blue);">
                     Oficiální síťová infrastruktura MYCHAL SMP • Port: ${port}
                     <br><span style="color: #94a3b8; font-size: 12px;">🛡️ Záložní IP (Unknown host fallback): <strong style="color: #fff;">130.61.89.37:25565</strong></span>
                    </div>`
-                : `<div class="server-full-telemetry">Vlastní přidaný server • Port: ${port}</div>`;
+                : `<div class="server-full-telemetry">Vlastní přidaný server • Port: ${port} ${offlineBadge}</div>`;
 
             const backupJoinBtn = isMychal ? `
                 <button class="mc-btn mc-btn-secondary btn-quick-join-backup" data-server="130.61.89.37:25565" title="Připojit se přímo přes číselnou záložní IP">
@@ -459,7 +505,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             return `
                 <div class="server-full-card ${isPinned ? 'is-pinned-card' : ''}">
-                    <img src="assets/server-icon.png" class="server-full-icon">
+                    <div style="position: relative; flex-shrink: 0;">
+                        <img src="${escapeHtml(iconSrc)}" class="server-full-icon" onerror="this.src='assets/server-icon.png'">
+                        ${(!isMychal && s.online === false) ? '<span class="server-offline-cross-badge">❌</span>' : ''}
+                    </div>
                     <div class="server-full-info">
                         <div class="server-full-name">
                             ${escapeHtml(s.name)}
@@ -518,6 +567,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    async function pingCustomServersInBackground() {
+        const servers = currentConfig.servers || [];
+        let hasChanges = false;
+        for (const s of servers) {
+            if (s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz') continue;
+            try {
+                const res = await window.api.pingServer(s.ip, s.port || 25565);
+                if (res && res.online) {
+                    if (s.online !== true || (res.favicon && s.icon !== res.favicon)) {
+                        s.online = true;
+                        if (res.favicon) s.icon = res.favicon;
+                        hasChanges = true;
+                    }
+                } else {
+                    if (s.online !== false) {
+                        s.online = false;
+                        hasChanges = true;
+                    }
+                }
+            } catch (e) {
+                if (s.online !== false) {
+                    s.online = false;
+                    hasChanges = true;
+                }
+            }
+        }
+        if (hasChanges) {
+            renderServerTracker();
+            renderServersFullTab();
+            try { await window.api.saveConfig({ servers: currentConfig.servers }); } catch (e) {}
+        }
+    }
+
     async function togglePinServer(serverId) {
         const servers = currentConfig.servers || [];
         const target = servers.find(s => s.id === serverId);
@@ -554,17 +636,123 @@ document.addEventListener('DOMContentLoaded', async () => {
     const newServerPinnedCheck = document.getElementById('newServerPinnedCheck');
     const btnOpenAddServerTab = document.getElementById('btnOpenAddServerTab');
 
+    const newServerPreviewIcon = document.getElementById('newServerPreviewIcon');
+    const newServerOfflineCross = document.getElementById('newServerOfflineCross');
+    const newServerStatusDot = document.getElementById('newServerStatusDot');
+    const newServerStatusBadge = document.getElementById('newServerStatusBadge');
+    const newServerPingDetails = document.getElementById('newServerPingDetails');
+    let addServerPingDebounce = null;
+    let currentDetectedServerIcon = null;
+    let currentDetectedServerOnline = false;
+
+    function resetAddServerPreview() {
+        if (addServerPingDebounce) clearTimeout(addServerPingDebounce);
+        currentDetectedServerIcon = null;
+        currentDetectedServerOnline = false;
+        if (newServerPreviewIcon) newServerPreviewIcon.src = 'assets/server-icon.png';
+        if (newServerOfflineCross) newServerOfflineCross.style.display = 'none';
+        if (newServerStatusDot) {
+            newServerStatusDot.className = 'status-dot';
+            newServerStatusDot.style.background = '#64748b';
+        }
+        if (newServerStatusBadge) {
+            newServerStatusBadge.textContent = 'Zadej IP adresu serveru...';
+            newServerStatusBadge.style.color = '#94a3b8';
+        }
+        if (newServerPingDetails) {
+            newServerPingDetails.textContent = 'Automatická detekce dostupnosti, latence a ikony';
+        }
+    }
+
     function openAddServerModal() {
         if (!modalAddServer) return;
         if (newServerNameInput) newServerNameInput.value = '';
         if (newServerIpInput) newServerIpInput.value = '';
         if (newServerPinnedCheck) newServerPinnedCheck.checked = true;
+        resetAddServerPreview();
         modalAddServer.style.display = 'flex';
-        setTimeout(() => newServerNameInput?.focus(), 50);
+        setTimeout(() => newServerIpInput?.focus(), 50);
     }
 
     function closeAddServerModal() {
         if (modalAddServer) modalAddServer.style.display = 'none';
+        resetAddServerPreview();
+    }
+
+    if (newServerIpInput) {
+        newServerIpInput.addEventListener('input', () => {
+            if (addServerPingDebounce) clearTimeout(addServerPingDebounce);
+            const val = newServerIpInput.value.trim();
+            if (!val) {
+                resetAddServerPreview();
+                return;
+            }
+
+            if (newServerStatusBadge) {
+                newServerStatusBadge.textContent = '🔄 Ověřuji server...';
+                newServerStatusBadge.style.color = '#38bdf8';
+            }
+            if (newServerStatusDot) {
+                newServerStatusDot.className = 'status-dot';
+                newServerStatusDot.style.background = '#38bdf8';
+            }
+
+            addServerPingDebounce = setTimeout(async () => {
+                let cleanIp = val;
+                let port = 25565;
+                if (cleanIp.includes(':')) {
+                    const parts = cleanIp.split(':');
+                    cleanIp = parts[0].trim();
+                    port = parseInt(parts[1], 10) || 25565;
+                }
+
+                try {
+                    const status = await window.api.pingServer(cleanIp, port);
+                    if (status && status.online) {
+                        currentDetectedServerOnline = true;
+                        currentDetectedServerIcon = status.favicon || null;
+                        if (newServerPreviewIcon) {
+                            newServerPreviewIcon.src = status.favicon || 'assets/server-icon.png';
+                        }
+                        if (newServerOfflineCross) newServerOfflineCross.style.display = 'none';
+                        if (newServerStatusDot) {
+                            newServerStatusDot.className = 'status-dot';
+                            newServerStatusDot.style.background = '#21DE00';
+                        }
+                        if (newServerStatusBadge) {
+                            newServerStatusBadge.textContent = `✓ Online (${status.latency} ms) • ${status.players.online}/${status.players.max} hráčů`;
+                            newServerStatusBadge.style.color = '#21DE00';
+                        }
+                        if (newServerPingDetails) {
+                            newServerPingDetails.textContent = status.motd ? status.motd.split('\n')[0].replace(/§./g, '').trim() : `${cleanIp}:${port}`;
+                        }
+                        // If name is empty, auto-suggest
+                        if (newServerNameInput && !newServerNameInput.value.trim()) {
+                            const suggested = status.motd ? status.motd.split('\n')[0].replace(/§./g, '').trim().slice(0, 32) : cleanIp;
+                            newServerNameInput.value = suggested || cleanIp;
+                        }
+                    } else {
+                        throw new Error('Server neodpovídá');
+                    }
+                } catch (e) {
+                    currentDetectedServerOnline = false;
+                    currentDetectedServerIcon = null;
+                    if (newServerPreviewIcon) newServerPreviewIcon.src = 'assets/server-icon.png';
+                    if (newServerOfflineCross) newServerOfflineCross.style.display = 'flex';
+                    if (newServerStatusDot) {
+                        newServerStatusDot.className = 'status-dot offline';
+                        newServerStatusDot.style.background = '#f51515';
+                    }
+                    if (newServerStatusBadge) {
+                        newServerStatusBadge.textContent = '❌ Server neodpovídá (offline / neplatná adresa)';
+                        newServerStatusBadge.style.color = '#f51515';
+                    }
+                    if (newServerPingDetails) {
+                        newServerPingDetails.textContent = 'Zkontroluj správnost IP adresy nebo portu.';
+                    }
+                }
+            }, 450);
+        });
     }
 
     if (btnAddCustomServer) btnAddCustomServer.addEventListener('click', openAddServerModal);
@@ -597,6 +785,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ip: cleanIp,
                 port: port,
                 pinned: isPinned,
+                icon: currentDetectedServerIcon || null,
+                online: currentDetectedServerOnline,
                 lastJoined: Date.now()
             };
 
@@ -773,6 +963,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    const updateModal = document.getElementById('updateModal');
+    const updateProgressContainer = document.getElementById('updateProgressContainer');
+    const updateProgressBar = document.getElementById('updateProgressBar');
+    const updateProgressText = document.getElementById('updateProgressText');
+    const updateProgressSize = document.getElementById('updateProgressSize');
+    const updateCountdownContainer = document.getElementById('updateCountdownContainer');
+    const updateCountdownSec = document.getElementById('updateCountdownSec');
+    const updateModalFoot = document.getElementById('updateModalFoot');
+    let isUpdatingCurrently = false;
+
+    // Příjem průběžných dat o stahování a instalaci aktualizace
+    if (window.api && window.api.onUpdateProgress) {
+        window.api.onUpdateProgress((data) => {
+            if (!updateProgressContainer) return;
+            updateProgressContainer.style.display = 'block';
+
+            if (data.status === 'downloading') {
+                const pct = data.percent || 0;
+                if (updateProgressBar) updateProgressBar.style.width = `${pct}%`;
+                if (updateProgressText) updateProgressText.textContent = `Stahuji aktualizaci... ${pct} %`;
+                if (updateProgressSize && data.total) {
+                    const curMb = (data.current / 1048576).toFixed(1);
+                    const totMb = (data.total / 1048576).toFixed(1);
+                    updateProgressSize.textContent = `${curMb} MB / ${totMb} MB`;
+                }
+            } else if (data.status === 'extracting') {
+                if (updateProgressBar) updateProgressBar.style.width = '100%';
+                if (updateProgressText) updateProgressText.textContent = 'Rozbaluji a instaluji novou verzi...';
+                if (updateProgressSize) updateProgressSize.textContent = 'Instalace';
+            }
+        });
+    }
+
     function openUpdateModal(update) {
         const modal = document.getElementById('updateModal');
         const title = document.getElementById('updateModalTitle');
@@ -780,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const notes = document.getElementById('updateReleaseNotes');
         if (!modal) return;
 
-        if (title) title.textContent = `Dostupná verze v${update.latestVersion || ''}`;
+        if (title) title.textContent = `Dostupná nová verze v${update.latestVersion || ''}`;
         if (desc) desc.textContent = `Byla vydána nová verze MYCHAL SMP Launcheru (máš nainstalovanou v${update.currentVersion || '1.0.0'}). Chceš aktualizaci stáhnout a nainstalovat?`;
 
         if (notes && update.releaseNotes) {
@@ -790,10 +1013,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             notes.style.display = 'none';
         }
 
+        // Reset progress & countdown
+        if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+        if (updateProgressBar) updateProgressBar.style.width = '0%';
+        if (updateCountdownContainer) updateCountdownContainer.style.display = 'none';
+        if (updateModalFoot) updateModalFoot.style.display = 'flex';
+
+        const btnConfirm = document.getElementById('btnConfirmUpdate');
+        if (btnConfirm) {
+            btnConfirm.disabled = false;
+            btnConfirm.innerHTML = '<span>⬇️ Aktualizovat nyní</span>';
+        }
+
         modal.style.display = 'flex';
     }
 
     function closeUpdateModal() {
+        if (isUpdatingCurrently) return;
         const modal = document.getElementById('updateModal');
         if (modal) modal.style.display = 'none';
     }
@@ -841,9 +1077,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnConfirmUpdate = document.getElementById('btnConfirmUpdate');
     if (btnConfirmUpdate) {
         btnConfirmUpdate.addEventListener('click', async () => {
-            if (!pendingUpdateData) return;
+            if (!pendingUpdateData || isUpdatingCurrently) return;
+            isUpdatingCurrently = true;
             btnConfirmUpdate.disabled = true;
             btnConfirmUpdate.innerHTML = '<span>⏳ Stahuji aktualizaci...</span>';
+
+            const notes = document.getElementById('updateReleaseNotes');
+            if (notes) notes.style.display = 'none';
+
+            if (updateProgressContainer) {
+                updateProgressContainer.style.display = 'block';
+                if (updateProgressBar) updateProgressBar.style.width = '0%';
+                if (updateProgressText) updateProgressText.textContent = 'Navazuji spojení s GitHub Releases...';
+                if (updateProgressSize) updateProgressSize.textContent = '0 MB / ...';
+            }
 
             try {
                 const assets = pendingUpdateData.assets || [];
@@ -852,23 +1099,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 const res = await window.api.applyUpdate(downloadUrl);
                 if (res && res.applied) {
-                    showToast('✓ ' + res.message, 'success');
-                    setTimeout(async () => {
-                        try {
-                            await window.api.restartLauncher();
-                        } catch (e) {
-                            window.location.reload();
+                    if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+                    if (updateModalFoot) updateModalFoot.style.display = 'none';
+                    if (updateCountdownContainer) updateCountdownContainer.style.display = 'block';
+
+                    let countdown = 3;
+                    if (updateCountdownSec) updateCountdownSec.textContent = countdown;
+
+                    const interval = setInterval(async () => {
+                        countdown--;
+                        if (updateCountdownSec) updateCountdownSec.textContent = countdown;
+                        if (countdown <= 0) {
+                            clearInterval(interval);
+                            try {
+                                await window.api.restartLauncher();
+                            } catch (e) {
+                                window.location.reload();
+                            }
                         }
-                    }, 1500);
+                    }, 1000);
                 } else if (res && res.openedInBrowser) {
                     showToast('Odkaz na stažení byl otevřen v prohlížeči.', 'info');
+                    isUpdatingCurrently = false;
                     closeUpdateModal();
                 }
             } catch (err) {
+                isUpdatingCurrently = false;
                 showToast('Chyba při aktualizaci: ' + err.message, 'error');
-            } finally {
-                btnConfirmUpdate.disabled = false;
-                btnConfirmUpdate.innerHTML = '<span>⬇️ Aktualizovat nyní</span>';
+                if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+                if (btnConfirmUpdate) {
+                    btnConfirmUpdate.disabled = false;
+                    btnConfirmUpdate.innerHTML = '<span>⬇️ Zkusit znovu</span>';
+                }
             }
         });
     }

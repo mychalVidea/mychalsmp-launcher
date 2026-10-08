@@ -683,11 +683,26 @@ ipcMain.handle('check-for-updates', async () => {
 });
 
 ipcMain.handle('apply-update', async (event, assetUrl) => {
-    return await applyUpdate(assetUrl);
+    return await applyUpdate(assetUrl, (data) => {
+        try {
+            event.sender.send('update-progress', data);
+        } catch (e) {}
+    });
 });
 
 ipcMain.handle('restart-launcher', () => {
-    app.relaunch();
+    let targetExe = path.join(require('os').homedir(), '.local', 'share', 'mychalsmp-launcher', 'mychalsmp-launcher');
+    if (process.platform === 'linux') {
+        const exeDir = path.dirname(process.execPath);
+        if (!exeDir.startsWith('/tmp') && fs.existsSync(path.join(exeDir, 'mychalsmp-launcher'))) {
+            targetExe = path.join(exeDir, 'mychalsmp-launcher');
+        }
+    }
+    if (fs.existsSync(targetExe)) {
+        app.relaunch({ execPath: targetExe });
+    } else {
+        app.relaunch();
+    }
     app.exit(0);
 });
 

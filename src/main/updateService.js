@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { app, shell } = require('electron');
+const { Readable } = require('stream');
+const { pipeline } = require('stream/promises');
 const packageJson = require('../../package.json');
 
 const GITHUB_REPO = 'mychalVidea/mychalsmp-launcher';
@@ -79,35 +81,125 @@ function isNewerVersion(remote, local) {
 
 /**
  * Downloads and applies the update for Linux if installed in ~/.local/share/mychalsmp-launcher.
+ * Podporuje streamování průběhu stahování a správné rozbalení vnořené složky tar.gz.
  */
-async function applyUpdate(assetUrl) {
+async function applyUpdate(assetUrl, onProgress) {
     if (!assetUrl) {
         throw new Error('Chybí odkaz na aktualizační balíček.');
     }
 
-    const installDir = path.join(os.homedir(), '.local', 'share', 'mychalsmp-launcher');
-    const isInstalledLinux = process.platform === 'linux' && fs.existsSync(installDir);
+    const defaultInstallDir = path.join(os.homedir(), '.local', 'share', 'mychalsmp-launcher');
+    let installDir = defaultInstallDir;
 
-    if (isInstalledLinux && assetUrl.endsWith('.tar.gz')) {
+    if (process.platform === 'linux') {
+        const exeDir = path.dirname(process.execPath);
+        if (!exeDir.startsWith('/tmp') && (fs.existsSync(path.join(exeDir, 'mychalsmp-launcher')) || fs.existsSync(path.join(exeDir, 'resources')))) {
+            installDir = exeDir;
+        }
+    }
+
+    if (process.platform === 'linux' && assetUrl.endsWith('.tar.gz')) {
         const tmpTar = path.join(os.tmpdir(), `mychalsmp-update-${Date.now()}.tar.gz`);
 
-        const res = await fetch(assetUrl);
+        // 1. Streamované stahování s reportingem procent a megabajtů
+        const res = await fetch(assetUrl, {
+            headers: {
+                'User-Agent': 'mychalsmp-launcher-updater'
+            }
+        });
         if (!res.ok) throw new Error(`Chyba stahování: HTTP ${res.status}`);
-        const buffer = await res.arrayBuffer();
-        fs.writeFileSync(tmpTar, Buffer.from(buffer));
 
-        // Unpack tar.gz into installDir
+        const totalBytes = parseInt(res.headers.get('content-length')) || 0;
+        let receivedBytes = 0;
+
+        const fileStream = fs.createWriteStream(tmpTar);
+        const nodeStream = Readable.fromWeb(res.body);
+
+        let lastReport = 0;
+        nodeStream.on('data', (chunk) => {
+            receivedBytes += chunk.length;
+            const now = Date.now();
+            if (now - lastReport > 60 || receivedBytes === totalBytes) {
+                lastReport = now;
+                const percent = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0;
+                if (onProgress) {
+                    onProgress({
+                        current: receivedBytes,
+                        total: totalBytes,
+                        percent: Math.min(percent, 100),
+                        status: 'downloading'
+                    });
+                }
+            }
+        });
+
+        await pipeline(nodeStream, fileStream);
+
+        if (onProgress) {
+            onProgress({
+                current: receivedBytes,
+                total: totalBytes,
+                percent: 100,
+                status: 'extracting'
+            });
+        }
+
+        // 2. Rozbalení tar.gz do dočasné složky
+        const tmpExtractDir = path.join(os.tmpdir(), `mychalsmp-extract-${Date.now()}`);
+        fs.mkdirSync(tmpExtractDir, { recursive: true });
+
         const { execSync } = require('child_process');
-        execSync(`tar -xzf "${tmpTar}" -C "${installDir}"`);
-        fs.unlinkSync(tmpTar);
+        execSync(`tar -xzf "${tmpTar}" -C "${tmpExtractDir}"`);
+
+        // 3. Detekce podsložky obsahující spustitelný soubor mychalsmp-launcher
+        function findBinaryDir(dir) {
+            if (fs.existsSync(path.join(dir, 'mychalsmp-launcher'))) {
+                return dir;
+            }
+            try {
+                const subdirs = fs.readdirSync(dir, { withFileTypes: true }).filter(d => d.isDirectory());
+                for (const sub of subdirs) {
+                    const subPath = path.join(dir, sub.name);
+                    if (fs.existsSync(path.join(subPath, 'mychalsmp-launcher'))) {
+                        return subPath;
+                    }
+                }
+            } catch (e) {}
+            return dir;
+        }
+
+        const sourceDir = findBinaryDir(tmpExtractDir);
+
+        // 4. Přepsání souborů v cílové složce instalace
+        fs.mkdirSync(installDir, { recursive: true });
+        execSync(`cp -rf "${sourceDir}"/* "${installDir}"/`);
+
+        const targetExe = path.join(installDir, 'mychalsmp-launcher');
+        try { execSync(`chmod +x "${targetExe}"`); } catch (e) {}
+
+        // 5. Aktualizace desktop ikony, pokud existuje
+        try {
+            const appsDir = path.join(os.homedir(), '.local', 'share', 'applications');
+            const desktopFile = path.join(appsDir, 'mychalsmp-launcher.desktop');
+            if (fs.existsSync(desktopFile)) {
+                let content = fs.readFileSync(desktopFile, 'utf8');
+                content = content.replace(/Exec="?[^"\n]+"?/g, `Exec="${targetExe}"`);
+                fs.writeFileSync(desktopFile, content, 'utf8');
+            }
+        } catch (e) {}
+
+        // 6. Úklid dočasných souborů
+        try { fs.unlinkSync(tmpTar); } catch (e) {}
+        try { fs.rmSync(tmpExtractDir, { recursive: true, force: true }); } catch (e) {}
 
         return {
             success: true,
             applied: true,
-            message: 'Aktualizace byla úspěšně nainstalována. Launcher se restartuje.'
+            targetExe: targetExe,
+            message: 'Aktualizace byla úspěšně nainstalována.'
         };
     } else {
-        // Open browser to release page
+        // Otevření v prohlížeči pro jiné platformy
         shell.openExternal(assetUrl);
         return {
             success: true,

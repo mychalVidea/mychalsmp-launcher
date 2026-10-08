@@ -14,6 +14,28 @@
 </head>
 
 <body>
+    <!-- CRAZY GOOD SATISFYING BOOT SPLASH SCREEN -->
+    <div id="bootSplashScreen" class="boot-splash-container">
+        <div class="boot-splash-ambient-glow"></div>
+        <div class="boot-splash-beam"></div>
+        <div class="boot-splash-center">
+            <div class="boot-splash-core">
+                <div class="boot-hologram-ring"></div>
+                <div class="boot-hologram-ring-inner"></div>
+                <img src="assets/server-icon.png" class="boot-splash-logo" alt="MYCHAL SMP">
+            </div>
+            <div class="boot-splash-brand">
+                <h1 class="boot-splash-title">MYCHAL<span>SMP</span></h1>
+            </div>
+            <div class="boot-progress-box">
+                <div class="boot-progress-bar">
+                    <div id="bootProgressFill" class="boot-progress-fill"></div>
+                </div>
+                <span id="bootProgressText" class="boot-progress-text">Inicializace jádra Beacon...</span>
+            </div>
+        </div>
+    </div>
+
     <!-- Top Frameless Titlebar / Header -->
     <header class="titlebar">
         <div class="titlebar-drag">
@@ -132,8 +154,10 @@
                         <div class="hero-character-stage">
                             <div class="stage-bg-overlay"></div>
                             <div class="stage-character">
-                                <div class="stage-skin-wrapper" id="heroSkinWrapper" title="3D Skin – Otáčej tažením myši">
-                                    <canvas id="heroSkinCanvas3D" class="hero-3d-canvas" width="160" height="220"></canvas>
+                                <div class="stage-skin-wrapper" id="heroSkinWrapper"
+                                    title="3D Skin – Otáčej tažením myši">
+                                    <canvas id="heroSkinCanvas3D" class="hero-3d-canvas" width="160"
+                                        height="220"></canvas>
                                     <img src="https://minotar.net/armor/body/Steve/180.png" alt="Skin" id="heroSkinImg"
                                         class="stage-skin" style="display: none;">
                                 </div>
@@ -308,7 +332,8 @@
                                     <span class="warden-banner-icon">🛡️</span>
                                     <div class="warden-banner-text">
                                         <strong>MYCHAL SMP Quick Play zablokován</strong>
-                                        <span id="wardenBlockedCountText">Nalezeny nepovolené módy (povoleny pro singleplayer a jiné servery)</span>
+                                        <span id="wardenBlockedCountText">Nalezeny nepovolené módy (povoleny pro
+                                            singleplayer a jiné servery)</span>
                                     </div>
                                 </div>
                                 <button type="button" class="btn-warden-action" id="btnOpenWardenModal">Vyřešit</button>
@@ -762,7 +787,8 @@
                         </label>
                         <label class="checkbox-label" style="margin-top: 8px;">
                             <input type="checkbox" id="checkDiscordRpc" checked>
-                            <span>Bohatý stav na <strong>Discordu (Rich Presence)</strong> – nick, server mychalsmp.xyz, herní čas a profil</span>
+                            <span>Bohatý stav na <strong>Discordu (Rich Presence)</strong> – nick, server mychalsmp.xyz,
+                                herní čas a profil</span>
                         </label>
                     </div>
 
@@ -819,7 +845,8 @@
                                 <input type="checkbox" id="checkNativeWayland">
                                 <div class="perf-toggle-info">
                                     <span class="perf-toggle-title">Nativní Wayland okno (GLFW)</span>
-                                    <span class="perf-toggle-desc">Vynutí čisté Wayland okno bez XWayland pro nejnižší možný input lag myši (GLFW_PLATFORM=wayland).</span>
+                                    <span class="perf-toggle-desc">Vynutí čisté Wayland okno bez XWayland pro nejnižší
+                                        možný input lag myši (GLFW_PLATFORM=wayland).</span>
                                 </div>
                             </label>
                         </div>
@@ -854,25 +881,32 @@
                     </div>
 
                     <!-- Automatická detekce a čištění nepotřebné Java cache -->
-                    <div class="cache-cleaner-card" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 16px; margin-top: 18px;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap;">
+                    <div class="cache-cleaner-card"
+                        style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 16px; margin-top: 18px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap;">
                             <div style="flex: 1; min-width: 240px;">
                                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
                                     <span style="font-size: 18px;">🧹</span>
-                                    <strong style="color: #f1f5f9; font-size: 14px;">Čištění nepotřebné Java cache & logů</strong>
+                                    <strong style="color: #f1f5f9; font-size: 14px;">Čištění nepotřebné Java cache &
+                                        logů</strong>
                                 </div>
                                 <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin: 0;">
-                                    Automaticky detekuje a promaže staré komprimované logy (.log.gz), crash reporty starší než 30 dní a dočasná data.
+                                    Automaticky detekuje a promaže staré komprimované logy (.log.gz), crash reporty
+                                    starší než 30 dní a dočasná data.
                                 </p>
-                                <div id="cacheCleanerSummary" style="font-size: 12px; color: #38bdf8; margin-top: 8px; font-weight: 500;">
+                                <div id="cacheCleanerSummary"
+                                    style="font-size: 12px; color: #38bdf8; margin-top: 8px; font-weight: 500;">
                                     Stav: Připraveno k analýze uvolnitelného místa.
                                 </div>
                             </div>
                             <div style="display: flex; gap: 8px; align-items: center;">
-                                <button type="button" class="mc-btn mc-btn-secondary" id="btnScanCache" style="padding: 8px 14px; font-size: 12px;">
+                                <button type="button" class="mc-btn mc-btn-secondary" id="btnScanCache"
+                                    style="padding: 8px 14px; font-size: 12px;">
                                     <span>🔍 Analyzovat</span>
                                 </button>
-                                <button type="button" class="mc-btn mc-btn-green" id="btnCleanCache" style="padding: 8px 14px; font-size: 12px;">
+                                <button type="button" class="mc-btn mc-btn-green" id="btnCleanCache"
+                                    style="padding: 8px 14px; font-size: 12px;">
                                     <span>🧹 Vyčistit disk (1 klik)</span>
                                 </button>
                             </div>
@@ -880,18 +914,22 @@
                     </div>
 
                     <!-- Aktualizace Launcheru -->
-                    <div class="update-checker-card" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 16px; margin-top: 18px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <div class="update-checker-card"
+                        style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 16px; margin-top: 18px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;">
                             <div>
                                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
                                     <span style="font-size: 18px;">🚀</span>
-                                    <strong style="color: #f1f5f9; font-size: 14px;">Aktualizace MYCHAL SMP Launcheru</strong>
+                                    <strong style="color: #f1f5f9; font-size: 14px;">Aktualizace MYCHAL SMP
+                                        Launcheru</strong>
                                 </div>
                                 <p style="font-size: 12px; color: #94a3b8; margin: 0;" id="launcherVersionStatus">
                                     Nainstalovaná verze: <strong>v1.0.4</strong>
                                 </p>
                             </div>
-                            <button type="button" class="mc-btn mc-btn-secondary" id="btnManualCheckUpdate" style="padding: 8px 14px; font-size: 12px;">
+                            <button type="button" class="mc-btn mc-btn-secondary" id="btnManualCheckUpdate"
+                                style="padding: 8px 14px; font-size: 12px;">
                                 <span>🔄 Zkontrolovat aktualizace</span>
                             </button>
                         </div>
@@ -1309,7 +1347,8 @@
                     <div class="modal-body">
                         <div class="warden-warning-notice">
                             <p>V aktivním profilu byly nalezeny modifikace, které nejsou na síti MYCHAL SMP povoleny.
-                                Na <strong>ostatních serverech a v singleplayeru</strong> můžeš tyto módy volně používat, pro připojení na MYCHAL SMP je však nutné je zakázat.</p>
+                                Na <strong>ostatních serverech a v singleplayeru</strong> můžeš tyto módy volně
+                                používat, pro připojení na MYCHAL SMP je však nutné je zakázat.</p>
                             <p class="warden-allowed-hint">💡 <em>Poznámka: Replay Mod, optimalizace (Sodium, Iris) a
                                     estetické doplňky jsou povoleny.</em></p>
                         </div>
@@ -1351,6 +1390,23 @@
                             <input type="text" class="text-input" id="newServerIpInput"
                                 placeholder="Např. mc.example.com nebo 130.61.89.37:25565">
                         </div>
+                        <!-- Live Ping Preview & Icon Detection -->
+                        <div class="form-group" style="margin-top: 14px;">
+                            <label>Živý náhled serveru & Ping</label>
+                            <div class="server-live-preview-card" id="newServerPreviewCard">
+                                <div class="server-preview-icon-wrapper">
+                                    <img src="assets/server-icon.png" id="newServerPreviewIcon" class="server-preview-icon" alt="Server Icon">
+                                    <span id="newServerOfflineCross" class="server-preview-cross-badge" style="display: none;">❌</span>
+                                </div>
+                                <div class="server-preview-details">
+                                    <div class="server-preview-status-line">
+                                        <span id="newServerStatusDot" class="status-dot"></span>
+                                        <strong id="newServerStatusBadge" style="font-size: 13px; color: #94a3b8;">Zadej IP adresu serveru...</strong>
+                                    </div>
+                                    <span id="newServerPingDetails" style="font-size: 12px; color: #64748b; margin-top: 3px;">Automatická detekce dostupnosti, latence a ikony</span>
+                                </div>
+                            </div>
+                        </div>
                         <div class="form-group" style="margin-top: 14px;">
                             <label
                                 style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-secondary); font-size: 13px; user-select: none;">
@@ -1371,7 +1427,7 @@
 
             <!-- AUTO-UPDATE MODAL -->
             <div class="custom-modal-overlay" id="updateModal" style="display: none;">
-                <div class="custom-modal-box" style="max-width: 500px;">
+                <div class="custom-modal-box" style="max-width: 520px;">
                     <div class="modal-head">
                         <div class="modal-title-with-icon">
                             <span style="font-size: 26px;">🚀</span>
@@ -1390,8 +1446,26 @@
                         <div id="updateReleaseNotes"
                             style="max-height: 140px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; font-size: 12px; color: #cbd5e1; white-space: pre-wrap; display: none;">
                         </div>
+
+                        <!-- PROGRESS BAR CONTAINER (zobrazí se při stahování) -->
+                        <div id="updateProgressContainer" style="display: none; margin-top: 14px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span id="updateProgressText" style="font-size: 13px; font-weight: 600; color: #fff;">Stahuji aktualizaci... 0 %</span>
+                                <span id="updateProgressSize" style="font-size: 12px; color: #38bdf8; font-family: monospace;">0 MB / 0 MB</span>
+                            </div>
+                            <div class="update-progress-track">
+                                <div id="updateProgressBar" class="update-progress-fill" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
+                        <!-- RESTART COUNTDOWN CONTAINER (zobrazí se po instalaci) -->
+                        <div id="updateCountdownContainer" style="display: none; margin-top: 14px; text-align: center; padding: 14px; background: rgba(33, 222, 0, 0.08); border: 1px solid rgba(33, 222, 0, 0.25); border-radius: 10px;">
+                            <div style="font-size: 24px; margin-bottom: 4px;">✓</div>
+                            <strong style="color: #21DE00; font-size: 14px; display: block; margin-bottom: 4px;">Aktualizace byla úspěšně nainstalována!</strong>
+                            <span style="font-size: 13px; color: #cbd5e1;">Restartuji launcher za <strong id="updateCountdownSec" style="color: #38bdf8; font-size: 16px;">3</strong> s...</span>
+                        </div>
                     </div>
-                    <div class="modal-foot">
+                    <div class="modal-foot" id="updateModalFoot">
                         <button class="mc-btn mc-btn-secondary" id="btnDismissUpdate">Později</button>
                         <button class="mc-btn mc-btn-green" id="btnConfirmUpdate">
                             <span>⬇️ Aktualizovat nyní</span>
@@ -1415,27 +1489,39 @@
                     </div>
                     <div class="modal-body">
                         <!-- Diagnostic Result Banner -->
-                        <div class="crash-diag-card" style="background: rgba(245, 21, 21, 0.08); border: 1px solid rgba(245, 21, 21, 0.25); border-radius: 10px; padding: 14px; margin-bottom: 14px;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-                                <strong id="crashCauseHead" style="color: #f87171; font-size: 15px;">Příčina: Nedostatek paměti RAM</strong>
-                                <span class="badge" id="crashExitCodeBadge" style="background: #f51515; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Kód 1</span>
+                        <div class="crash-diag-card"
+                            style="background: rgba(245, 21, 21, 0.08); border: 1px solid rgba(245, 21, 21, 0.25); border-radius: 10px; padding: 14px; margin-bottom: 14px;">
+                            <div
+                                style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                                <strong id="crashCauseHead" style="color: #f87171; font-size: 15px;">Příčina: Nedostatek
+                                    paměti RAM</strong>
+                                <span class="badge" id="crashExitCodeBadge"
+                                    style="background: #f51515; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Kód
+                                    1</span>
                             </div>
-                            <p id="crashCauseDesc" style="font-size: 13px; color: #e2e8f0; line-height: 1.5; margin: 0 0 10px 0;">
-                                Hře došla přidělená operační paměť RAM. Minecraft nebo nainstalované modifikace vyžadují více paměti.
+                            <p id="crashCauseDesc"
+                                style="font-size: 13px; color: #e2e8f0; line-height: 1.5; margin: 0 0 10px 0;">
+                                Hře došla přidělená operační paměť RAM. Minecraft nebo nainstalované modifikace vyžadují
+                                více paměti.
                             </p>
-                            <div style="background: rgba(0,0,0,0.3); border-left: 3px solid #0a67e5; padding: 8px 12px; border-radius: 4px;">
+                            <div
+                                style="background: rgba(0,0,0,0.3); border-left: 3px solid #0a67e5; padding: 8px 12px; border-radius: 4px;">
                                 <span style="font-size: 12px; color: #94a3b8;">Doporučené řešení:</span>
-                                <div id="crashRecommendation" style="font-size: 13px; color: #60a5fa; font-weight: 500; margin-top: 2px;">
+                                <div id="crashRecommendation"
+                                    style="font-size: 13px; color: #60a5fa; font-weight: 500; margin-top: 2px;">
                                     Zvyš posuvník RAM na alespoň 6 GB.
                                 </div>
                             </div>
                         </div>
 
                         <!-- Technical Log Excerpt -->
-                        <div style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 12px; color: #94a3b8; font-weight: 600;">Výňatek z chybového hlášení:</span>
+                        <div
+                            style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 12px; color: #94a3b8; font-weight: 600;">Výňatek z chybového
+                                hlášení:</span>
                         </div>
-                        <pre id="crashLogExcerpt" style="max-height: 140px; overflow-y: auto; background: #0c0e17; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; font-size: 11px; font-family: monospace; color: #cbd5e1; white-space: pre-wrap; user-select: text; margin: 0;"></pre>
+                        <pre id="crashLogExcerpt"
+                            style="max-height: 140px; overflow-y: auto; background: #0c0e17; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; font-size: 11px; font-family: monospace; color: #cbd5e1; white-space: pre-wrap; user-select: text; margin: 0;"></pre>
                     </div>
                     <div class="modal-foot" style="display: flex; justify-content: space-between; align-items: center;">
                         <button class="mc-btn mc-btn-secondary" id="btnOpenCrashFullReport">
