@@ -147,6 +147,182 @@ Client.prototype.startMinecraft = function(launchArguments) {
     return proc;
 };
 
+/**
+ * Vyhledá existující oficiální instalace Minecraftu na počítači hráče (Linux, Windows, macOS).
+ */
+function getExistingMinecraftBaseDirs() {
+    const os = require('os');
+    const home = os.homedir();
+    const dirs = [];
+
+    if (process.platform === 'win32') {
+        const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+        const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+        dirs.push(path.join(appData, '.minecraft'));
+        dirs.push(path.join(appData, 'PrismLauncher'));
+        dirs.push(path.join(localAppData, 'Packages', 'Microsoft.4297127D64C6C_8wekyb3d8bbwe', 'LocalCache', 'Roaming', '.minecraft'));
+    } else if (process.platform === 'darwin') {
+        dirs.push(path.join(home, 'Library', 'Application Support', 'minecraft'));
+        dirs.push(path.join(home, 'Library', 'Application Support', 'PrismLauncher'));
+    } else {
+        dirs.push(path.join(home, '.minecraft'));
+        dirs.push(path.join(home, '.var', 'app', 'com.mojang.Minecraft', '.minecraft'));
+        dirs.push(path.join(home, '.local', 'share', 'PrismLauncher'));
+        dirs.push(path.join(home, '.local', 'share', 'ModrinthApp'));
+    }
+
+    return dirs.filter(d => fs.existsSync(d));
+}
+
+/**
+ * ⚡ Bleskové převzetí: Pokud na disku existuje .minecraft, okamžitě propojí složky assets a libraries.
+ */
+function linkOrShareExistingMinecraftData(targetRootDir, onLog) {
+    if (!targetRootDir) return;
+    const candidates = getExistingMinecraftBaseDirs();
+    if (!candidates.length) return;
+
+    const log = (msg) => { if (typeof onLog === 'function') onLog(msg); };
+
+    // 1. Propojení / sdílení složky assets
+    const targetAssets = path.join(targetRootDir, 'assets');
+    if (!fs.existsSync(targetAssets)) {
+        for (const cand of candidates) {
+            const candAssets = path.join(cand, 'assets');
+            const candObjects = path.join(candAssets, 'objects');
+            if (fs.existsSync(candObjects)) {
+                try {
+                    fs.mkdirSync(path.dirname(targetAssets), { recursive: true });
+                    const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
+                    fs.symlinkSync(candAssets, targetAssets, symlinkType);
+                    log(`[OPTIMALIZACE] ⚡ Bleskově propojeny existující Minecraft assety z "${candAssets}" (0 MB ke stahování)!`);
+                    break;
+                } catch (e) {
+                    log(`[OPTIMALIZACE] Nelze vytvořit symlink na assety (${e.message}), použijeme přímé čtení z disku.`);
+                }
+            }
+        }
+    }
+
+    // 2. Propojení / sdílení složky libraries
+    const targetLibs = path.join(targetRootDir, 'libraries');
+    if (!fs.existsSync(targetLibs)) {
+        for (const cand of candidates) {
+            const candLibs = path.join(cand, 'libraries');
+            if (fs.existsSync(candLibs)) {
+                try {
+                    fs.mkdirSync(path.dirname(targetLibs), { recursive: true });
+                    const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
+                    fs.symlinkSync(candLibs, targetLibs, symlinkType);
+                    log(`[OPTIMALIZACE] ⚡ Bleskově propojeny existující Minecraft knihovny z "${candLibs}"!`);
+                    break;
+                } catch (e) {}
+            }
+        }
+    }
+}
+
+/**
+ * Intercept Handler.prototype.getAssets:
+ * 1. Oseká 120+ nepotřebných cizích jazyků a stáhne z Mojangu POUZE CS, SK, EN_US a EN_GB (~50 MB úspora).
+ * 2. Zkontroluje existující .minecraft na disku a chybějící soubory zkopíruje bleskově z disku namísto stahování.
+ */
+Handler.prototype.getAssets = async function() {
+    if (this.client && this.client._isCancelled) {
+        return Promise.reject(new Error('LAUNCH_CANCELLED'));
+    }
+
+    const assetDirectory = path.resolve(this.options.overrides.assetRoot || path.join(this.options.root, 'assets'));
+    const assetId = this.options.version.custom || this.options.version.number;
+    const indexFilePath = path.join(assetDirectory, 'indexes', `${assetId}.json`);
+
+    if (!fs.existsSync(indexFilePath)) {
+        await this.downloadAsync(this.version.assetIndex.url, path.join(assetDirectory, 'indexes'), `${assetId}.json`, true, 'asset-json');
+    }
+
+    if (!fs.existsSync(indexFilePath)) {
+        throw new Error(`Nepodařilo se stáhnout index assetů: ${assetId}.json`);
+    }
+
+    const index = JSON.parse(fs.readFileSync(indexFilePath, { encoding: 'utf8' }));
+
+    // Povolené jazyky: čeština, slovenština, americká angličtina, britská angličtina
+    const ALLOWED_LANGUAGES = new Set(['cs_cz', 'sk_sk', 'en_us', 'en_gb']);
+
+    // Osekáme nepotřebné jazyky z objektů
+    const filteredAssetKeys = Object.keys(index.objects || {}).filter(assetKey => {
+        if (assetKey.startsWith('minecraft/lang/') || assetKey.includes('/lang/')) {
+            const langName = path.basename(assetKey, '.json').toLowerCase();
+            return ALLOWED_LANGUAGES.has(langName);
+        }
+        return true;
+    });
+
+    const existingCandidates = getExistingMinecraftBaseDirs()
+        .map(d => path.join(d, 'assets', 'objects'))
+        .filter(d => fs.existsSync(d));
+
+    let counter = 0;
+    this.client.emit('progress', {
+        type: 'assets',
+        task: 0,
+        total: filteredAssetKeys.length
+    });
+
+    // Paralelní zpracování po dávkách pro maximální rychlost
+    const concurrency = 25;
+    let idx = 0;
+
+    const processAsset = async (asset) => {
+        if (this.client && this.client._isCancelled) return;
+
+        const hash = index.objects[asset].hash;
+        const subhash = hash.substring(0, 2);
+        const subAssetDir = path.join(assetDirectory, 'objects', subhash);
+        const targetFilePath = path.join(subAssetDir, hash);
+
+        // A) Zkontrolovat, zda soubor již v cílové složce existuje
+        if (!fs.existsSync(targetFilePath)) {
+            // B) Bleskové převzetí ze stávajícího .minecraft na disku
+            let copiedFromDisk = false;
+            for (const candDir of existingCandidates) {
+                const srcPath = path.join(candDir, subhash, hash);
+                if (fs.existsSync(srcPath)) {
+                    try {
+                        fs.mkdirSync(subAssetDir, { recursive: true });
+                        fs.copyFileSync(srcPath, targetFilePath);
+                        copiedFromDisk = true;
+                        break;
+                    } catch (e) {}
+                }
+            }
+
+            // C) Pokud není na disku, stáhnout z oficiálního Mojang serveru
+            if (!copiedFromDisk) {
+                await this.downloadAsync(`${this.options.overrides.url.resource}/${subhash}/${hash}`, subAssetDir, hash, true, 'assets');
+            }
+        }
+
+        counter++;
+        this.client.emit('progress', {
+            type: 'assets',
+            task: counter,
+            total: filteredAssetKeys.length
+        });
+    };
+
+    const workers = Array.from({ length: concurrency }, async () => {
+        while (idx < filteredAssetKeys.length) {
+            if (this.client && this.client._isCancelled) break;
+            const currentAsset = filteredAssetKeys[idx++];
+            await processAsset(currentAsset);
+        }
+    });
+
+    await Promise.all(workers);
+    this.client.emit('debug', `[OPTIMALIZACE]: Zpracováno ${counter} assetů (cizí jazyky vynechány, staženy jen CS, SK, EN_US, EN_GB)`);
+};
+
 
 /**
  * Scans installed Java environments prioritizing Java 25 and Java 21.
@@ -289,6 +465,9 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     if (!fs.existsSync(rootDir)) {
         fs.mkdirSync(rootDir, { recursive: true });
     }
+
+    // ⚡ Bleskové převzetí existujících assetů a knihoven ze systému (.minecraft)
+    linkOrShareExistingMinecraftData(rootDir, onLog);
 
     // If running in an instance subfolder, share central assets and libraries
     try {

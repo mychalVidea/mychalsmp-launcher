@@ -736,6 +736,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const updateText = document.getElementById('updateText');
         try {
             const update = await window.api.checkForUpdates();
+            const versionStatus = document.getElementById('launcherVersionStatus');
+            if (versionStatus && update && update.currentVersion) {
+                versionStatus.innerHTML = `Nainstalovaná verze: <strong>v${update.currentVersion}</strong>${update.hasUpdate ? ` • <span style="color: #4ade80; font-weight: 600;">Dostupná nová verze v${update.latestVersion}</span>` : ' • <span style="color: #94a3b8;">Aktuální</span>'}`;
+            }
+
             if (update && update.hasUpdate) {
                 pendingUpdateData = update;
                 if (chip) {
@@ -748,7 +753,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 if (chip) chip.style.display = 'none';
                 if (!silent) {
-                    showToast('Launcher je aktuální (verze ' + (update.currentVersion || '1.0.0') + ')', 'info');
+                    showToast('Launcher je aktuální (verze v' + (update.currentVersion || '1.0.4') + ')', 'info');
                 }
             }
         } catch (e) {
@@ -786,6 +791,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnUpdateChip.addEventListener('click', () => {
             if (pendingUpdateData) {
                 openUpdateModal(pendingUpdateData);
+            }
+        });
+    }
+
+    const btnManualCheckUpdate = document.getElementById('btnManualCheckUpdate');
+    if (btnManualCheckUpdate) {
+        btnManualCheckUpdate.addEventListener('click', async () => {
+            btnManualCheckUpdate.disabled = true;
+            const orig = btnManualCheckUpdate.innerHTML;
+            btnManualCheckUpdate.innerHTML = '<span>⏳ Kontroluji...</span>';
+            try {
+                await checkLauncherUpdates(false);
+            } finally {
+                btnManualCheckUpdate.disabled = false;
+                btnManualCheckUpdate.innerHTML = orig;
             }
         });
     }
