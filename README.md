@@ -29,23 +29,22 @@ Plná podpora pro **Linux** (Ubuntu/Debian, Fedora, CachyOS, Arch Linux) a **Win
 
 ## 🐧 Podpora Linuxu
 
-V souladu s požadavky **nejsou použity žádné AppImage** balíčky. Launcher je připraven pro všechny hlavní distribuce:
+V souladu s požadavky **nejsou použity žádné AppImage** balíčky. Pro veškeré distribuce je k dispozici univerzální, čistý a rychlý archiv **`.tar.gz`**:
 
-### 1. CachyOS / Arch Linux
-- **Rychlý instalátor:** Spusť `./install-cachyos.sh` přímo ve složce launcher.
-- **Nativní balíček PKGBUILD:** Můžeš využít přiložený `PKGBUILD` a nainstalovat přes `makepkg -si`.
-- **Archiv:** K dispozici je také standalone `.tar.gz` v `dist/`.
-
-### 2. Ubuntu / Debian / Linux Mint
-- Výstupní `.deb` balíček:
+### 1. Univerzální 1-click instalátor (všechny distribuce)
+- Stačí stáhnout a spustit přiložený instalační skript:
   ```bash
-  sudo dpkg -i dist/mychalsmp-launcher_1.0.0_amd64.deb
+  curl -sSfL https://raw.githubusercontent.com/mychalVidea/mychalsmp-launcher/main/install.sh | bash
   ```
 
-### 3. Fedora / RHEL / openSUSE
-- Výstupní `.rpm` balíček:
+### 2. CachyOS / Arch Linux
+- Spusť `./install-cachyos.sh` přímo ve složce launcheru nebo využij přiložený `PKGBUILD`.
+
+### 3. Ruční spuštění archivu (.tar.gz)
+- Rozbal archiv a spusť binárku:
   ```bash
-  sudo rpm -i dist/mychalsmp-launcher-1.0.0.x86_64.rpm
+  tar -xzf mychalsmp-launcher.tar.gz
+  ./mychalsmp-launcher
   ```
 
 ---
@@ -65,7 +64,7 @@ Pro Windows 11 jsou k dispozici dva výstupy:
 npm start
 ```
 
-### Sestavení balíčků pro Linux (deb, rpm, tar.gz)
+### Sestavení balíčku pro Linux (tar.gz)
 ```bash
 npm run build:linux
 ```

@@ -31,12 +31,6 @@ nsis:
 linux:
   maintainer: "mychalVidea <admin@mychalsmp.xyz>"
   target:
-    - target: deb
-      arch:
-        - x64
-    - target: rpm
-      arch:
-        - x64
     - target: tar.gz
       arch:
         - x64
@@ -46,17 +40,3 @@ linux:
     Name: MYCHAL SMP Launcher
     Comment: Oficiální launcher Minecraft sítě MYCHAL SMP
     Categories: Game;ActionGame;AdventureGame;
-
-deb:
-  depends:
-    - libnotify4
-    - libnss3
-    - libxss1
-    - libasound2
-
-rpm:
-  depends:
-    - libnotify
-    - nss
-    - libXScrnSaver
-    - alsa-lib

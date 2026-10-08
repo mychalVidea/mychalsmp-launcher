@@ -1,11 +1,11 @@
 {
   "name": "mychalsmp-launcher",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Oficiální multiplatformní launcher pro síť MYCHAL SMP s optimalizovaným klientem pro Windows 11 a Linux",
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
-    "build:linux": "electron-builder --linux deb rpm tar.gz",
+    "build:linux": "electron-builder --linux tar.gz",
     "build:win": "electron-builder --win nsis portable",
     "build:all": "electron-builder -wl",
     "pack": "electron-builder --dir",

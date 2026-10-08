@@ -27,6 +27,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
@@ -48,7 +49,7 @@ jobs:
           if-no-files-found: error
 
   build-linux:
-    name: Build Linux (.tar.gz, .deb, .rpm)
+    name: Build Linux (.tar.gz)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -58,6 +59,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
@@ -67,8 +69,8 @@ jobs:
         run: |
           node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('./package.json')); pkg.version = '${{ github.event.inputs.custom_version }}'.replace(/^v/, ''); fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');"
 
-      - name: Build Linux Packages
-        run: npx electron-builder --linux deb rpm tar.gz --publish never
+      - name: Build Linux Package
+        run: npx electron-builder --linux tar.gz --publish never
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
@@ -76,8 +78,6 @@ jobs:
           name: linux-binaries
           path: |
             dist/*.tar.gz
-            dist/*.deb
-            dist/*.rpm
           if-no-files-found: error
 
   publish-release:
@@ -138,7 +138,5 @@ jobs:
           files: |
             release-assets/*.exe
             release-assets/*.tar.gz
-            release-assets/*.deb
-            release-assets/*.rpm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
