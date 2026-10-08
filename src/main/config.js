@@ -93,7 +93,8 @@ const DEFAULT_CONFIG = {
     enableDiscordRpc: true,
     customSkinPath: null,
     customSkinVariant: 'classic',
-    customCapePath: null
+    customCapePath: null,
+    enableAudioDlc: true
 };
 
 function ensureDirSync(dir) {

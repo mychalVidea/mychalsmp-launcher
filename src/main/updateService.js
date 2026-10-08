@@ -39,6 +39,32 @@ async function checkForUpdates() {
 
         const hasUpdate = isNewerVersion(latestTag, CURRENT_VERSION);
 
+        const assets = (release.assets || []).map(a => ({
+            name: a.name,
+            downloadUrl: a.browser_download_url,
+            size: a.size
+        }));
+
+        // Detekce bleskového delta balíčku (update.asar nebo app.asar ~3 MB)
+        const deltaAsset = assets.find(a => a.name === 'update.asar' || a.name === 'app.asar');
+        const tarAsset = assets.find(a => a.name.endsWith('.tar.gz') && !a.name.includes('blockmap'));
+        const winAsset = assets.find(a => a.name.endsWith('.exe') && !a.name.includes('blockmap'));
+
+        let preferredAsset = null;
+        let isDelta = false;
+
+        // Pokud máme k dispozici lehký delta balíček, preferujeme ho pro okamžitou aktualizaci
+        if (deltaAsset) {
+            preferredAsset = deltaAsset;
+            isDelta = true;
+        } else if (process.platform === 'linux' && tarAsset) {
+            preferredAsset = tarAsset;
+        } else if (process.platform === 'win32' && winAsset) {
+            preferredAsset = winAsset;
+        } else if (assets.length > 0) {
+            preferredAsset = assets[0];
+        }
+
         return {
             hasUpdate,
             currentVersion: CURRENT_VERSION,
@@ -47,11 +73,11 @@ async function checkForUpdates() {
             releaseUrl: release.html_url,
             releaseNotes: release.body || '',
             publishedAt: release.published_at,
-            assets: (release.assets || []).map(a => ({
-                name: a.name,
-                downloadUrl: a.browser_download_url,
-                size: a.size
-            }))
+            isDelta,
+            deltaName: deltaAsset ? deltaAsset.name : null,
+            downloadUrl: preferredAsset ? preferredAsset.downloadUrl : null,
+            downloadSize: preferredAsset ? preferredAsset.size : null,
+            assets
         };
     } catch (e) {
         return {
@@ -80,14 +106,111 @@ function isNewerVersion(remote, local) {
 }
 
 /**
- * Downloads and applies the update for Linux if installed in ~/.local/share/mychalsmp-launcher.
- * Podporuje streamování průběhu stahování a správné rozbalení vnořené složky tar.gz.
+ * Downloads and applies the update.
+ * Podporuje:
+ * 1. Bleskovou delta aktualizaci přes update.asar (~3 MB namísto ~90 MB).
+ * 2. Inteligentní souborový diff sync pro plný archiv .tar.gz (přepisuje pouze reálně změněné soubory).
  */
 async function applyUpdate(assetUrl, onProgress) {
     if (!assetUrl) {
         throw new Error('Chybí odkaz na aktualizační balíček.');
     }
 
+    // ── 1. Blesková Delta Aktualizace (jen změněné soubory app.asar ~3 MB) ────
+    if (assetUrl.endsWith('.asar')) {
+        let resourcesDir = null;
+        const exeDir = path.dirname(process.execPath);
+        const candidates = [
+            process.resourcesPath,
+            path.join(exeDir, 'resources'),
+            path.join(os.homedir(), '.local', 'share', 'mychalsmp-launcher', 'resources')
+        ];
+
+        for (const cand of candidates) {
+            if (cand && fs.existsSync(cand) && (fs.existsSync(path.join(cand, 'app.asar')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher.exe')))) {
+                resourcesDir = cand;
+                break;
+            }
+        }
+
+        if (!resourcesDir) {
+            resourcesDir = process.resourcesPath || path.join(exeDir, 'resources');
+            try { fs.mkdirSync(resourcesDir, { recursive: true }); } catch (e) {}
+        }
+
+        const targetAsar = path.join(resourcesDir, 'app.asar');
+        const tmpAsar = path.join(os.tmpdir(), `mychalsmp-update-${Date.now()}.asar`);
+
+        const res = await fetch(assetUrl, {
+            headers: { 'User-Agent': 'mychalsmp-launcher-updater' }
+        });
+        if (!res.ok) throw new Error(`Chyba stahování delta balíčku: HTTP ${res.status}`);
+
+        const totalBytes = parseInt(res.headers.get('content-length')) || 0;
+        let receivedBytes = 0;
+        const fileStream = fs.createWriteStream(tmpAsar);
+        const nodeStream = Readable.fromWeb(res.body);
+
+        let lastReport = 0;
+        nodeStream.on('data', (chunk) => {
+            receivedBytes += chunk.length;
+            const now = Date.now();
+            if (now - lastReport > 40 || receivedBytes === totalBytes) {
+                lastReport = now;
+                const percent = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0;
+                if (onProgress) {
+                    onProgress({
+                        current: receivedBytes,
+                        total: totalBytes,
+                        percent: Math.min(percent, 100),
+                        status: 'downloading',
+                        isDelta: true
+                    });
+                }
+            }
+        });
+
+        await pipeline(nodeStream, fileStream);
+
+        if (onProgress) {
+            onProgress({
+                current: totalBytes,
+                total: totalBytes,
+                percent: 100,
+                status: 'extracting',
+                isDelta: true
+            });
+        }
+
+        // Záloha a atomické přepsání
+        const backupAsar = path.join(resourcesDir, 'app.asar.bak');
+        try {
+            if (fs.existsSync(targetAsar)) {
+                fs.copyFileSync(targetAsar, backupAsar);
+            }
+        } catch (e) {}
+
+        try {
+            fs.copyFileSync(tmpAsar, targetAsar);
+            try { fs.unlinkSync(tmpAsar); } catch (e) {}
+        } catch (copyErr) {
+            if (fs.existsSync(backupAsar)) {
+                try { fs.copyFileSync(backupAsar, targetAsar); } catch (e) {}
+            }
+            throw new Error(`Chyba při zápisu delta balíčku: ${copyErr.message}`);
+        }
+
+        const targetExe = process.execPath;
+        return {
+            success: true,
+            applied: true,
+            isDelta: true,
+            targetExe: targetExe,
+            message: 'Blesková delta aktualizace byla úspěšně nainstalována.'
+        };
+    }
+
+    // ── 2. Plná instalace archivu .tar.gz (Linux) se souborovým diff-syncem ───
     const defaultInstallDir = path.join(os.homedir(), '.local', 'share', 'mychalsmp-launcher');
     let installDir = defaultInstallDir;
 
@@ -101,11 +224,8 @@ async function applyUpdate(assetUrl, onProgress) {
     if (process.platform === 'linux' && assetUrl.endsWith('.tar.gz')) {
         const tmpTar = path.join(os.tmpdir(), `mychalsmp-update-${Date.now()}.tar.gz`);
 
-        // 1. Streamované stahování s reportingem procent a megabajtů
         const res = await fetch(assetUrl, {
-            headers: {
-                'User-Agent': 'mychalsmp-launcher-updater'
-            }
+            headers: { 'User-Agent': 'mychalsmp-launcher-updater' }
         });
         if (!res.ok) throw new Error(`Chyba stahování: HTTP ${res.status}`);
 
@@ -127,7 +247,8 @@ async function applyUpdate(assetUrl, onProgress) {
                         current: receivedBytes,
                         total: totalBytes,
                         percent: Math.min(percent, 100),
-                        status: 'downloading'
+                        status: 'downloading',
+                        isDelta: false
                     });
                 }
             }
@@ -140,18 +261,17 @@ async function applyUpdate(assetUrl, onProgress) {
                 current: receivedBytes,
                 total: totalBytes,
                 percent: 100,
-                status: 'extracting'
+                status: 'extracting',
+                isDelta: false
             });
         }
 
-        // 2. Rozbalení tar.gz do dočasné složky
         const tmpExtractDir = path.join(os.tmpdir(), `mychalsmp-extract-${Date.now()}`);
         fs.mkdirSync(tmpExtractDir, { recursive: true });
 
         const { execSync } = require('child_process');
         execSync(`tar -xzf "${tmpTar}" -C "${tmpExtractDir}"`);
 
-        // 3. Detekce podsložky obsahující spustitelný soubor mychalsmp-launcher
         function findBinaryDir(dir) {
             if (fs.existsSync(path.join(dir, 'mychalsmp-launcher'))) {
                 return dir;
@@ -170,14 +290,50 @@ async function applyUpdate(assetUrl, onProgress) {
 
         const sourceDir = findBinaryDir(tmpExtractDir);
 
-        // 4. Přepsání souborů v cílové složce instalace
+        // Inteligentní souborový diff sync: přepisuje pouze novější nebo změněné soubory
         fs.mkdirSync(installDir, { recursive: true });
-        execSync(`cp -rf "${sourceDir}"/* "${installDir}"/`);
+
+        function syncDirDiff(src, dst) {
+            fs.mkdirSync(dst, { recursive: true });
+            const entries = fs.readdirSync(src, { withFileTypes: true });
+            let modified = 0;
+            let skipped = 0;
+
+            for (const entry of entries) {
+                const srcPath = path.join(src, entry.name);
+                const dstPath = path.join(dst, entry.name);
+
+                if (entry.isDirectory()) {
+                    const sub = syncDirDiff(srcPath, dstPath);
+                    modified += sub.modified;
+                    skipped += sub.skipped;
+                } else if (entry.isFile()) {
+                    let needsCopy = true;
+                    if (fs.existsSync(dstPath)) {
+                        try {
+                            const srcStat = fs.statSync(srcPath);
+                            const dstStat = fs.statSync(dstPath);
+                            if (srcStat.size === dstStat.size) {
+                                needsCopy = false;
+                                skipped++;
+                            }
+                        } catch (e) {}
+                    }
+                    if (needsCopy) {
+                        fs.copyFileSync(srcPath, dstPath);
+                        modified++;
+                    }
+                }
+            }
+            return { modified, skipped };
+        }
+
+        const syncStats = syncDirDiff(sourceDir, installDir);
+        console.log(`[DIFF UPDATER] Synchronizováno ${syncStats.modified} změněných souborů, ${syncStats.skipped} nezměněných knihoven zachováno.`);
 
         const targetExe = path.join(installDir, 'mychalsmp-launcher');
         try { execSync(`chmod +x "${targetExe}"`); } catch (e) {}
 
-        // 5. Aktualizace desktop ikony, pokud existuje
         try {
             const appsDir = path.join(os.homedir(), '.local', 'share', 'applications');
             const desktopFile = path.join(appsDir, 'mychalsmp-launcher.desktop');
@@ -188,18 +344,17 @@ async function applyUpdate(assetUrl, onProgress) {
             }
         } catch (e) {}
 
-        // 6. Úklid dočasných souborů
         try { fs.unlinkSync(tmpTar); } catch (e) {}
         try { fs.rmSync(tmpExtractDir, { recursive: true, force: true }); } catch (e) {}
 
         return {
             success: true,
             applied: true,
+            isDelta: false,
             targetExe: targetExe,
             message: 'Aktualizace byla úspěšně nainstalována.'
         };
     } else {
-        // Otevření v prohlížeči pro jiné platformy
         shell.openExternal(assetUrl);
         return {
             success: true,

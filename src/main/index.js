@@ -11,7 +11,10 @@ const {
     cancelLaunch,
     detectJavaPath,
     getAvailableJavas,
-    getInstalledVersions
+    getInstalledVersions,
+    checkAudioDlcStatus,
+    downloadAudioDlc,
+    cancelAudioDlcDownload
 } = require('./launcher');
 const { searchModrinth, downloadModOrPack } = require('./modrinth');
 const {
@@ -551,6 +554,39 @@ ipcMain.handle('reset-launcher-data', async () => {
     } catch (e) {
         return { success: false, error: e.message };
     }
+});
+
+// ── Minecraft Hudba & Zvuky (DLC) IPC Handlers ──────────────────────────────
+ipcMain.handle('check-audio-dlc', async () => {
+    try {
+        const cfg = loadConfig();
+        const baseDir = cfg.baseDir || BASE_DIR;
+        const targetVersion = cfg.version || '26.2';
+        return await checkAudioDlcStatus(baseDir, targetVersion);
+    } catch (e) {
+        console.error('Chyba při kontrole stavu audio DLC:', e);
+        return { available: false, error: e.message };
+    }
+});
+
+ipcMain.handle('download-audio-dlc', async () => {
+    try {
+        const cfg = loadConfig();
+        const baseDir = cfg.baseDir || BASE_DIR;
+        const targetVersion = cfg.version || '26.2';
+        return await downloadAudioDlc(baseDir, targetVersion, (progress) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('audio-dlc-progress', progress);
+            }
+        });
+    } catch (e) {
+        console.error('Chyba při stahování audio DLC:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('cancel-audio-dlc', () => {
+    return cancelAudioDlcDownload();
 });
 
 ipcMain.handle('select-skin-file', async () => {

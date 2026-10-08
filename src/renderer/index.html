@@ -31,7 +31,6 @@
                 <div class="boot-progress-bar">
                     <div id="bootProgressFill" class="boot-progress-fill"></div>
                 </div>
-                <span id="bootProgressText" class="boot-progress-text">Inicializace jádra Beacon...</span>
             </div>
         </div>
     </div>
@@ -878,6 +877,56 @@
                         <button class="mc-btn mc-btn-secondary" id="btnOpenGameDir">📂 Otevřít složku hry
                             (.mychalsmp)</button>
                         <button class="mc-btn mc-btn-green" id="btnSaveSettings">Uložit nastavení</button>
+                    </div>
+
+                    <!-- DLC Balíček: Minecraft Hudba & Zvuky (Default zapnuto, možnost vypnout / doinstalovat později) -->
+                    <div class="dlc-pack-card" id="dlcAudioCard">
+                        <div class="dlc-card-header">
+                            <div class="dlc-header-left">
+                                <span class="dlc-icon">🎵</span>
+                                <div class="dlc-header-titles">
+                                    <div class="dlc-title-row">
+                                        <strong class="dlc-title">Minecraft Hudba & Zvuky (DLC)</strong>
+                                        <span class="dlc-badge" id="dlcAudioBadge">Výchozí: Zapnuto</span>
+                                    </div>
+                                    <p class="dlc-desc">
+                                        Soundtrack hry, gramofonové desky, zvuky bloků, mobů a prostředí (~280 MB).
+                                        Při vypnutí se hra stáhne bleskově (vhodné na školní/pomalou síť) a kompletní audio balíček lze kdykoliv doinstalovat později.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="dlc-switch-container">
+                                <label class="dlc-switch" title="Přepnout automatické stahování hudby a zvuků">
+                                    <input type="checkbox" id="checkAudioDlc" checked>
+                                    <span class="dlc-toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="dlc-card-footer">
+                            <div class="dlc-status-info" id="dlcAudioStatusText">
+                                Stav: Zjišťování audio balíčku...
+                            </div>
+                            <div class="dlc-actions-row">
+                                <button type="button" class="mc-btn mc-btn-secondary" id="btnCheckAudioDlc">
+                                    <span>🔍 Zkontrolovat stav</span>
+                                </button>
+                                <button type="button" class="mc-btn mc-btn-green" id="btnDownloadAudioDlc">
+                                    <span>⬇️ Stáhnout audio balíček nyní</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar pro stahování Audio DLC -->
+                        <div class="dlc-progress-box" id="dlcProgressBox" style="display: none;">
+                            <div class="dlc-progress-meta">
+                                <span id="dlcProgressStatus">Stahování zvuků a skladeb...</span>
+                                <span id="dlcProgressPercent">0%</span>
+                            </div>
+                            <div class="dlc-progress-track">
+                                <div class="dlc-progress-bar" id="dlcProgressBar"></div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Automatická detekce a čištění nepotřebné Java cache -->

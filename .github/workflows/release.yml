@@ -70,7 +70,7 @@ jobs:
           node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('./package.json')); pkg.version = '${{ github.event.inputs.custom_version }}'.replace(/^v/, ''); fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');"
 
       - name: Build Linux Package
-        run: npx electron-builder --linux tar.gz --publish never
+        run: npx electron-builder --linux tar.gz --dir --publish never
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
@@ -78,6 +78,7 @@ jobs:
           name: linux-binaries
           path: |
             dist/*.tar.gz
+            dist/linux-unpacked/resources/app.asar
           if-no-files-found: error
 
   publish-release:
@@ -122,6 +123,13 @@ jobs:
           if [ -n "$LINUX_TAR" ]; then
             cp "$LINUX_TAR" "mychalsmp-launcher.tar.gz"
           fi
+
+          # Připravit bleskový delta balíček update.asar (~3 MB namísto 90 MB)
+          ASAR_FILE=$(ls *app.asar* 2>/dev/null | head -n 1)
+          if [ -n "$ASAR_FILE" ]; then
+            cp "$ASAR_FILE" "update.asar"
+            cp "$ASAR_FILE" "app.asar"
+          fi
           
           echo "=== Seznam souborů k vydání ==="
           ls -la
@@ -138,6 +146,7 @@ jobs:
           files: |
             release-assets/*.exe
             release-assets/*.tar.gz
+            release-assets/*.asar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -77,6 +77,12 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateProgress: (callback) => {
         ipcRenderer.on('update-progress', (event, data) => callback(data));
     },
+    checkAudioDlc: () => ipcRenderer.invoke('check-audio-dlc'),
+    downloadAudioDlc: () => ipcRenderer.invoke('download-audio-dlc'),
+    cancelAudioDlc: () => ipcRenderer.invoke('cancel-audio-dlc'),
+    onAudioDlcProgress: (callback) => {
+        ipcRenderer.on('audio-dlc-progress', (event, data) => callback(data));
+    },
     getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
     openGameDir: () => ipcRenderer.send('open-game-dir'),
     openUrl: (url) => ipcRenderer.send('open-url', url),

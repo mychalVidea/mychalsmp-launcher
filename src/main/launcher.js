@@ -5,6 +5,7 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
+const { BASE_DIR } = require('./config');
 
 let activeMinecraftProcess = null;
 let activeLauncherClient = null;
@@ -161,12 +162,63 @@ Client.prototype.startMinecraft = function(launchArguments) {
 };
 
 /**
+ * Intercept Handler.prototype.getJar:
+ * Zkontroluje, zda herní klient (<version>.jar) již existuje na disku v .minecraft nebo jiných instalacích.
+ * Pokud ano, bleskově jej zkopíruje bez stahování 30–40 MB přes internet!
+ */
+Handler.prototype.getJar = async function() {
+    if (this.client && this.client._isCancelled) {
+        return Promise.reject(new Error('LAUNCH_CANCELLED'));
+    }
+
+    const versionNumber = this.options.version.custom ? this.options.version.custom : this.options.version.number;
+    const jarName = `${versionNumber}.jar`;
+    const targetJarPath = path.join(this.options.directory, jarName);
+    const targetJsonPath = path.join(this.options.directory, `${this.options.version.number}.json`);
+
+    // 1. Zkontrolovat, zda cílový client jar již existuje
+    if (fs.existsSync(targetJarPath)) {
+        try { fs.writeFileSync(targetJsonPath, JSON.stringify(this.version, null, 4)); } catch (e) {}
+        this.client.emit('debug', `[OPTIMALIZACE]: Verze ${jarName} již existuje na disku, stahování přeskočeno.`);
+        return;
+    }
+
+    // 2. Bleskové převzetí existujícího jaru ze systému (.minecraft, PrismLauncher, Modrinth)
+    const candidates = getExistingMinecraftBaseDirs();
+    let copied = false;
+    for (const cand of candidates) {
+        const candJar = path.join(cand, 'versions', versionNumber, `${versionNumber}.jar`);
+        if (fs.existsSync(candJar)) {
+            try {
+                fs.mkdirSync(this.options.directory, { recursive: true });
+                fs.copyFileSync(candJar, targetJarPath);
+                copied = true;
+                this.client.emit('debug', `[OPTIMALIZACE]: ⚡ Bleskově převzat existující herní klient ${jarName} z "${candJar}"!`);
+                break;
+            } catch (e) {}
+        }
+    }
+
+    // 3. Pokud není na disku, stáhnout z oficiálního Mojang serveru
+    if (!copied) {
+        await this.downloadAsync(this.version.downloads.client.url, this.options.directory, jarName, true, 'version-jar');
+    }
+
+    try { fs.writeFileSync(targetJsonPath, JSON.stringify(this.version, null, 4)); } catch (e) {}
+    this.client.emit('debug', `[MCLC]: Herní klient ${jarName} je připraven.`);
+};
+
+/**
  * Vyhledá existující oficiální instalace Minecraftu na počítači hráče (Linux, Windows, macOS).
  */
 function getExistingMinecraftBaseDirs() {
     const os = require('os');
     const home = os.homedir();
     const dirs = [];
+
+    if (BASE_DIR) {
+        dirs.push(BASE_DIR);
+    }
 
     if (process.platform === 'win32') {
         const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
@@ -262,14 +314,18 @@ Handler.prototype.getAssets = async function() {
     // Povolené jazyky: čeština, slovenština, americká angličtina, britská angličtina
     const ALLOWED_LANGUAGES = new Set(['cs_cz', 'sk_sk', 'en_us', 'en_gb']);
 
-    // Osekáme nepotřebné jazyky (~84 MB) a obří soundtracky / gramofonové desky (~242 MB)
+    // Volitelné Audio & Hudba DLC: defaultně zapnuto (true)
+    const downloadAudioDlc = this.options.downloadAudioDlc !== false;
+
+    // Osekáme nepotřebné jazyky (~84 MB).
+    // Pokud je DLC vypnuté (např. na pomalé školní síti), přeskočíme zvuky a hudbu pro okamžité spuštění.
+    // Pokud je DLC zapnuté (výchozí stav), stáhnou se VŠECHNY zvuky, hudba i desky.
     const filteredAssetKeys = Object.keys(index.objects || {}).filter(assetKey => {
         if (assetKey.startsWith('minecraft/lang/') || assetKey.includes('/lang/')) {
             const langName = path.basename(assetKey, '.json').toLowerCase();
             return ALLOWED_LANGUAGES.has(langName);
         }
-        // Přeskočíme gigantické ambientní soundtracky a gramofonové desky (tvoří 60 % stahování, klient bez nich funguje naprosto bezchybně)
-        if (assetKey.startsWith('minecraft/sounds/music/') || assetKey.startsWith('minecraft/sounds/records/')) {
+        if (!downloadAudioDlc && assetKey.startsWith('minecraft/sounds/')) {
             return false;
         }
         return true;
@@ -279,28 +335,22 @@ Handler.prototype.getAssets = async function() {
         .map(d => path.join(d, 'assets', 'objects'))
         .filter(d => fs.existsSync(d));
 
-    let counter = 0;
-    this.client.emit('progress', {
-        type: 'assets',
-        task: 0,
-        total: filteredAssetKeys.length
-    });
+    // ── Inteligentní Delta Analýza Textur & Assetů ───────────────────────────
+    // Zjistíme, které textury a assety už existují (z předchozích verzí 26.1/26.2 nebo .minecraft).
+    // Pokud Mojang textury nezměnil, mají totožný SHA-1 hash a znovupoužijí se bez stahování!
+    const missingAssetKeys = [];
+    let reusedCount = 0;
 
-    // Paralelní zpracování po dávkách pro maximální rychlost přes HTTP/2 multiplexing
-    const concurrency = 35;
-    let idx = 0;
-
-    const processAsset = async (asset) => {
-        if (this.client && this.client._isCancelled) return;
-
-        const hash = index.objects[asset].hash;
+    for (const assetKey of filteredAssetKeys) {
+        const hash = index.objects[assetKey].hash;
         const subhash = hash.substring(0, 2);
         const subAssetDir = path.join(assetDirectory, 'objects', subhash);
         const targetFilePath = path.join(subAssetDir, hash);
 
-        // A) Zkontrolovat, zda soubor již v cílové složce existuje
-        if (!fs.existsSync(targetFilePath)) {
-            // B) Bleskové převzetí ze stávajícího .minecraft na disku
+        if (fs.existsSync(targetFilePath)) {
+            reusedCount++;
+        } else {
+            // Zkusit okamžitě převzít z .minecraft nebo jiných launcherů na disku
             let copiedFromDisk = false;
             for (const candDir of existingCandidates) {
                 const srcPath = path.join(candDir, subhash, hash);
@@ -309,35 +359,67 @@ Handler.prototype.getAssets = async function() {
                         fs.mkdirSync(subAssetDir, { recursive: true });
                         fs.copyFileSync(srcPath, targetFilePath);
                         copiedFromDisk = true;
+                        reusedCount++;
                         break;
                     } catch (e) {}
                 }
             }
-
-            // C) Pokud není na disku, stáhnout z oficiálního Mojang serveru
             if (!copiedFromDisk) {
-                await this.downloadAsync(`${this.options.overrides.url.resource}/${subhash}/${hash}`, subAssetDir, hash, true, 'assets');
+                missingAssetKeys.push(assetKey);
             }
         }
+    }
+
+    if (missingAssetKeys.length === 0) {
+        this.client.emit('debug', `[DELTA ASSETY]: ⚡ Všech ${filteredAssetKeys.length} textur a zvuků již existuje na disku a jsou 100% aktuální. Spouštím hru bleskově bez stahování!`);
+        this.client.emit('progress', {
+            type: 'assets',
+            task: filteredAssetKeys.length,
+            total: filteredAssetKeys.length
+        });
+        return;
+    }
+
+    this.client.emit('debug', `[DELTA ASSETY]: ⚡ Znovupoužito ${reusedCount} již existujících textur a zvuků z předchozích verzí. Stahuje se pouze ${missingAssetKeys.length} nových změn.`);
+
+    let counter = 0;
+    this.client.emit('progress', {
+        type: 'assets',
+        task: 0,
+        total: missingAssetKeys.length
+    });
+
+    // Paralelní zpracování po dávkách pro maximální rychlost přes HTTP/2 multiplexing
+    const concurrency = 35;
+    let idx = 0;
+
+    const downloadMissingAsset = async (assetKey) => {
+        if (this.client && this.client._isCancelled) return;
+
+        const hash = index.objects[assetKey].hash;
+        const subhash = hash.substring(0, 2);
+        const subAssetDir = path.join(assetDirectory, 'objects', subhash);
+
+        await this.downloadAsync(`${this.options.overrides.url.resource}/${subhash}/${hash}`, subAssetDir, hash, true, 'assets');
 
         counter++;
         this.client.emit('progress', {
             type: 'assets',
             task: counter,
-            total: filteredAssetKeys.length
+            total: missingAssetKeys.length
         });
     };
 
     const workers = Array.from({ length: concurrency }, async () => {
-        while (idx < filteredAssetKeys.length) {
+        while (idx < missingAssetKeys.length) {
             if (this.client && this.client._isCancelled) break;
-            const currentAsset = filteredAssetKeys[idx++];
-            await processAsset(currentAsset);
+            const currentAsset = missingAssetKeys[idx++];
+            await downloadMissingAsset(currentAsset);
         }
     });
 
     await Promise.all(workers);
-    this.client.emit('debug', `[OPTIMALIZACE]: Zpracováno ${counter} klíčových assetů (cizí jazyky a velká hudba vynechány, staženo bleskově přes HTTP/2)`);
+    this.client.emit('debug', `[OPTIMALIZACE]: Staženo ${counter} nových/změněných assetů. ${reusedCount} nezměněných textur a zvuků bylo bleskově převzato z disku.`);
 };
 
 
@@ -582,7 +664,10 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             fullscreen: config.resolution ? config.resolution.fullscreen : false
         },
         quickPlay: quickPlay,
+        downloadAudioDlc: config.enableAudioDlc !== false,
         overrides: {
+            assetRoot: path.join(BASE_DIR, 'assets'),
+            libraryRoot: path.join(BASE_DIR, 'libraries'),
             detached: false,
             maxSockets: 64,
             timeout: 10000
@@ -830,6 +915,230 @@ function killGame() {
     return cancelLaunch();
 }
 
+// ── Minecraft Hudba & Zvuky (DLC) ───────────────────────────────────────────
+let activeDlcAbortController = null;
+
+async function getOrFetchAssetIndex(baseDir, targetVersion = '26.2') {
+    const assetsDir = path.join(baseDir, 'assets');
+    const indexesDir = path.join(assetsDir, 'indexes');
+    const indexFile = path.join(indexesDir, `${targetVersion}.json`);
+
+    if (fs.existsSync(indexFile)) {
+        try {
+            return JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+        } catch (e) {}
+    }
+
+    if (fs.existsSync(indexesDir)) {
+        try {
+            const files = fs.readdirSync(indexesDir).filter(f => f.endsWith('.json'));
+            if (files.length > 0) {
+                const fPath = path.join(indexesDir, files[0]);
+                return JSON.parse(fs.readFileSync(fPath, 'utf8'));
+            }
+        } catch (e) {}
+    }
+
+    try {
+        fs.mkdirSync(indexesDir, { recursive: true });
+        const manifestRes = await fetch('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', { signal: AbortSignal.timeout(8000) });
+        if (manifestRes.ok) {
+            const manifest = await manifestRes.json();
+            let vEntry = manifest.versions.find(v => v.id === targetVersion) ||
+                         manifest.versions.find(v => v.id === manifest.latest.release) ||
+                         manifest.versions[0];
+            if (vEntry && vEntry.url) {
+                const vRes = await fetch(vEntry.url, { signal: AbortSignal.timeout(8000) });
+                if (vRes.ok) {
+                    const vJson = await vRes.json();
+                    if (vJson.assetIndex && vJson.assetIndex.url) {
+                        const indexRes = await fetch(vJson.assetIndex.url, { signal: AbortSignal.timeout(10000) });
+                        if (indexRes.ok) {
+                            const indexText = await indexRes.text();
+                            fs.writeFileSync(indexFile, indexText, 'utf8');
+                            return JSON.parse(indexText);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Nepodařilo se stáhnout online asset index pro audio DLC:', e.message);
+    }
+    return null;
+}
+
+async function checkAudioDlcStatus(baseDir, targetVersion = '26.2') {
+    const assetsDir = path.join(baseDir, 'assets');
+    const objectsDir = path.join(assetsDir, 'objects');
+    const index = await getOrFetchAssetIndex(baseDir, targetVersion);
+
+    if (!index || !index.objects) {
+        return {
+            available: false,
+            installed: false,
+            totalAudioFiles: 0,
+            existingCount: 0,
+            missingCount: 0,
+            missingMB: 0
+        };
+    }
+
+    const audioKeys = Object.keys(index.objects).filter(k => k.startsWith('minecraft/sounds/'));
+    let existingCount = 0;
+    let missingBytes = 0;
+
+    for (const key of audioKeys) {
+        const obj = index.objects[key];
+        const sub = obj.hash.substring(0, 2);
+        const objPath = path.join(objectsDir, sub, obj.hash);
+        if (fs.existsSync(objPath)) {
+            existingCount++;
+        } else {
+            missingBytes += (obj.size || 0);
+        }
+    }
+
+    const missingCount = audioKeys.length - existingCount;
+    return {
+        available: true,
+        installed: missingCount === 0 && audioKeys.length > 0,
+        totalAudioFiles: audioKeys.length,
+        existingCount: existingCount,
+        missingCount: missingCount,
+        missingMB: Math.round(missingBytes / (1024 * 1024))
+    };
+}
+
+async function downloadAudioDlc(baseDir, targetVersion = '26.2', onProgress) {
+    if (activeDlcAbortController) {
+        try { activeDlcAbortController.abort(); } catch (e) {}
+    }
+    const abortCtrl = new AbortController();
+    activeDlcAbortController = abortCtrl;
+
+    const assetsDir = path.join(baseDir, 'assets');
+    const objectsDir = path.join(assetsDir, 'objects');
+    const index = await getOrFetchAssetIndex(baseDir, targetVersion);
+
+    if (!index || !index.objects) {
+        throw new Error('Nelze načíst index Minecraft assetů.');
+    }
+
+    const audioKeys = Object.keys(index.objects).filter(k => k.startsWith('minecraft/sounds/'));
+    const missingKeys = audioKeys.filter(k => {
+        const obj = index.objects[k];
+        const sub = obj.hash.substring(0, 2);
+        return !fs.existsSync(path.join(objectsDir, sub, obj.hash));
+    });
+
+    if (missingKeys.length === 0) {
+        if (onProgress) onProgress({ current: audioKeys.length, total: audioKeys.length, percent: 100, status: 'completed' });
+        return { success: true, count: 0 };
+    }
+
+    const existingCandidates = getExistingMinecraftBaseDirs()
+        .map(d => path.join(d, 'assets', 'objects'))
+        .filter(d => fs.existsSync(d));
+
+    let processed = 0;
+    const totalToDownload = missingKeys.length;
+    const concurrency = 25;
+    let idx = 0;
+
+    let lastReport = 0;
+    const report = () => {
+        const now = Date.now();
+        if (now - lastReport > 80 || processed === totalToDownload) {
+            lastReport = now;
+            const percent = Math.min(100, Math.round((processed / totalToDownload) * 100));
+            if (onProgress) {
+                onProgress({
+                    current: processed,
+                    total: totalToDownload,
+                    percent,
+                    status: 'downloading'
+                });
+            }
+        }
+    };
+
+    report();
+
+    const downloadSingle = async (key) => {
+        if (abortCtrl.signal.aborted) return;
+        const obj = index.objects[key];
+        const hash = obj.hash;
+        const subhash = hash.substring(0, 2);
+        const subDir = path.join(objectsDir, subhash);
+        const targetFile = path.join(subDir, hash);
+
+        // 1. Zkusit zkopírovat ze stávajícího .minecraft
+        for (const candDir of existingCandidates) {
+            const candPath = path.join(candDir, subhash, hash);
+            if (fs.existsSync(candPath)) {
+                try {
+                    fs.mkdirSync(subDir, { recursive: true });
+                    fs.copyFileSync(candPath, targetFile);
+                    processed++;
+                    report();
+                    return;
+                } catch (e) {}
+            }
+        }
+
+        // 2. Stáhnout z Mojangu
+        const url = `https://resources.download.minecraft.net/${subhash}/${hash}`;
+        try {
+            fs.mkdirSync(subDir, { recursive: true });
+            const res = await fetch(url, { signal: abortCtrl.signal });
+            if (res.ok) {
+                const buffer = Buffer.from(await res.arrayBuffer());
+                fs.writeFileSync(targetFile, buffer);
+            }
+        } catch (e) {
+            if (abortCtrl.signal.aborted) throw e;
+        }
+
+        processed++;
+        report();
+    };
+
+    const workers = Array.from({ length: concurrency }, async () => {
+        while (idx < missingKeys.length) {
+            if (abortCtrl.signal.aborted) break;
+            const key = missingKeys[idx++];
+            await downloadSingle(key);
+        }
+    });
+
+    await Promise.all(workers);
+
+    if (abortCtrl.signal.aborted) {
+        throw new Error('DOWNLOAD_CANCELLED');
+    }
+
+    if (onProgress) {
+        onProgress({
+            current: totalToDownload,
+            total: totalToDownload,
+            percent: 100,
+            status: 'completed'
+        });
+    }
+
+    return { success: true, count: processed };
+}
+
+function cancelAudioDlcDownload() {
+    if (activeDlcAbortController) {
+        try { activeDlcAbortController.abort(); } catch (e) {}
+        activeDlcAbortController = null;
+        return true;
+    }
+    return false;
+}
+
 module.exports = {
     detectJavaPath,
     getAvailableJavas,
@@ -837,5 +1146,8 @@ module.exports = {
     launchGame,
     isGameRunning,
     killGame,
-    cancelLaunch
+    cancelLaunch,
+    checkAudioDlcStatus,
+    downloadAudioDlc,
+    cancelAudioDlcDownload
 };

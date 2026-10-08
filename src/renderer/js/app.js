@@ -3,38 +3,29 @@
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // ── Crazy Good Satisfying Boot Splash Screen ────────────────────────────
+    // ── Ultra Clean Satisfying Boot Splash Screen ───────────────────────────
     const bootSplash = document.getElementById('bootSplashScreen');
     const bootProgressFill = document.getElementById('bootProgressFill');
-    const bootProgressText = document.getElementById('bootProgressText');
 
     if (bootSplash && bootProgressFill) {
         setTimeout(() => {
-            bootProgressFill.style.width = '25%';
-            if (bootProgressText) bootProgressText.textContent = '⚡ Inicializace subsystémů Beacon...';
+            bootProgressFill.style.width = '35%';
         }, 80);
 
         setTimeout(() => {
-            bootProgressFill.style.width = '65%';
-            if (bootProgressText) bootProgressText.textContent = '🌐 Synchronizace síťového jádra...';
-        }, 420);
-
-        setTimeout(() => {
-            bootProgressFill.style.width = '90%';
-            if (bootProgressText) bootProgressText.textContent = '🛡️ Příprava herního rozhraní...';
-        }, 800);
+            bootProgressFill.style.width = '75%';
+        }, 360);
 
         setTimeout(() => {
             bootProgressFill.style.width = '100%';
-            if (bootProgressText) bootProgressText.textContent = '✓ Systém Beacon připraven';
-        }, 1100);
+        }, 680);
 
         setTimeout(() => {
             bootSplash.classList.add('boot-splash-exit');
             setTimeout(() => {
                 try { bootSplash.remove(); } catch (e) {}
-            }, 700);
-        }, 1300);
+            }, 600);
+        }, 880);
     }
 
     // ── Element References ──────────────────────────────────────────────────
@@ -102,6 +93,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnSaveSettings = document.getElementById('btnSaveSettings');
     const consoleOutput = document.getElementById('consoleOutput');
     const btnClearLog = document.getElementById('btnClearLog');
+
+    // DLC Audio Elements
+    const checkAudioDlc = document.getElementById('checkAudioDlc');
+    const dlcAudioBadge = document.getElementById('dlcAudioBadge');
+    const dlcAudioStatusText = document.getElementById('dlcAudioStatusText');
+    const btnCheckAudioDlc = document.getElementById('btnCheckAudioDlc');
+    const btnDownloadAudioDlc = document.getElementById('btnDownloadAudioDlc');
+    const dlcProgressBox = document.getElementById('dlcProgressBox');
+    const dlcProgressStatus = document.getElementById('dlcProgressStatus');
+    const dlcProgressPercent = document.getElementById('dlcProgressPercent');
+    const dlcProgressBar = document.getElementById('dlcProgressBar');
 
     // State
     let currentConfig = {};
@@ -306,6 +308,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             initSkinViewer3D();
             initHeroSkinViewer3D();
             checkLauncherUpdates(true);
+
+            // Audio DLC
+            if (checkAudioDlc) {
+                checkAudioDlc.checked = currentConfig.enableAudioDlc !== false;
+                updateAudioDlcBadge(checkAudioDlc.checked);
+            }
+            refreshAudioDlcStatusUi();
         } catch (e) {
             console.error('Chyba při načítání konfigurace:', e);
         }
@@ -982,16 +991,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (data.status === 'downloading') {
                 const pct = data.percent || 0;
                 if (updateProgressBar) updateProgressBar.style.width = `${pct}%`;
-                if (updateProgressText) updateProgressText.textContent = `Stahuji aktualizaci... ${pct} %`;
+                if (updateProgressText) {
+                    updateProgressText.textContent = data.isDelta
+                        ? `Stahuji bleskovou delta aktualizaci... ${pct} %`
+                        : `Stahuji aktualizaci... ${pct} %`;
+                }
                 if (updateProgressSize && data.total) {
                     const curMb = (data.current / 1048576).toFixed(1);
                     const totMb = (data.total / 1048576).toFixed(1);
-                    updateProgressSize.textContent = `${curMb} MB / ${totMb} MB`;
+                    updateProgressSize.textContent = `${curMb} MB / ${totMb} MB${data.isDelta ? ' (Delta)' : ''}`;
                 }
             } else if (data.status === 'extracting') {
                 if (updateProgressBar) updateProgressBar.style.width = '100%';
-                if (updateProgressText) updateProgressText.textContent = 'Rozbaluji a instaluji novou verzi...';
-                if (updateProgressSize) updateProgressSize.textContent = 'Instalace';
+                if (updateProgressText) {
+                    updateProgressText.textContent = data.isDelta
+                        ? '⚡ Aplikuji delta změny v kódu launcheru...'
+                        : 'Rozbaluji a instaluji novou verzi...';
+                }
+                if (updateProgressSize) updateProgressSize.textContent = data.isDelta ? 'Delta instalace' : 'Instalace';
             }
         });
     }
@@ -1004,7 +1021,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!modal) return;
 
         if (title) title.textContent = `Dostupná nová verze v${update.latestVersion || ''}`;
-        if (desc) desc.textContent = `Byla vydána nová verze MYCHAL SMP Launcheru (máš nainstalovanou v${update.currentVersion || '1.0.0'}). Chceš aktualizaci stáhnout a nainstalovat?`;
+        if (desc) {
+            if (update.isDelta) {
+                const mb = update.downloadSize ? (update.downloadSize / 1048576).toFixed(1) + ' MB' : '~3 MB';
+                desc.innerHTML = `Byla vydána nová verze MYCHAL SMP Launcheru (máš v${update.currentVersion || '1.0.0'}).<br><span style="display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: #21de00; font-weight: 700; background: rgba(33, 222, 0, 0.12); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(33, 222, 0, 0.3);">⚡ Blesková delta aktualizace: stahují se pouze změny (${mb} namísto ~90 MB)</span>`;
+            } else {
+                desc.textContent = `Byla vydána nová verze MYCHAL SMP Launcheru (máš nainstalovanou v${update.currentVersion || '1.0.0'}). Chceš aktualizaci stáhnout a nainstalovat?`;
+            }
+        }
 
         if (notes && update.releaseNotes) {
             notes.textContent = update.releaseNotes;
@@ -1022,7 +1046,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const btnConfirm = document.getElementById('btnConfirmUpdate');
         if (btnConfirm) {
             btnConfirm.disabled = false;
-            btnConfirm.innerHTML = '<span>⬇️ Aktualizovat nyní</span>';
+            btnConfirm.innerHTML = update.isDelta
+                ? '<span>⚡ Aktualizovat bleskově (Delta)</span>'
+                : '<span>⬇️ Aktualizovat nyní</span>';
         }
 
         modal.style.display = 'flex';
@@ -1080,7 +1106,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!pendingUpdateData || isUpdatingCurrently) return;
             isUpdatingCurrently = true;
             btnConfirmUpdate.disabled = true;
-            btnConfirmUpdate.innerHTML = '<span>⏳ Stahuji aktualizaci...</span>';
+            btnConfirmUpdate.innerHTML = pendingUpdateData.isDelta
+                ? '<span>⚡ Stahuji delta aktualizaci...</span>'
+                : '<span>⏳ Stahuji aktualizaci...</span>';
 
             const notes = document.getElementById('updateReleaseNotes');
             if (notes) notes.style.display = 'none';
@@ -1088,14 +1116,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (updateProgressContainer) {
                 updateProgressContainer.style.display = 'block';
                 if (updateProgressBar) updateProgressBar.style.width = '0%';
-                if (updateProgressText) updateProgressText.textContent = 'Navazuji spojení s GitHub Releases...';
+                if (updateProgressText) updateProgressText.textContent = pendingUpdateData.isDelta
+                    ? 'Stahuji bleskový delta balíček...'
+                    : 'Navazuji spojení s GitHub Releases...';
                 if (updateProgressSize) updateProgressSize.textContent = '0 MB / ...';
             }
 
             try {
                 const assets = pendingUpdateData.assets || [];
+                const deltaAsset = assets.find(a => a.name === 'update.asar' || a.name === 'app.asar');
                 const tarAsset = assets.find(a => a.name.endsWith('.tar.gz'));
-                const downloadUrl = tarAsset ? tarAsset.downloadUrl : (assets[0] ? assets[0].downloadUrl : pendingUpdateData.releaseUrl);
+                const downloadUrl = pendingUpdateData.downloadUrl || (deltaAsset ? deltaAsset.downloadUrl : (tarAsset ? tarAsset.downloadUrl : (assets[0] ? assets[0].downloadUrl : pendingUpdateData.releaseUrl)));
 
                 const res = await window.api.applyUpdate(downloadUrl);
                 if (res && res.applied) {
@@ -2441,6 +2472,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 disableVsync: checkDisableVsync ? checkDisableVsync.checked : false,
                 enableNativeWayland: checkNativeWayland ? checkNativeWayland.checked : false,
                 enableDiscordRpc: checkDiscordRpc ? checkDiscordRpc.checked : true,
+                enableAudioDlc: checkAudioDlc ? checkAudioDlc.checked : true,
                 customJvmArgs: jvmArgsInput ? jvmArgsInput.value.trim() : null,
                 customEnvVars: customEnvVarsInput ? customEnvVarsInput.value.trim() : ''
             };
@@ -2470,6 +2502,118 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (jvmInput) {
                 jvmInput.value = '-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch';
                 showToast('Nastaveny standardní parametry G1GC.', 'info');
+            }
+        });
+    }
+
+    // ── Minecraft Hudba & Zvuky (DLC) UI Logic ──────────────────────────────
+    function updateAudioDlcBadge(enabled) {
+        if (!dlcAudioBadge) return;
+        if (enabled) {
+            dlcAudioBadge.textContent = 'Výchozí: Zapnuto';
+            dlcAudioBadge.classList.remove('off');
+        } else {
+            dlcAudioBadge.textContent = 'Vypnuto (Rychlý start)';
+            dlcAudioBadge.classList.add('off');
+        }
+    }
+
+    async function refreshAudioDlcStatusUi() {
+        if (!dlcAudioStatusText) return;
+        try {
+            const res = await window.api.checkAudioDlc();
+            if (!res) return;
+            if (res.installed) {
+                dlcAudioStatusText.textContent = `✓ Kompletně nainstalováno (${res.totalAudioFiles} zvuků a skladeb)`;
+                dlcAudioStatusText.className = 'dlc-status-info installed';
+                if (btnDownloadAudioDlc) {
+                    btnDownloadAudioDlc.innerHTML = '<span>✓ Audio balíček je kompletní</span>';
+                    btnDownloadAudioDlc.disabled = true;
+                }
+            } else if (res.missingCount > 0) {
+                dlcAudioStatusText.textContent = `Stav: Chybí ${res.missingCount} z ${res.totalAudioFiles} audio souborů (~${res.missingMB} MB)`;
+                dlcAudioStatusText.className = 'dlc-status-info';
+                if (btnDownloadAudioDlc) {
+                    btnDownloadAudioDlc.innerHTML = '<span>⬇️ Stáhnout audio balíček nyní</span>';
+                    btnDownloadAudioDlc.disabled = false;
+                }
+            } else {
+                dlcAudioStatusText.textContent = 'Stav: K dispozici k automatickému stažení při spuštění hry.';
+                dlcAudioStatusText.className = 'dlc-status-info';
+                if (btnDownloadAudioDlc) {
+                    btnDownloadAudioDlc.innerHTML = '<span>⬇️ Stáhnout audio balíček nyní</span>';
+                    btnDownloadAudioDlc.disabled = false;
+                }
+            }
+        } catch (e) {
+            console.warn('Chyba při zjišťování stavu Audio DLC:', e);
+        }
+    }
+
+    if (checkAudioDlc) {
+        checkAudioDlc.addEventListener('change', async () => {
+            const isEnabled = checkAudioDlc.checked;
+            updateAudioDlcBadge(isEnabled);
+            await window.api.saveConfig({ enableAudioDlc: isEnabled });
+            currentConfig.enableAudioDlc = isEnabled;
+            if (isEnabled) {
+                showToast('🎵 Audio DLC zapnuto: Hudba a zvuky se automaticky stáhnou s hrou.', 'info');
+            } else {
+                showToast('⚡ Rychlý start: Hudba a zvuky vynechány. Můžeš je kdykoliv doinstalovat níže.', 'info');
+            }
+        });
+    }
+
+    if (btnCheckAudioDlc) {
+        btnCheckAudioDlc.addEventListener('click', async () => {
+            if (dlcAudioStatusText) dlcAudioStatusText.textContent = 'Zjišťování stavu audio souborů...';
+            await refreshAudioDlcStatusUi();
+            showToast('Stav audio balíčku byl aktualizován.', 'info');
+        });
+    }
+
+    if (btnDownloadAudioDlc) {
+        btnDownloadAudioDlc.addEventListener('click', async () => {
+            try {
+                btnDownloadAudioDlc.disabled = true;
+                btnDownloadAudioDlc.innerHTML = '<span>⏳ Stahování...</span>';
+                if (dlcProgressBox) dlcProgressBox.style.display = 'block';
+                if (dlcProgressBar) dlcProgressBar.style.width = '0%';
+                if (dlcProgressPercent) dlcProgressPercent.textContent = '0%';
+                if (dlcProgressStatus) dlcProgressStatus.textContent = 'Příprava stahování audio balíčku...';
+
+                const removeListener = window.api.onAudioDlcProgress((data) => {
+                    if (dlcProgressBar) dlcProgressBar.style.width = `${data.percent}%`;
+                    if (dlcProgressPercent) dlcProgressPercent.textContent = `${data.percent}%`;
+                    if (dlcProgressStatus) {
+                        dlcProgressStatus.textContent = `Stahování: ${data.current} / ${data.total} (${data.percent}%)`;
+                    }
+                });
+
+                const res = await window.api.downloadAudioDlc();
+                if (removeListener) removeListener();
+
+                if (res && res.success) {
+                    if (dlcProgressBar) dlcProgressBar.style.width = '100%';
+                    if (dlcProgressPercent) dlcProgressPercent.textContent = '100%';
+                    if (dlcProgressStatus) dlcProgressStatus.textContent = '✓ Stahování dokončeno!';
+                    showToast('🎵 Minecraft Audio balíček (DLC) byl úspěšně stažen!', 'success');
+                    setTimeout(() => {
+                        if (dlcProgressBox) dlcProgressBox.style.display = 'none';
+                        refreshAudioDlcStatusUi();
+                    }, 1200);
+                } else if (res && res.error) {
+                    showToast(`Chyba stahování audio balíčku: ${res.error}`, 'error');
+                    if (dlcProgressBox) dlcProgressBox.style.display = 'none';
+                    btnDownloadAudioDlc.disabled = false;
+                    btnDownloadAudioDlc.innerHTML = '<span>⬇️ Zkusit znovu</span>';
+                }
+            } catch (err) {
+                console.error('Chyba při stahování DLC:', err);
+                showToast(`Chyba: ${err.message}`, 'error');
+                if (dlcProgressBox) dlcProgressBox.style.display = 'none';
+                btnDownloadAudioDlc.disabled = false;
+                btnDownloadAudioDlc.innerHTML = '<span>⬇️ Zkusit znovu</span>';
             }
         });
     }
