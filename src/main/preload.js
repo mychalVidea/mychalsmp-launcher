@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('search-modrinth', query, version, loader, category, projectType),
     downloadModOrPack: (options) => ipcRenderer.invoke('download-mod-or-pack', options),
     toggleMod: (modId) => ipcRenderer.invoke('toggle-mod', modId),
+    getProfileMods: (profileId) => ipcRenderer.invoke('get-profile-mods', profileId),
+    toggleProfileMod: (profileId, filename) => ipcRenderer.invoke('toggle-profile-mod', profileId, filename),
+    deleteProfileMod: (profileId, filename) => ipcRenderer.invoke('delete-profile-mod', profileId, filename),
 
     // Profile Import, Upgrade & Management
     importProfileDialog: () => ipcRenderer.invoke('import-profile-dialog'),

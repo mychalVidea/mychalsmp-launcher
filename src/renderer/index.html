@@ -73,15 +73,7 @@
                         <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     </svg>
                 </button>
-                <button class="nav-icon-btn" data-tab="versions" title="Instalátory verzí 26.x">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="14" width="7" height="7"></rect>
-                        <rect x="3" y="14" width="7" height="7"></rect>
-                    </svg>
-                </button>
-                <button class="nav-icon-btn" data-tab="mods" title="Modrinth Katalog & Mody">
+                <button class="nav-icon-btn" data-tab="mods" title="Správa módů & Modrinth">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path
                             d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
@@ -344,278 +336,127 @@
             </section>
 
             <!-- ══════════════════════════════════════════════════════════════════
-                 TAB 2: VERSIONS & INSTALLERS (26.1.2, 26.2, 26.3, 26.4)
-            ══════════════════════════════════════════════════════════════════ -->
-            <section class="tab-pane" id="tab-versions">
-                <div class="pane-header">
-                    <h2>Instalátory & Správa verzí 26.x</h2>
-                    <p>Podpora nového značení verzí Minecraftu (rok.kvartál). Nainstaluj verze pro offline hraní nebo
-                        přepínej profily.</p>
-                </div>
-
-                <div class="version-installers-grid">
-                    <!-- Version 26.2: Recommended -->
-                    <div class="version-card v-card-recommended" id="vCard262" data-version="26.2">
-                        <div class="v-card-top">
-                            <div class="v-tag v-tag-blue">DOPORUČENÁ VERZE</div>
-                            <span class="v-status-badge" id="vStatus262">
-                                <span class="v-status-dot"></span>
-                                <span class="v-status-label">Kontrola...</span>
-                            </span>
-                        </div>
-                        <div class="v-card-main">
-                            <h3 class="v-card-title">Minecraft 26.2</h3>
-                            <p class="v-card-desc">Oficiální doporučená verze pro server <strong>mychalsmp.xyz</strong>
-                                s plnou optimalizací pro moderní Javu 25/21 a nízkou latenci.</p>
-                        </div>
-
-                        <!-- Mod Loader Selector -->
-                        <div class="v-loader-picker">
-                            <span class="v-loader-label">Modloader:</span>
-                            <div class="v-loader-options" data-version="26.2">
-                                <button type="button" class="v-loader-btn active" data-loader="vanilla">Vanilla</button>
-                                <button type="button" class="v-loader-btn" data-loader="fabric">Fabric</button>
-                            </div>
-                        </div>
-
-                        <div class="v-card-meta">
-                            <span>Verze jádra: <strong>26.2</strong></span>
-                            <span>Java runtime: <strong>Java 25 / 21</strong></span>
-                        </div>
-
-                        <!-- Live in-card progress bar -->
-                        <div class="v-card-progress" id="vProgressBox262" style="display: none;">
-                            <div class="v-progress-info">
-                                <span class="v-progress-text" id="vProgressText262">Stahování...</span>
-                                <span class="v-progress-percent" id="vProgressPercent262">0%</span>
-                            </div>
-                            <div class="v-progress-track">
-                                <div class="v-progress-fill" id="vProgressBar262" style="width: 0%;"></div>
-                            </div>
-                        </div>
-
-                        <div class="v-card-actions">
-                            <button type="button" class="mc-btn mc-btn-green btn-install-v" id="btnAction262"
-                                data-version="26.2">
-                                <span>▶ Hrát Minecraft 26.2</span>
-                            </button>
-                            <button type="button" class="mc-btn mc-btn-danger btn-stop-v" id="btnStop262"
-                                data-version="26.2" style="display: none;">
-                                <span>■ Zastavit proces</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Version 26.3: Latest Release -->
-                    <div class="version-card" id="vCard263" data-version="26.3">
-                        <div class="v-card-top">
-                            <div class="v-tag v-tag-green">NEJNOVĚJŠÍ VYDÁNÍ</div>
-                            <span class="v-status-badge" id="vStatus263">
-                                <span class="v-status-dot"></span>
-                                <span class="v-status-label">Kontrola...</span>
-                            </span>
-                        </div>
-                        <div class="v-card-main">
-                            <h3 class="v-card-title">Minecraft 26.3</h3>
-                            <p class="v-card-desc">Nejnovější oficiální vydání Minecraftu. Připraveno pro spuštění čistě
-                                Vanilla nebo s rychlým zavaděčem Fabric.</p>
-                        </div>
-
-                        <!-- Mod Loader Selector -->
-                        <div class="v-loader-picker">
-                            <span class="v-loader-label">Modloader:</span>
-                            <div class="v-loader-options" data-version="26.3">
-                                <button type="button" class="v-loader-btn active" data-loader="vanilla">Vanilla</button>
-                                <button type="button" class="v-loader-btn" data-loader="fabric">Fabric</button>
-                            </div>
-                        </div>
-
-                        <div class="v-card-meta">
-                            <span>Verze jádra: <strong>26.3</strong></span>
-                            <span>Java runtime: <strong>Java 25 (Doporučeno)</strong></span>
-                        </div>
-
-                        <!-- Live in-card progress bar -->
-                        <div class="v-card-progress" id="vProgressBox263" style="display: none;">
-                            <div class="v-progress-info">
-                                <span class="v-progress-text" id="vProgressText263">Stahování...</span>
-                                <span class="v-progress-percent" id="vProgressPercent263">0%</span>
-                            </div>
-                            <div class="v-progress-track">
-                                <div class="v-progress-fill" id="vProgressBar263" style="width: 0%;"></div>
-                            </div>
-                        </div>
-
-                        <div class="v-card-actions">
-                            <button type="button" class="mc-btn mc-btn-green btn-install-v" id="btnAction263"
-                                data-version="26.3">
-                                <span>▶ Hrát Minecraft 26.3</span>
-                            </button>
-                            <button type="button" class="mc-btn mc-btn-danger btn-stop-v" id="btnStop263"
-                                data-version="26.3" style="display: none;">
-                                <span>■ Zastavit proces</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Version 26.1.2: Legacy -->
-                    <div class="version-card" id="vCard2612" data-version="26.1.2">
-                        <div class="v-card-top">
-                            <div class="v-tag">LEGACY VERZE</div>
-                            <span class="v-status-badge" id="vStatus2612">
-                                <span class="v-status-dot"></span>
-                                <span class="v-status-label">Kontrola...</span>
-                            </span>
-                        </div>
-                        <div class="v-card-main">
-                            <h3 class="v-card-title">Minecraft 26.1.2</h3>
-                            <p class="v-card-desc">Starší stabilní vydání pro kompatibilitu se staršími světy a archivy.
-                                Plná podpora offline i online hraní.</p>
-                        </div>
-
-                        <!-- Mod Loader Selector -->
-                        <div class="v-loader-picker">
-                            <span class="v-loader-label">Modloader:</span>
-                            <div class="v-loader-options" data-version="26.1.2">
-                                <button type="button" class="v-loader-btn active" data-loader="vanilla">Vanilla</button>
-                                <button type="button" class="v-loader-btn" data-loader="fabric">Fabric</button>
-                            </div>
-                        </div>
-
-                        <div class="v-card-meta">
-                            <span>Verze jádra: <strong>26.1.2</strong></span>
-                            <span>Java runtime: <strong>Java 21+</strong></span>
-                        </div>
-
-                        <!-- Live in-card progress bar -->
-                        <div class="v-card-progress" id="vProgressBox2612" style="display: none;">
-                            <div class="v-progress-info">
-                                <span class="v-progress-text" id="vProgressText2612">Stahování...</span>
-                                <span class="v-progress-percent" id="vProgressPercent2612">0%</span>
-                            </div>
-                            <div class="v-progress-track">
-                                <div class="v-progress-fill" id="vProgressBar2612" style="width: 0%;"></div>
-                            </div>
-                        </div>
-
-                        <div class="v-card-actions">
-                            <button type="button" class="mc-btn mc-btn-secondary btn-install-v" id="btnAction2612"
-                                data-version="26.1.2">
-                                <span>▶ Hrát Minecraft 26.1.2</span>
-                            </button>
-                            <button type="button" class="mc-btn mc-btn-danger btn-stop-v" id="btnStop2612"
-                                data-version="26.1.2" style="display: none;">
-                                <span>■ Zastavit proces</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Version 26.4: Upcoming Teaser -->
-                    <div class="version-card v-card-future">
-                        <div class="v-card-top">
-                            <div class="v-tag v-tag-purple">PŘIPRAVUJE SE (PROSINEC 2026)</div>
-                            <span class="v-status-badge">
-                                <span class="v-status-dot dot-purple"></span>
-                                <span class="v-status-label">Snapshoty</span>
-                            </span>
-                        </div>
-                        <div class="v-card-main">
-                            <h3 class="v-card-title">Minecraft 26.4 (Zimní Update)</h3>
-                            <p class="v-card-desc">Předběžná podpora pro nadcházející zimní update. Síť MYCHAL SMP bude
-                                aktualizována po vydání plné verze.</p>
-                        </div>
-                        <div class="v-card-meta">
-                            <span>Plánované vydání: <strong>Prosinec 2026</strong></span>
-                            <span>Stav: <strong>Vývojová verze</strong></span>
-                        </div>
-                        <div class="v-card-actions">
-                            <button class="mc-btn mc-btn-secondary" disabled>
-                                <span>Již brzy</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ══════════════════════════════════════════════════════════════════
-                 TAB 3: MODS & MODRINTH BROWSER (Inspired by Screenshot 2)
+                 TAB 2: SPRÁVA MÓDŮ & PROFILŮ (Nainstalované i Modrinth)
             ══════════════════════════════════════════════════════════════════ -->
             <section class="tab-pane" id="tab-mods">
-                <!-- Modrinth Header & Search -->
-                <div class="mods-catalog-header">
-                    <div class="catalog-subtabs">
-                        <button class="mod-tab-btn active" data-mod-type="mod">Mody</button>
-                        <button class="mod-tab-btn" data-mod-type="resourcepack">Resource Packy</button>
-                        <button class="mod-tab-btn" data-mod-type="shader">Shadery</button>
+                <!-- Topbar: Profile Selector & Subview Switch -->
+                <div class="mods-pane-topbar">
+                    <div class="mods-topbar-profile">
+                        <label for="modsProfileSelect" class="mods-picker-label">Spravovat profil:</label>
+                        <select id="modsProfileSelect" class="input-select mods-profile-dropdown"></select>
+                        <button type="button" class="mc-btn mc-btn-secondary btn-sm"
+                            id="btnOpenSelectedProfileModsFolder" title="Otevřít složku mods vybraného profilu">
+                            <span>📂 Složka módů</span>
+                        </button>
                     </div>
 
-                    <div class="catalog-search-wrapper">
-                        <span class="search-icon">🔍</span>
-                        <input type="text" id="modSearchInput"
-                            placeholder="Hledat v katalogu Modrinth (Sodium, Iris, Lithium, AppleSkin...)..."
-                            class="catalog-search-input">
+                    <div class="mods-topbar-switch">
+                        <button type="button" class="mods-switch-btn active" id="btnSwitchInstalledMods"
+                            data-subview="installed">
+                            <span>📦 Mody v profilu (<span id="installedModsCount">0</span>)</span>
+                        </button>
+                        <button type="button" class="mods-switch-btn" id="btnSwitchCatalogMods" data-subview="catalog">
+                            <span>🌐 Modrinth Katalog</span>
+                        </button>
                     </div>
                 </div>
 
-                <div class="mods-browser-layout">
-                    <!-- Left Filter Column -->
-                    <aside class="mods-filters-col">
-                        <div class="filter-group">
-                            <div class="filter-group-title">Verze hry</div>
-                            <label class="filter-label">
-                                <input type="radio" name="filterVersion" value="26.2" checked>
-                                <span>26.2 (Doporučeno)</span>
-                            </label>
-                            <label class="filter-label">
-                                <input type="radio" name="filterVersion" value="26.3">
-                                <span>26.3 (Nejnovější)</span>
-                            </label>
-                            <label class="filter-label">
-                                <input type="radio" name="filterVersion" value="26.1.2">
-                                <span>26.1.2</span>
-                            </label>
+                <!-- SUBVIEW 1: INSTALLED MODS IN CURRENT PROFILE -->
+                <div class="mods-subview" id="viewInstalledMods">
+                    <div class="installed-mods-toolbar">
+                        <div class="catalog-search-wrapper flex-1">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="installedModsSearchInput"
+                                placeholder="Hledat mezi nainstalovanými mody v tomto profilu..."
+                                class="catalog-search-input">
+                        </div>
+                        <div class="installed-mods-meta" id="installedModsSummary">
+                            Načítání...
+                        </div>
+                    </div>
+
+                    <div class="installed-mods-list" id="installedModsList">
+                        <div class="mods-loading">Načítám nainstalované mody...</div>
+                    </div>
+                </div>
+
+                <!-- SUBVIEW 2: MODRINTH CATALOG BROWSER -->
+                <div class="mods-subview" id="viewCatalogMods" style="display: none;">
+                    <div class="mods-catalog-header">
+                        <div class="catalog-subtabs">
+                            <button class="mod-tab-btn active" data-mod-type="mod">Mody</button>
+                            <button class="mod-tab-btn" data-mod-type="resourcepack">Resource Packy</button>
+                            <button class="mod-tab-btn" data-mod-type="shader">Shadery</button>
                         </div>
 
-                        <div class="filter-group">
-                            <div class="filter-group-title">Mod Loader</div>
-                            <label class="filter-label">
-                                <input type="radio" name="filterLoader" value="fabric" checked>
-                                <span>Fabric</span>
-                            </label>
-                            <label class="filter-label">
-                                <input type="radio" name="filterLoader" value="neoforge">
-                                <span>NeoForge</span>
-                            </label>
-                            <label class="filter-label">
-                                <input type="radio" name="filterLoader" value="forge">
-                                <span>Forge</span>
-                            </label>
+                        <div class="catalog-search-wrapper">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="modSearchInput"
+                                placeholder="Hledat v katalogu Modrinth (Sodium, Iris, Lithium, AppleSkin...)..."
+                                class="catalog-search-input">
                         </div>
+                    </div>
 
-                        <div class="filter-group">
-                            <div class="filter-group-title">Kategorie</div>
-                            <label class="filter-label">
-                                <input type="radio" name="filterCategory" value="" checked>
-                                <span>Všechny</span>
-                            </label>
-                            <label class="filter-label">
-                                <input type="radio" name="filterCategory" value="optimization">
-                                <span>⚡ Optimalizace (FPS)</span>
-                            </label>
-                            <label class="filter-label">
-                                <input type="radio" name="filterCategory" value="utility">
-                                <span>🛠️ Utility & HUD</span>
-                            </label>
-                            <label class="filter-label">
-                                <input type="radio" name="filterCategory" value="adventure">
-                                <span>🗺️ Mapy & Svět</span>
-                            </label>
+                    <div class="mods-browser-layout">
+                        <!-- Left Filter Column -->
+                        <aside class="mods-filters-col">
+                            <div class="filter-group">
+                                <div class="filter-group-title">Verze hry</div>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterVersion" value="26.2" checked>
+                                    <span>26.2 (Doporučeno)</span>
+                                </label>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterVersion" value="26.3">
+                                    <span>26.3 (Nejnovější)</span>
+                                </label>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterVersion" value="26.1.2">
+                                    <span>26.1.2</span>
+                                </label>
+                            </div>
+
+                            <div class="filter-group">
+                                <div class="filter-group-title">Mod Loader</div>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterLoader" value="fabric" checked>
+                                    <span>Fabric</span>
+                                </label>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterLoader" value="neoforge">
+                                    <span>NeoForge</span>
+                                </label>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterLoader" value="forge">
+                                    <span>Forge</span>
+                                </label>
+                            </div>
+
+                            <div class="filter-group">
+                                <div class="filter-group-title">Kategorie</div>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterCategory" value="" checked>
+                                    <span>Všechny</span>
+                                </label>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterCategory" value="optimization">
+                                    <span>⚡ Optimalizace (FPS)</span>
+                                </label>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterCategory" value="utility">
+                                    <span>🛠️ Utility & HUD</span>
+                                </label>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterCategory" value="adventure">
+                                    <span>🗺️ Mapy & Svět</span>
+                                </label>
+                            </div>
+                        </aside>
+
+                        <!-- Right Mod Cards List -->
+                        <div class="mods-cards-container" id="modsCardsList">
+                            <div class="mods-loading">Načítám mody z Modrinth...</div>
                         </div>
-                    </aside>
-
-                    <!-- Right Mod Cards List -->
-                    <div class="mods-cards-container" id="modsCardsList">
-                        <div class="mods-loading">Načítám mody z Modrinth...</div>
                     </div>
                 </div>
             </section>
@@ -643,26 +484,21 @@
                         <div class="skin-caption" id="skinCaption">3D Náhled (Otáčej tažením myši)</div>
                         <div id="skinAccountTypeBadge" class="skin-badge-pill">Offline Profil</div>
 
-                        <!-- 3D Character Toolbar -->
-                        <div class="viewer-3d-toolbar">
-                            <button type="button" class="btn-3d-tool active" id="btn3DFrontView" title="Pohled zepředu">
-                                <span>Předek</span>
+                        <!-- Clean Segmented 3D Toolbar -->
+                        <div class="viewer-3d-toolbar-clean">
+                            <button type="button" class="btn-3d-chip active" id="btn3DFrontView" title="Přední pohled">
+                                <span>👤 Předek</span>
                             </button>
-                            <button type="button" class="btn-3d-tool" id="btn3DBackView"
-                                title="Otočit o 180° – prohlédnout plášť">
-                                <span>Plášť (Záda)</span>
+                            <button type="button" class="btn-3d-chip" id="btn3DBackView" title="Zadní pohled na plášť">
+                                <span>🧥 Záda</span>
                             </button>
-                            <button type="button" class="btn-3d-tool" id="btn3DRotateToggle"
-                                title="Plynulé automatické otáčení 360°">
+                            <button type="button" class="btn-3d-chip" id="btn3DRotateToggle"
+                                title="Plynulé automatické otáčení">
                                 <span>🔄 360°</span>
                             </button>
-                            <button type="button" class="btn-3d-tool" id="btn3DElytraToggle"
-                                title="Přepnout zobrazení Plášť vs. Elytra">
+                            <button type="button" class="btn-3d-chip" id="btn3DElytraToggle"
+                                title="Přepnout Plášť vs. Elytra">
                                 <span id="label3DElytra">🪽 Elytra</span>
-                            </button>
-                            <button type="button" class="btn-3d-tool" id="btn3DFlyingToggle"
-                                title="Přepnout do pozice létání">
-                                <span id="label3DFlying">🚀 Létání</span>
                             </button>
                         </div>
 
@@ -684,10 +520,15 @@
                     <!-- Right: Account & Skin/Cape Settings -->
                     <div class="skin-form-card">
                         <div class="form-group">
-                            <label for="inputNick">Herní přezdívka (Nick)</label>
+                            <div class="label-with-badge">
+                                <label for="inputNick">Herní přezdívka (Nick)</label>
+                                <span id="nickLockBadge" class="nick-lock-badge" style="display: none;">🔒 Microsoft
+                                    účet</span>
+                            </div>
                             <input type="text" id="inputNick" class="input-text" placeholder="Zadej herní nick..."
                                 maxlength="16">
-                            <span class="input-hint">Přezdívka se použije při vstupu na server a pro tvůj profil.</span>
+                            <span class="input-hint" id="inputNickHint">Přezdívka se použije při vstupu na server a pro
+                                tvůj profil.</span>
                         </div>
 
                         <div class="form-group">
@@ -739,9 +580,8 @@
                             <div class="offline-skin-notice">
                                 <span class="notice-icon">ℹ️</span>
                                 <div>
-                                    <strong>Vlastní skin pro offline režim:</strong><br>
-                                    Tvůj offline skin a plášť jsou uloženy v launcheru a uvidíš je u sebe bez ohledu na
-                                    to, jaký nick si zadáš. Přepíší se pouze pokud se přihlásíš přes Microsoft účet.
+                                    <strong>Offline (Warez) Profil:</strong><br>
+                                    Tvůj skin i plášť jsou uloženy v launcheru a automaticky se přenesou do hry.
                                 </div>
                             </div>
 
@@ -754,18 +594,23 @@
                                 </div>
                             </div>
 
-                            <div class="form-group">
-                                <label>Vlastní offline plášť (.png)</label>
-                                <div class="file-picker-row">
-                                    <button class="mc-btn mc-btn-secondary" id="btnSelectCapeFile">🧥 Vybrat soubor
-                                        pláště</button>
-                                    <button class="mc-btn mc-btn-secondary" id="btnRemoveOfflineCape"
-                                        title="Odebrat plášť">✕</button>
+                            <div class="mojang-capes-section">
+                                <div class="capes-header">
+                                    <label>Oblíbené offline pláště (nebo nahraj vlastní):</label>
+                                </div>
+                                <div class="capes-selector-grid" id="offlineCapesList">
+                                    <!-- Dynamic upright cape cards -->
+                                </div>
+                                <div class="file-picker-row mt-2">
+                                    <button class="mc-btn mc-btn-secondary" id="btnSelectCapeFile">📁 Nahrát vlastní
+                                        .png plášť</button>
+                                    <button class="mc-btn mc-btn-secondary btn-icon-only" id="btnRemoveOfflineCape"
+                                        title="Sundat plášť">✕</button>
                                     <span id="offlineCapePathLabel" class="skin-file-label">Žádný plášť</span>
                                 </div>
                             </div>
 
-                            <div class="form-actions">
+                            <div class="form-actions mt-3">
                                 <button class="mc-btn mc-btn-green" id="btnSaveCharacter">Uložit postavu &
                                     nastavení</button>
                             </div>

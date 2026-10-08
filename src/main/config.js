@@ -63,6 +63,7 @@ const DEFAULT_SERVERS = [
 
 const DEFAULT_CONFIG = {
     username: 'Hrac' + Math.floor(100 + Math.random() * 900),
+    offlineUsername: 'Hrac' + Math.floor(100 + Math.random() * 900),
     authType: 'offline', // 'offline' | 'microsoft'
     microsoftAccount: null,
     ramMin: 2,
@@ -138,6 +139,9 @@ function loadConfig() {
                 },
                 baseDir: BASE_DIR
             };
+            if (!merged.offlineUsername) {
+                merged.offlineUsername = (merged.authType === 'offline' && merged.username) ? merged.username : 'Hrac';
+            }
             // Ensure profiles exist
             if (!merged.profiles || merged.profiles.length === 0) {
                 merged.profiles = DEFAULT_PROFILES;

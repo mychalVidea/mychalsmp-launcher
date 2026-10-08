@@ -252,11 +252,97 @@ ipcMain.handle('search-modrinth', async (event, query, version, loader, category
 
 ipcMain.handle('download-mod-or-pack', async (event, modOptions) => {
     const config = loadConfig();
-    const activeProfile = (config.profiles || []).find(p => p.id === config.activeProfileId) || config.profiles[0];
-    const targetDir = activeProfile.gameDir || BASE_DIR;
+    const targetProfileId = modOptions?.profileId || config.activeProfileId;
+    const targetProfile = (config.profiles || []).find(p => p.id === targetProfileId) || config.profiles[0];
+    const targetDir = targetProfile?.gameDir || BASE_DIR;
     try {
         const res = await downloadModOrPack(modOptions, targetDir);
         return res;
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('get-profile-mods', async (event, profileId) => {
+    const config = loadConfig();
+    const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+    const gameDir = profile?.gameDir || BASE_DIR;
+    const modsDir = path.join(gameDir, 'mods');
+
+    if (!fs.existsSync(modsDir)) {
+        return { success: true, mods: [], modsDir, profileName: profile?.name || profileId };
+    }
+
+    try {
+        const files = fs.readdirSync(modsDir);
+        const mods = [];
+        for (const file of files) {
+            const lower = file.toLowerCase();
+            if (lower.endsWith('.jar') || lower.endsWith('.jar.disabled')) {
+                const fullPath = path.join(modsDir, file);
+                const stat = fs.statSync(fullPath);
+                const isEnabled = !lower.endsWith('.disabled');
+                const cleanName = file.replace(/\.disabled$/i, '').replace(/\.jar$/i, '');
+                mods.push({
+                    filename: file,
+                    cleanName,
+                    enabled: isEnabled,
+                    sizeBytes: stat.size,
+                    sizeFormatted: (stat.size / (1024 * 1024)).toFixed(1) + ' MB',
+                    mtime: stat.mtimeMs
+                });
+            }
+        }
+        mods.sort((a, b) => a.cleanName.localeCompare(b.cleanName));
+        return { success: true, mods, modsDir, profileName: profile?.name || profileId };
+    } catch (e) {
+        return { success: false, error: e.message, mods: [] };
+    }
+});
+
+ipcMain.handle('toggle-profile-mod', async (event, profileId, filename) => {
+    const config = loadConfig();
+    const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+    const gameDir = profile?.gameDir || BASE_DIR;
+    const modsDir = path.join(gameDir, 'mods');
+
+    const srcPath = path.join(modsDir, filename);
+    if (!fs.existsSync(srcPath)) {
+        return { success: false, error: 'Soubor módu nebyl nalezen.' };
+    }
+
+    let targetFilename;
+    let enabled;
+    if (filename.toLowerCase().endsWith('.disabled')) {
+        targetFilename = filename.replace(/\.disabled$/i, '');
+        enabled = true;
+    } else {
+        targetFilename = filename + '.disabled';
+        enabled = false;
+    }
+
+    const destPath = path.join(modsDir, targetFilename);
+    try {
+        fs.renameSync(srcPath, destPath);
+        return { success: true, oldFilename: filename, newFilename: targetFilename, enabled };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('delete-profile-mod', async (event, profileId, filename) => {
+    const config = loadConfig();
+    const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+    const gameDir = profile?.gameDir || BASE_DIR;
+    const filePath = path.join(gameDir, 'mods', filename);
+
+    if (!fs.existsSync(filePath)) {
+        return { success: false, error: 'Soubor módu nebyl nalezen.' };
+    }
+
+    try {
+        fs.unlinkSync(filePath);
+        return { success: true, filename };
     } catch (e) {
         return { success: false, error: e.message };
     }
@@ -278,7 +364,7 @@ ipcMain.handle('login-offline', (event, username) => {
     const config = loadConfig();
     const auth = createOfflineAuth(username);
     // Offline mode: Keep existing customSkinPath and customCapePath so they persist across any nick!
-    saveConfig({ username: auth.name, authType: 'offline' });
+    saveConfig({ username: auth.name, offlineUsername: auth.name, authType: 'offline' });
     return {
         success: true,
         auth,

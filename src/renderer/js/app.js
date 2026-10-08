@@ -109,9 +109,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         if (tabId === 'mods') {
-            loadModrinthMods();
-        } else if (tabId === 'versions') {
-            refreshVersionStatuses();
+            renderModsProfileDropdown();
+            loadProfileMods();
         } else if (tabId === 'servers') {
             renderServersFullTab();
         } else if (tabId === 'character') {
@@ -146,7 +145,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnEditNickFromHero.addEventListener('click', () => switchTab('character'));
     }
     if (btnManageProfiles) {
-        btnManageProfiles.addEventListener('click', () => switchTab('versions'));
+        btnManageProfiles.addEventListener('click', () => switchTab('mods'));
     }
     if (btnAddModsShortcut) {
         btnAddModsShortcut.addEventListener('click', () => switchTab('mods'));
@@ -186,7 +185,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             installedVersions = await window.api.getInstalledVersions();
 
             // Profile info
-            const name = currentConfig.username || 'Steve';
+            const isMs = currentConfig.authType === 'microsoft';
+            const name = isMs
+                ? (currentConfig.microsoftAccount?.username || currentConfig.username || 'Steve')
+                : (currentConfig.offlineUsername || currentConfig.username || 'Hráč');
             updateUserUI(name, currentConfig.authType || 'offline', currentConfig.customSkinPath);
 
             // System Hardware & RAM detection (up to 80% of system RAM)
@@ -279,11 +281,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function updateUserUI(name, type, customSkin) {
-        if (greetingNick) greetingNick.textContent = name;
-        if (heroNickLabel) heroNickLabel.textContent = name;
-        if (inputNick) inputNick.value = name;
-
         const isMicrosoft = type === 'microsoft';
+        const displayName = isMicrosoft
+            ? (currentConfig.microsoftAccount?.username || name || 'Steve')
+            : (currentConfig.offlineUsername || name || 'Hráč');
+
+        if (greetingNick) greetingNick.textContent = displayName;
+        if (heroNickLabel) heroNickLabel.textContent = displayName;
+        if (inputNick) {
+            inputNick.value = displayName;
+            inputNick.readOnly = isMicrosoft;
+            inputNick.disabled = isMicrosoft;
+        }
+
+        const nickLockBadge = document.getElementById('nickLockBadge');
+        if (nickLockBadge) {
+            nickLockBadge.style.display = isMicrosoft ? 'inline-block' : 'none';
+        }
+
         const panelMs = document.getElementById('panelMicrosoftSkin');
         const panelOff = document.getElementById('panelOfflineSkin');
         const badgePill = document.getElementById('skinAccountTypeBadge');
@@ -309,6 +324,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 badgePill.textContent = '🟡 Offline Profil (Uloženo lokálně)';
                 badgePill.className = 'skin-badge-pill';
             }
+            loadOfflinePresetCapes();
         }
 
         // Labels for offline paths
@@ -319,7 +335,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (capePathLabel) {
             capePathLabel.textContent = currentConfig.customCapePath
-                ? currentConfig.customCapePath.split(/[\/\\]/).pop()
+                ? (currentConfig.customCapePath.startsWith('http') ? 'Vybraný plášť' : currentConfig.customCapePath.split(/[\/\\]/).pop())
                 : 'Žádný plášť';
         }
 
@@ -332,16 +348,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Effective skin resolution
         const effectiveSkin = customSkin || currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
-        const avatarUrl = `https://minotar.net/avatar/${encodeURIComponent(name)}/24.png`;
+        const avatarUrl = `https://minotar.net/avatar/${encodeURIComponent(displayName)}/24.png`;
 
         if (greetingAvatar) greetingAvatar.src = avatarUrl;
-        if (skinCaption) skinCaption.textContent = `3D Náhled: ${name}`;
+        if (skinCaption) skinCaption.textContent = `3D Náhled: ${displayName}`;
 
         const effectiveCape = getEffectiveCape();
 
         const skinSrc = effectiveSkin
             ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
-            : `https://minotar.net/skin/${encodeURIComponent(name)}`;
+            : `https://minotar.net/skin/${encodeURIComponent(displayName)}`;
 
         drawSkinToCanvas(skinSrc, isSlim);
         updateSkinViewer3D(skinSrc, effectiveCape, isSlim);
@@ -1564,7 +1580,233 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshVersionStatuses();
     }
 
-    // ── Modrinth Catalog Browsing (Mods, Resourcepacks & Shaders) ──────────
+    // ── Správa Módů v Profilech & Modrinth Katalog ──────────────────────────
+    let selectedModsProfileId = null;
+    let currentProfileModsList = [];
+
+    // Profile selector dropdown for mods
+    function renderModsProfileDropdown() {
+        const select = document.getElementById('modsProfileSelect');
+        if (!select) return;
+
+        const profiles = currentConfig.profiles || [];
+        if (!selectedModsProfileId) {
+            selectedModsProfileId = currentConfig.activeProfileId || (profiles[0] ? profiles[0].id : null);
+        }
+
+        select.innerHTML = profiles.map(p => {
+            const isSelected = p.id === selectedModsProfileId;
+            const icon = p.imported ? '📥' : (p.version === '26.2' ? '⭐' : '🎮');
+            const loader = p.loader && p.loader !== 'vanilla' ? ` [${p.loader.toUpperCase()}]` : '';
+            const name = p.name || p.id;
+            return `<option value="${escapeHtml(p.id)}" ${isSelected ? 'selected' : ''}>${icon} ${escapeHtml(name)} (${p.version}${loader})</option>`;
+        }).join('');
+
+        select.onchange = (e) => {
+            selectedModsProfileId = e.target.value;
+            loadProfileMods(selectedModsProfileId);
+        };
+    }
+
+    // Button to open selected profile's mods folder
+    const btnOpenSelectedProfileModsFolder = document.getElementById('btnOpenSelectedProfileModsFolder');
+    if (btnOpenSelectedProfileModsFolder) {
+        btnOpenSelectedProfileModsFolder.addEventListener('click', async () => {
+            const profId = selectedModsProfileId || currentConfig.activeProfileId;
+            if (profId) {
+                await window.api.openProfileFolder(profId, 'mods');
+            }
+        });
+    }
+
+    // Subview switcher: Installed mods vs Modrinth catalog
+    const btnSwitchInstalledMods = document.getElementById('btnSwitchInstalledMods');
+    const btnSwitchCatalogMods = document.getElementById('btnSwitchCatalogMods');
+    const viewInstalledMods = document.getElementById('viewInstalledMods');
+    const viewCatalogMods = document.getElementById('viewCatalogMods');
+
+    if (btnSwitchInstalledMods && btnSwitchCatalogMods) {
+        btnSwitchInstalledMods.addEventListener('click', () => {
+            btnSwitchInstalledMods.classList.add('active');
+            btnSwitchCatalogMods.classList.remove('active');
+            if (viewInstalledMods) viewInstalledMods.style.display = 'block';
+            if (viewCatalogMods) viewCatalogMods.style.display = 'none';
+            loadProfileMods();
+        });
+
+        btnSwitchCatalogMods.addEventListener('click', () => {
+            btnSwitchCatalogMods.classList.add('active');
+            btnSwitchInstalledMods.classList.remove('active');
+            if (viewInstalledMods) viewInstalledMods.style.display = 'none';
+            if (viewCatalogMods) viewCatalogMods.style.display = 'block';
+            loadModrinthMods();
+        });
+    }
+
+    // Load installed mods for selected profile
+    async function loadProfileMods(profileId) {
+        const listEl = document.getElementById('installedModsList');
+        const countEl = document.getElementById('installedModsCount');
+        const summaryEl = document.getElementById('installedModsSummary');
+        if (!listEl) return;
+
+        const profId = profileId || selectedModsProfileId || currentConfig.activeProfileId;
+        if (!profId) {
+            listEl.innerHTML = `<div class="empty-mods-state"><p>Není vybrán žádný profil.</p></div>`;
+            return;
+        }
+
+        listEl.innerHTML = `<div class="mods-loading">Načítám nainstalované módy profilu...</div>`;
+
+        try {
+            const res = await window.api.getProfileMods(profId);
+            if (!res || !res.success) {
+                listEl.innerHTML = `<div class="empty-mods-state"><p>Nepodařilo se načíst módy: ${escapeHtml(res?.error || 'Neznámá chyba')}</p></div>`;
+                return;
+            }
+
+            currentProfileModsList = res.mods || [];
+            if (countEl) countEl.textContent = currentProfileModsList.length;
+            if (summaryEl) {
+                const activeCount = currentProfileModsList.filter(m => m.enabled).length;
+                summaryEl.innerHTML = `Profil: <strong>${escapeHtml(res.profileName || profId)}</strong> • Aktivních: <strong>${activeCount}/${currentProfileModsList.length}</strong>`;
+            }
+
+            renderFilteredInstalledMods();
+        } catch (e) {
+            listEl.innerHTML = `<div class="empty-mods-state"><p>Chyba při načítání módů: ${escapeHtml(e.message)}</p></div>`;
+        }
+    }
+
+    // Render filtered installed mods
+    function renderFilteredInstalledMods() {
+        const listEl = document.getElementById('installedModsList');
+        const searchInput = document.getElementById('installedModsSearchInput');
+        if (!listEl) return;
+
+        const filterText = (searchInput?.value || '').trim().toLowerCase();
+        const filtered = currentProfileModsList.filter(m => {
+            if (!filterText) return true;
+            return m.cleanName.toLowerCase().includes(filterText) || m.filename.toLowerCase().includes(filterText);
+        });
+
+        if (filtered.length === 0) {
+            if (currentProfileModsList.length === 0) {
+                listEl.innerHTML = `
+                    <div class="empty-mods-state">
+                        <div class="empty-mods-icon">📦</div>
+                        <div class="empty-mods-title">V tomto profilu zatím nejsou žádné módy</div>
+                        <p class="empty-mods-desc">Přidej módy z Modrinth katalogu jedním kliknutím nebo vlož .jar soubory do složky mods.</p>
+                        <div class="empty-mods-actions">
+                            <button type="button" class="mc-btn mc-btn-primary" id="btnEmptyGoCatalog">
+                                <span>🌐 Přejít do Modrinth katalogu</span>
+                            </button>
+                            <button type="button" class="mc-btn mc-btn-secondary" id="btnEmptyOpenFolder">
+                                <span>📂 Otevřít složku mods</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                const goCatalog = document.getElementById('btnEmptyGoCatalog');
+                if (goCatalog) {
+                    goCatalog.onclick = () => {
+                        btnSwitchCatalogMods?.click();
+                    };
+                }
+                const openFolder = document.getElementById('btnEmptyOpenFolder');
+                if (openFolder) {
+                    openFolder.onclick = () => {
+                        const profId = selectedModsProfileId || currentConfig.activeProfileId;
+                        if (profId) window.api.openProfileFolder(profId, 'mods');
+                    };
+                }
+            } else {
+                listEl.innerHTML = `<div class="empty-mods-state"><p>Hledání neodpovídá žádný mód v profilu.</p></div>`;
+            }
+            return;
+        }
+
+        const profId = selectedModsProfileId || currentConfig.activeProfileId;
+        listEl.innerHTML = filtered.map(m => `
+            <div class="installed-mod-row ${m.enabled ? 'mod-enabled' : 'mod-disabled'}" data-filename="${escapeHtml(m.filename)}">
+                <div class="mod-row-icon">${m.enabled ? '📦' : '⏸️'}</div>
+                <div class="mod-row-info">
+                    <div class="mod-row-title-line">
+                        <span class="mod-row-name">${escapeHtml(m.cleanName)}</span>
+                        <span class="mod-row-badge ${m.enabled ? 'badge-enabled' : 'badge-disabled'}">
+                            ${m.enabled ? '✓ Aktivní' : 'Vypnuto'}
+                        </span>
+                    </div>
+                    <div class="mod-row-file-meta">
+                        <span class="mod-file-name">${escapeHtml(m.filename)}</span>
+                        <span>•</span>
+                        <span class="mod-file-size">${escapeHtml(m.sizeFormatted)}</span>
+                    </div>
+                </div>
+                <div class="mod-row-actions">
+                    <button type="button" class="mc-btn btn-mod-toggle ${m.enabled ? 'btn-disable' : 'btn-enable'}"
+                        data-filename="${escapeHtml(m.filename)}"
+                        title="${m.enabled ? 'Deaktivovat mód' : 'Aktivovat mód'}">
+                        <span>${m.enabled ? 'Vypnout' : 'Zapnout'}</span>
+                    </button>
+                    <button type="button" class="mc-btn mc-btn-secondary btn-mod-delete"
+                        data-filename="${escapeHtml(m.filename)}"
+                        title="Smazat soubor módu">
+                        <span>🗑️ Smazat</span>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        // Bind toggle buttons
+        listEl.querySelectorAll('.btn-mod-toggle').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const filename = btn.dataset.filename;
+                btn.disabled = true;
+                try {
+                    const res = await window.api.toggleProfileMod(profId, filename);
+                    if (res && res.success) {
+                        showToast(res.enabled ? '✓ Mód aktivován' : '⏸️ Mód vypnut', 'info');
+                        await loadProfileMods(profId);
+                    } else {
+                        showToast('Chyba při změně módu: ' + (res?.error || 'Neznámá chyba'), 'error');
+                    }
+                } catch (err) {
+                    showToast('Chyba: ' + err.message, 'error');
+                }
+            });
+        });
+
+        // Bind delete buttons
+        listEl.querySelectorAll('.btn-mod-delete').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const filename = btn.dataset.filename;
+                if (!confirm(`Opravdu chceš smazat soubor "${filename}" z profilu?`)) return;
+                btn.disabled = true;
+                try {
+                    const res = await window.api.deleteProfileMod(profId, filename);
+                    if (res && res.success) {
+                        showToast('✓ Soubor módu byl smazán.', 'success');
+                        await loadProfileMods(profId);
+                    } else {
+                        showToast('Chyba při mazání módu: ' + (res?.error || 'Neznámá chyba'), 'error');
+                    }
+                } catch (err) {
+                    showToast('Chyba: ' + err.message, 'error');
+                }
+            });
+        });
+    }
+
+    const installedModsSearchInput = document.getElementById('installedModsSearchInput');
+    if (installedModsSearchInput) {
+        installedModsSearchInput.addEventListener('input', () => {
+            renderFilteredInstalledMods();
+        });
+    }
+
     // Subtabs: Mody, Resource Packy, Shadery
     modTabButtons.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1640,6 +1882,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const modId = btn.dataset.mod;
                 const modItem = (mods || []).find(x => x.id === modId);
                 const title = modItem ? modItem.title : modId;
+                const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
 
                 // Micro-animation: Button spinner state
                 btn.disabled = true;
@@ -1652,7 +1895,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         title: title,
                         projectType: currentModFilter.projectType || 'mod',
                         version: currentModFilter.version,
-                        loader: currentModFilter.loader
+                        loader: currentModFilter.loader,
+                        profileId: targetProfileId
                     });
 
                     if (res && res.success) {
@@ -1662,10 +1906,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         const sub = res.subfolder || 'mods';
                         showToast(`✓ ${title} byl úspěšně stažen do ${sub}/!`, 'success');
-                        appendLog(`[DOWNLOAD] Soubor ${res.filename} stažen do složky ${sub}/.`);
+                        appendLog(`[DOWNLOAD] Soubor ${res.filename} stažen do složky ${sub}/ v profilu ${targetProfileId}.`);
 
                         const updatedList = await window.api.toggleMod(modId);
                         currentConfig.installedMods = updatedList;
+                        await loadProfileMods(targetProfileId);
                         await checkWardenProbe();
                     } else {
                         btn.classList.remove('btn-downloading');
@@ -1967,9 +2212,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     : `https://minotar.net/skin/${encodeURIComponent(name)}`;
                 const effectiveCape = getEffectiveCape();
 
-                heroSkinViewer.loadSkin(skinSrc, { model: isSlim ? 'slim' : 'default' });
+                const pSkin = heroSkinViewer.loadSkin(skinSrc, { model: isSlim ? 'slim' : 'default' });
+                if (pSkin && typeof pSkin.catch === 'function') {
+                    pSkin.catch(err => console.warn('[HERO 3D] loadSkin init failed:', err));
+                }
                 if (effectiveCape) {
-                    heroSkinViewer.loadCape(effectiveCape, { backEquipment: 'cape' });
+                    const pCape = heroSkinViewer.loadCape(effectiveCape, { backEquipment: 'cape' });
+                    if (pCape && typeof pCape.catch === 'function') {
+                        pCape.catch(err => console.warn('[HERO 3D] loadCape init failed:', err));
+                    }
                 }
             }
         } catch (e) {
@@ -1990,11 +2241,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             heroSkinViewer.setSize(160, 220);
             if (skinUrl) {
-                heroSkinViewer.loadSkin(skinUrl, { model: isSlim ? 'slim' : 'default' });
+                const pSkin = heroSkinViewer.loadSkin(skinUrl, { model: isSlim ? 'slim' : 'default' });
+                if (pSkin && typeof pSkin.catch === 'function') {
+                    pSkin.catch(err => console.warn('[HERO 3D] loadSkin failed:', err));
+                }
             }
             const capeToLoad = capeUrl !== undefined ? capeUrl : getEffectiveCape();
             if (capeToLoad) {
-                heroSkinViewer.loadCape(capeToLoad, { backEquipment: 'cape' });
+                const pCape = heroSkinViewer.loadCape(capeToLoad, { backEquipment: 'cape' });
+                if (pCape && typeof pCape.catch === 'function') {
+                    pCape.catch(err => console.warn('[HERO 3D] loadCape failed:', err));
+                }
             } else {
                 heroSkinViewer.loadCape(null);
             }
@@ -2118,12 +2375,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             if (skinUrl) {
                 lastLoadedSkinUrl = skinUrl;
-                skinViewer.loadSkin(skinUrl, { model: isSlim ? 'slim' : 'default' });
+                const pSkin = skinViewer.loadSkin(skinUrl, { model: isSlim ? 'slim' : 'default' });
+                if (pSkin && typeof pSkin.catch === 'function') {
+                    pSkin.catch(err => console.warn('[3D VIEWER] loadSkin failed:', err));
+                }
             }
 
             if (capeUrl) {
                 lastLoadedCapeUrl = capeUrl;
-                skinViewer.loadCape(capeUrl, { backEquipment: isBackEquipmentElytra ? 'elytra' : 'cape' });
+                const pCape = skinViewer.loadCape(capeUrl, { backEquipment: isBackEquipmentElytra ? 'elytra' : 'cape' });
+                if (pCape && typeof pCape.catch === 'function') {
+                    pCape.catch(err => console.warn('[3D VIEWER] loadCape failed:', err));
+                }
             } else if (capeUrl === null) {
                 lastLoadedCapeUrl = null;
                 skinViewer.loadCape(null);
@@ -2152,6 +2415,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateSkinViewer3D(skinSrc, effectiveCape, isSlim);
         updateHeroSkinViewer3D(skinSrc, effectiveCape, isSlim);
         drawSkinToCanvas(skinSrc, isSlim);
+        if (isMicrosoft) {
+            loadMojangCapes();
+        } else {
+            loadOfflinePresetCapes();
+        }
     }
 
     // ── Skin Canvas 2D Renderer ─────────────────────────────────────────────
@@ -2244,6 +2512,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         img.src = imgSrc;
     }
 
+    // ── Cape Thumbnail Renderer (Upright 10:16 Minecraft Model) ─────────────
+    function drawCapeModelThumb(imgSrc, canvas) {
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.imageSmoothingEnabled = false;
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            canvas.width = 40;
+            canvas.height = 64;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // In Minecraft 64x32 cape textures, the back of the cape is at (1, 1, 10, 16)
+            const scale = (img.naturalWidth || 64) / 64;
+            const sx = 1 * scale;
+            const sy = 1 * scale;
+            const sw = 10 * scale;
+            const sh = 16 * scale;
+
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        };
+        img.onerror = () => {
+            canvas.width = 40;
+            canvas.height = 64;
+            ctx.fillStyle = '#0a67e5';
+            ctx.fillRect(0, 0, 40, 64);
+        };
+        img.src = imgSrc;
+    }
+
     // ── Mojang Capes Fetcher & Renderer ─────────────────────────────────────
     async function loadMojangCapes() {
         const container = document.getElementById('mojangCapesList');
@@ -2262,16 +2562,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
 
                 let activeCapeFound = null;
-                container.innerHTML = capes.map(c => {
+                container.innerHTML = capes.map((c, idx) => {
                     const isActive = c.state === 'ACTIVE';
                     if (isActive) activeCapeFound = c;
                     return `
                         <div class="cape-item-card ${isActive ? 'active-cape' : ''}" data-cape-id="${escapeHtml(c.id)}" title="${escapeHtml(c.alias || 'Plášť')}">
-                            <img src="${escapeHtml(c.url)}" class="cape-item-thumb" alt="Cape">
+                            <div class="cape-item-preview-box">
+                                <canvas class="cape-canvas-render" id="mojangCapeCanvas_${idx}" width="40" height="64"></canvas>
+                            </div>
+                            ${isActive ? '<span class="cape-active-indicator">✓ Aktivní</span>' : ''}
                             <span class="cape-item-name">${escapeHtml(c.alias || 'Plášť')}</span>
                         </div>
                     `;
                 }).join('');
+
+                capes.forEach((c, idx) => {
+                    const canvas = document.getElementById(`mojangCapeCanvas_${idx}`);
+                    if (canvas) drawCapeModelThumb(c.url, canvas);
+                });
 
                 if (equippedBadge && equippedName) {
                     if (activeCapeFound) {
@@ -2304,11 +2612,89 @@ document.addEventListener('DOMContentLoaded', async () => {
                     });
                 });
             } else {
-                container.innerHTML = `<div class="cape-loading-hint">Pláště nelze načíst (${res.error || 'Nepřihlášen'}).</div>`;
+                container.innerHTML = `<div class="cape-loading-hint">Pláště nelze načíst (${res?.error || 'Nepřihlášen'}).</div>`;
             }
         } catch (e) {
             container.innerHTML = `<div class="cape-loading-hint">Chyba při načítání plášťů.</div>`;
         }
+    }
+
+    // ── Offline Preset & Custom Capes ───────────────────────────────────────
+    function loadOfflinePresetCapes() {
+        const container = document.getElementById('offlineCapesList');
+        if (!container) return;
+
+        const currentCape = currentConfig.customCapePath;
+        const presets = [
+            { id: 'server', name: 'MYCHAL SMP', url: getDefaultServerCapeUrl() },
+            { id: '15th', name: '15th Anniversary', url: 'https://textures.minecraft.net/texture/2330a5f037dd78696b99684c3116805d76d655f26194b308be73cb55ad48c9' },
+            { id: 'cherry', name: 'Cherry Blossom', url: 'https://textures.minecraft.net/texture/414f5ae33b4972e2c88f9a2cbfa7dcc2668b8b8ebf4b4f5352fa1d59baee27cb' },
+            { id: 'vanilla', name: 'Vanilla Cape', url: 'https://textures.minecraft.net/texture/42d20e7df5d46816ab9c6c5ea577907f9c894ad691d57e2a9b21f39185a6cf17' },
+            { id: 'migrator', name: 'Migrator Cape', url: 'https://textures.minecraft.net/texture/17912790d697449c40217c06eb6555cc5e7f1ba9a3934d402e6c525f0ad08819' },
+            { id: 'pancape', name: 'Pancape', url: 'https://textures.minecraft.net/texture/9f7e52292f7033ec09ad7f272a83e020d2c38cc01844ebc40228d488f57fae00' },
+            { id: 'twitch', name: 'Twitch Cape', url: 'https://textures.minecraft.net/texture/486242636c841bb2df6a096c4a631bf3cbe76ee64db5ec9bf78018cb14eb61eb' },
+            { id: 'tiktok', name: 'TikTok Cape', url: 'https://textures.minecraft.net/texture/3449e7b39886a8775080c3eec5ee4f6cb9607147dbfb56a42a59a72df9e8e4db' }
+        ];
+
+        let allItems = [];
+        if (currentCape && currentCape !== 'none' && !presets.some(p => p.url === currentCape)) {
+            const formatted = (currentCape.startsWith('http') || currentCape.startsWith('file://'))
+                ? currentCape
+                : `file://${currentCape}`;
+            allItems.push({
+                id: 'custom',
+                name: 'Vlastní soubor',
+                url: formatted
+            });
+        }
+        allItems = allItems.concat(presets);
+
+        container.innerHTML = allItems.map((c, idx) => {
+            const isActive = currentCape && (
+                currentCape === c.url ||
+                (c.url.startsWith('file://') && currentCape.includes(c.url.replace('file://', '')))
+            );
+            return `
+                <div class="cape-item-card ${isActive ? 'active-cape' : ''}" data-cape-idx="${idx}" title="${escapeHtml(c.name)}">
+                    <div class="cape-item-preview-box">
+                        <canvas class="cape-canvas-render" id="offCapeCanvas_${idx}" width="40" height="64"></canvas>
+                    </div>
+                    ${isActive ? '<span class="cape-active-indicator">✓ Aktivní</span>' : ''}
+                    <span class="cape-item-name">${escapeHtml(c.name)}</span>
+                </div>
+            `;
+        }).join('');
+
+        allItems.forEach((c, idx) => {
+            const canvas = document.getElementById(`offCapeCanvas_${idx}`);
+            if (canvas) drawCapeModelThumb(c.url, canvas);
+        });
+
+        container.querySelectorAll('.cape-item-card').forEach(card => {
+            card.addEventListener('click', async () => {
+                const idx = parseInt(card.dataset.capeIdx, 10);
+                const item = allItems[idx];
+                if (!item) return;
+
+                currentConfig.customCapePath = item.url;
+                await window.api.saveOfflineSkin({ capePath: item.url });
+                const isSlim = currentConfig.customSkinVariant === 'slim';
+                const effectiveSkin = currentConfig.customSkinPath || (currentConfig.authType === 'microsoft' && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
+                const skinSrc = effectiveSkin
+                    ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
+                    : `https://minotar.net/skin/${encodeURIComponent(currentConfig.offlineUsername || currentConfig.username || 'Hráč')}`;
+
+                updateSkinViewer3D(skinSrc, item.url, isSlim);
+                updateHeroSkinViewer3D(skinSrc, item.url, isSlim);
+                loadOfflinePresetCapes();
+
+                const capePathLabel = document.getElementById('offlineCapePathLabel');
+                if (capePathLabel) {
+                    capePathLabel.textContent = item.name;
+                }
+                showToast(`✓ Plášť "${item.name}" byl vybrán pro tvůj profil!`, 'success');
+            });
+        });
     }
 
     // ── Character & Skin Handlers ───────────────────────────────────────────
@@ -2316,10 +2702,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (inputNick) {
         inputNick.addEventListener('input', (e) => {
             clearTimeout(nickDebounce);
-            const val = e.target.value.trim() || 'Steve';
+            const val = e.target.value.trim() || 'Hráč';
+            // Save immediately in config for offline players
+            if (currentConfig.authType !== 'microsoft') {
+                currentConfig.offlineUsername = val;
+                currentConfig.username = val;
+            }
             nickDebounce = setTimeout(() => {
-                if (skinCaption) skinCaption.textContent = `Náhled: ${val}`;
-                // Only fallback to minotar if no custom skin is set
+                if (skinCaption) skinCaption.textContent = `3D Náhled: ${val}`;
                 if (!currentConfig.customSkinPath && currentConfig.authType !== 'microsoft') {
                     const minotarSkin = `https://minotar.net/skin/${encodeURIComponent(val)}`;
                     drawSkinToCanvas(minotarSkin, currentConfig.customSkinVariant === 'slim');
@@ -2447,6 +2837,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentConfig.customCapePath = capePath;
                 await window.api.saveOfflineSkin({ capePath: capePath });
                 updateUserUI(currentConfig.username, 'offline', currentConfig.customSkinPath);
+                loadOfflinePresetCapes();
                 showToast('✓ Offline plášť byl uložen v launcheru!', 'success');
                 appendLog(`[CAPE] Vlastní offline plášť nastaven: ${capePath}`);
             }
@@ -2460,6 +2851,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentConfig.customCapePath = null;
             await window.api.saveOfflineSkin({ capePath: null });
             updateUserUI(currentConfig.username, 'offline', currentConfig.customSkinPath);
+            loadOfflinePresetCapes();
             showToast('✓ Offline plášť byl odebrán.', 'info');
         });
     }
@@ -2467,10 +2859,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Offline / Warez: Save character nick & config
     if (btnSaveCharacter) {
         btnSaveCharacter.addEventListener('click', async () => {
-            const nick = inputNick.value.trim() || 'Steve';
+            const nick = inputNick.value.trim() || 'Hráč';
+            currentConfig.offlineUsername = nick;
+            currentConfig.username = nick;
             const res = await window.api.loginOffline(nick);
             if (res && res.success) {
                 currentConfig.username = nick;
+                currentConfig.offlineUsername = nick;
                 currentConfig.authType = 'offline';
                 // Note: customSkinPath is kept!
                 updateUserUI(nick, 'offline', currentConfig.customSkinPath);
@@ -2523,10 +2918,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Offline Account Switcher
     if (authOfflineBtn) {
         authOfflineBtn.addEventListener('click', async () => {
-            const nick = (inputNick ? inputNick.value.trim() : '') || currentConfig.username || 'Steve';
+            const nick = currentConfig.offlineUsername || 'Hráč';
+            if (inputNick) inputNick.value = nick;
             const res = await window.api.loginOffline(nick);
             if (res && res.success) {
                 currentConfig.username = nick;
+                currentConfig.offlineUsername = nick;
                 currentConfig.authType = 'offline';
                 currentConfig.microsoftAccount = null;
                 updateUserUI(nick, 'offline', currentConfig.customSkinPath);

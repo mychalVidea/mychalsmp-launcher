@@ -581,11 +581,195 @@ Handler.prototype.getAssets = async function() {
 
 
 /**
+ * Tests if a java binary executable runs properly.
+ */
+function testJavaExecutable(binPath) {
+    if (!binPath) return false;
+    try {
+        execSync(`"${binPath}" -version`, { timeout: 3500, stdio: 'pipe' });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Downloads and installs OpenJDK 21 Temurin JRE from the official Adoptium API.
+ * Solves the missing Java issue (e.g. "javaw -version failed") completely automatically.
+ */
+async function downloadAndInstallJava21(onLog = console.log, onProgress = null) {
+    const runtimeBase = path.join(BASE_DIR, 'runtime');
+    const javaDir = path.join(runtimeBase, 'java-21');
+    const isWin = process.platform === 'win32';
+    const osType = isWin ? 'windows' : (process.platform === 'darwin' ? 'mac' : 'linux');
+    const arch = process.arch === 'arm64' ? 'aarch64' : 'x64';
+
+    fs.mkdirSync(runtimeBase, { recursive: true });
+
+    onLog(`[JAVA] V systému nebyla nalezena Java 21+. Automaticky stahuji oficiální OpenJDK 21 Runtime (${osType}-${arch})...`);
+    if (onProgress) {
+        onProgress({ percent: 5, text: 'Stahování běhového prostředí Java 21 z Adoptium...', status: 'Stahování Java 21...' });
+    }
+
+    const apiUrl = `https://api.adoptium.net/v3/binary/latest/21/ga/${osType}/${arch}/jre/hotspot/normal/eclipse`;
+
+    const resp = await fetch(apiUrl, {
+        headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' },
+        redirect: 'follow'
+    });
+
+    if (!resp.ok) {
+        throw new Error(`Nepodařilo se stáhnout Javu z Adoptium API: HTTP ${resp.status}`);
+    }
+
+    const totalBytes = parseInt(resp.headers.get('content-length') || '0', 10);
+    const archivePath = path.join(runtimeBase, isWin ? 'java21.zip' : 'java21.tar.gz');
+    const fileStream = fs.createWriteStream(archivePath);
+
+    let downloadedBytes = 0;
+    const reader = resp.body.getReader();
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        downloadedBytes += value.length;
+        fileStream.write(Buffer.from(value));
+        if (totalBytes > 0 && onProgress) {
+            const percent = Math.min(90, Math.round((downloadedBytes / totalBytes) * 85) + 5);
+            onProgress({
+                percent,
+                text: `Stahování Java 21 (${Math.round(downloadedBytes / 1024 / 1024)} MB / ${Math.round(totalBytes / 1024 / 1024)} MB)...`,
+                status: `Stahování Java 21 (${percent}%)...`
+            });
+        }
+    }
+    fileStream.end();
+    await new Promise((resolve) => fileStream.on('finish', resolve));
+
+    if (onProgress) {
+        onProgress({ percent: 92, text: 'Instalace a rozbalování Java 21...', status: 'Rozbalování Java 21...' });
+    }
+    onLog(`[JAVA] Archiv stažen (${Math.round(downloadedBytes / 1024 / 1024)} MB). Rozbaluji do ${javaDir}...`);
+
+    if (fs.existsSync(javaDir)) {
+        try { fs.rmSync(javaDir, { recursive: true, force: true }); } catch (e) {}
+    }
+    fs.mkdirSync(javaDir, { recursive: true });
+
+    const tempExtract = path.join(runtimeBase, 'extract_tmp');
+    if (fs.existsSync(tempExtract)) {
+        try { fs.rmSync(tempExtract, { recursive: true, force: true }); } catch (e) {}
+    }
+
+    if (isWin) {
+        const AdmZip = require('adm-zip');
+        const zip = new AdmZip(archivePath);
+        zip.extractAllTo(tempExtract, true);
+
+        const entries = fs.readdirSync(tempExtract);
+        let sourceFolder = tempExtract;
+        for (const e of entries) {
+            const p = path.join(tempExtract, e);
+            if (fs.statSync(p).isDirectory() && (fs.existsSync(path.join(p, 'bin', 'javaw.exe')) || fs.existsSync(path.join(p, 'bin', 'java.exe')))) {
+                sourceFolder = p;
+                break;
+            }
+        }
+        for (const item of fs.readdirSync(sourceFolder)) {
+            fs.renameSync(path.join(sourceFolder, item), path.join(javaDir, item));
+        }
+    } else {
+        fs.mkdirSync(tempExtract, { recursive: true });
+        execSync(`tar -xzf "${archivePath}" -C "${tempExtract}"`);
+
+        const entries = fs.readdirSync(tempExtract);
+        let sourceFolder = tempExtract;
+        for (const e of entries) {
+            const p = path.join(tempExtract, e);
+            if (fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'bin', 'java'))) {
+                sourceFolder = p;
+                break;
+            }
+        }
+        for (const item of fs.readdirSync(sourceFolder)) {
+            fs.renameSync(path.join(sourceFolder, item), path.join(javaDir, item));
+        }
+    }
+
+    try { fs.rmSync(tempExtract, { recursive: true, force: true }); } catch (e) {}
+    try { fs.unlinkSync(archivePath); } catch (e) {}
+
+    const binName = isWin ? 'javaw.exe' : 'java';
+    let finalJavaPath = path.join(javaDir, 'bin', binName);
+    if (isWin && !fs.existsSync(finalJavaPath)) {
+        finalJavaPath = path.join(javaDir, 'bin', 'java.exe');
+    }
+
+    if (!fs.existsSync(finalJavaPath)) {
+        throw new Error(`Běhový soubor Java nebyl nalezen po rozbalení: ${finalJavaPath}`);
+    }
+
+    if (!isWin) {
+        try { fs.chmodSync(finalJavaPath, 0o755); } catch (e) {}
+    }
+
+    onLog(`[JAVA] ✓ Java 21 úspěšně připravena: ${finalJavaPath}`);
+    if (onProgress) {
+        onProgress({ percent: 100, text: 'Java 21 připravena!', status: 'Hotovo' });
+    }
+    return finalJavaPath;
+}
+
+/**
+ * Ensures that a working Java 21+ executable is available.
+ * If neither system nor configured Java is functional, automatically downloads it.
+ */
+async function ensureJavaExecutable(config, onLog = console.log, onProgress = null) {
+    // 1. Configured custom path
+    if (config.javaPath && testJavaExecutable(config.javaPath)) {
+        return config.javaPath;
+    }
+
+    // 2. Launcher local runtime
+    const isWin = process.platform === 'win32';
+    const localBin = path.join(BASE_DIR, 'runtime', 'java-21', 'bin', isWin ? 'javaw.exe' : 'java');
+    const localBinAlt = isWin ? path.join(BASE_DIR, 'runtime', 'java-21', 'bin', 'java.exe') : null;
+    if (fs.existsSync(localBin) && testJavaExecutable(localBin)) {
+        return localBin;
+    }
+    if (localBinAlt && fs.existsSync(localBinAlt) && testJavaExecutable(localBinAlt)) {
+        return localBinAlt;
+    }
+
+    // 3. System detected paths
+    const detected = detectJavaPath();
+    if (detected && testJavaExecutable(detected)) {
+        return detected;
+    }
+
+    // 4. Fallback: Automatically download OpenJDK 21
+    onLog('[JAVA] V systému nebyla nalezena žádná funkční Java 21+. Stahuji vestavěný OpenJDK 21...');
+    const installed = await downloadAndInstallJava21(onLog, onProgress);
+    try {
+        saveConfig({ javaPath: installed });
+    } catch (e) {}
+    return installed;
+}
+
+/**
  * Scans installed Java environments prioritizing Java 25 and Java 21.
  */
 function detectJavaPath() {
+    const isWin = process.platform === 'win32';
+
+    // Check launcher local runtime first
+    const localRuntime = path.join(BASE_DIR, 'runtime', 'java-21', 'bin', isWin ? 'javaw.exe' : 'java');
+    if (fs.existsSync(localRuntime) && testJavaExecutable(localRuntime)) {
+        return localRuntime;
+    }
+
     // 1. Linux candidates (Java 25 first, then Java 21, then system default)
-    if (process.platform !== 'win32') {
+    if (!isWin) {
         const linuxCandidates = [
             '/usr/lib/jvm/java-25-openjdk-amd64/bin/java',
             '/usr/lib/jvm/java-25-openjdk/bin/java',
@@ -596,15 +780,18 @@ function detectJavaPath() {
             '/usr/lib/jvm/default-runtime/bin/java'
         ];
         for (const cand of linuxCandidates) {
-            if (fs.existsSync(cand)) return cand;
+            if (fs.existsSync(cand) && testJavaExecutable(cand)) return cand;
         }
 
         try {
             const out = execSync('which java', { encoding: 'utf-8', timeout: 1500 }).trim().split('\n')[0];
-            if (out && fs.existsSync(out)) return out;
+            if (out && fs.existsSync(out) && testJavaExecutable(out)) return out;
         } catch (e) {}
 
-        return '/usr/bin/java';
+        if (fs.existsSync('/usr/bin/java') && testJavaExecutable('/usr/bin/java')) {
+            return '/usr/bin/java';
+        }
+        return null;
     }
 
     // 2. Windows candidates (Java 25 first, then Java 21)
@@ -619,11 +806,12 @@ function detectJavaPath() {
         if (fs.existsSync(base)) {
             try {
                 const subdirs = fs.readdirSync(base);
-                // Prefer 25 over 21
                 const sorted = subdirs.sort((a, b) => b.localeCompare(a));
                 for (const sub of sorted) {
                     const javaw = path.join(base, sub, 'bin', 'javaw.exe');
-                    if (fs.existsSync(javaw)) return javaw;
+                    if (fs.existsSync(javaw) && testJavaExecutable(javaw)) return javaw;
+                    const javaExe = path.join(base, sub, 'bin', 'java.exe');
+                    if (fs.existsSync(javaExe) && testJavaExecutable(javaExe)) return javaExe;
                 }
             } catch (e) {}
         }
@@ -631,10 +819,15 @@ function detectJavaPath() {
 
     try {
         const out = execSync('where javaw', { encoding: 'utf-8', timeout: 1500 }).trim().split('\n')[0];
-        if (out && fs.existsSync(out)) return out;
+        if (out && fs.existsSync(out) && testJavaExecutable(out)) return out;
     } catch (e) {}
 
-    return 'javaw';
+    try {
+        const out = execSync('where java', { encoding: 'utf-8', timeout: 1500 }).trim().split('\n')[0];
+        if (out && fs.existsSync(out) && testJavaExecutable(out)) return out;
+    } catch (e) {}
+
+    return null;
 }
 
 /**
@@ -700,20 +893,44 @@ function getInstalledVersions(baseDir) {
 /**
  * 🎭 Nastavení vlastního offline skinu a pláště pro warez / offline hráče.
  * Automaticky vytvoří/aktualizuje vestavěný resource pack v resourcepacks/mychalsmp-character
- * a mychalsmp-character.zip s formátem 88-97 pro Minecraft 26.x a aktivuje jej v options.txt.
- * Defaultně nepřidává ŽÁDNÝ plášť, ledaže si hráč explicitně nastavil vlastní cape!
+ * a mychalsmp-character.zip s formátem plně kompatibilním s Minecraft 26.x a aktivuje jej v options.txt.
+ * Pokud offline hráč nemá nastavený lokální soubor skinu, automaticky stáhne skin pro jeho nick.
  */
-function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
+async function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
     if (config.authType === 'microsoft') {
         return; // Pro oficiální účty se skin spravuje přes Mojang API
     }
 
+    const username = config.offlineUsername || config.username || 'Hrac';
     const skinCandidates = [
         config.customSkinPath,
         path.join(gameDir, 'custom_skin.png'),
         path.join(gameDir, 'skins', 'skin.png'),
         path.join(BASE_DIR, 'custom_skin.png')
     ].filter(Boolean);
+
+    let activeSkin = skinCandidates.find(p => fs.existsSync(p));
+
+    // Pokud skin na disku neexistuje, automaticky stáhneme oficiální skin odpovídající zvolenému nicku
+    if (!activeSkin) {
+        try {
+            const dest = path.join(BASE_DIR, 'custom_skin.png');
+            const resp = await fetch(`https://minotar.net/skin/${encodeURIComponent(username)}`, {
+                headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
+            });
+            if (resp.ok) {
+                const buf = await resp.arrayBuffer();
+                if (buf.byteLength > 100) {
+                    fs.writeFileSync(dest, Buffer.from(buf));
+                    activeSkin = dest;
+                    config.customSkinPath = dest;
+                    onLog(`[POSTAVA] 🎨 Automaticky stažen skin pro nick "${username}" z Minotaru.`);
+                }
+            }
+        } catch (e) {
+            onLog(`[POSTAVA] Minotar stažení skinu selhalo: ${e.message}`);
+        }
+    }
 
     // Plášť aplikujeme POUZE pokud je explicitně nastaven a není 'none' / prázdný
     const hasExplicitCape = config.customCapePath && config.customCapePath !== 'none';
@@ -723,7 +940,6 @@ function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
         path.join(BASE_DIR, 'custom_cape.png')
     ].filter(Boolean) : [];
 
-    const activeSkin = skinCandidates.find(p => fs.existsSync(p));
     const activeCape = capeCandidates.find(p => fs.existsSync(p));
 
     if (!activeSkin && !activeCape) {
@@ -740,6 +956,7 @@ function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
         const playerRoot = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player');
         const entityDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity');
         const wingsDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'equipment', 'wings');
+        const armorDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'models', 'armor');
         const capeDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'cape');
 
         fs.mkdirSync(wideDir, { recursive: true });
@@ -747,12 +964,13 @@ function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
         fs.mkdirSync(playerRoot, { recursive: true });
         fs.mkdirSync(entityDir, { recursive: true });
         fs.mkdirSync(wingsDir, { recursive: true });
+        fs.mkdirSync(armorDir, { recursive: true });
         fs.mkdirSync(capeDir, { recursive: true });
 
-        // 1. pack.mcmeta (Plná kompatibilita s Minecraft 26.x - formát 88 až 97)
+        // 1. pack.mcmeta (Plná kompatibilita s Minecraft 26.x - formát 34 s rozsahem 1 až 999)
         const mcmeta = {
             pack: {
-                pack_format: 88,
+                pack_format: 34,
                 supported_formats: { min_inclusive: 1, max_inclusive: 999 },
                 description: "MYCHAL SMP Vlastní Offline Postava"
             }
@@ -768,6 +986,8 @@ function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
             }
             fs.copyFileSync(activeSkin, path.join(playerRoot, 'steve.png'));
             fs.copyFileSync(activeSkin, path.join(playerRoot, 'alex.png'));
+            fs.copyFileSync(activeSkin, path.join(entityDir, 'steve.png'));
+            fs.copyFileSync(activeSkin, path.join(entityDir, 'alex.png'));
             onLog(`[POSTAVA] 🎨 Vlastní offline skin aplikován (${path.basename(activeSkin)}) pro modely postav.`);
         }
 
@@ -775,11 +995,13 @@ function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
         if (activeCape) {
             fs.copyFileSync(activeCape, path.join(entityDir, 'elytra.png'));
             fs.copyFileSync(activeCape, path.join(wingsDir, 'elytra.png'));
-            const capeTypes = ['mojang', 'migrator', 'vanilla', 'cherry', 'follower', 'cape'];
+            fs.copyFileSync(activeCape, path.join(armorDir, 'elytra.png'));
+            const capeTypes = ['mojang', 'migrator', 'vanilla', 'cherry', 'follower', 'experience', '15th_anniversary', 'cape'];
             for (const c of capeTypes) {
                 fs.copyFileSync(activeCape, path.join(capeDir, `${c}.png`));
             }
             fs.copyFileSync(activeCape, path.join(playerRoot, 'cape.png'));
+            fs.copyFileSync(activeCape, path.join(entityDir, 'cape.png'));
             onLog(`[POSTAVA] 🧥 Vlastní offline plášť aplikován (${path.basename(activeCape)}) pro plášť i elytru.`);
         }
 
@@ -794,46 +1016,49 @@ function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
             // fallback k adresářovému resource packu
         }
 
-        // 5. Automatická aktivace v options.txt
-        const optionsFile = path.join(gameDir, 'options.txt');
-        const packIdentifiers = ['file/mychalsmp-character.zip', 'file/mychalsmp-character'];
-        if (fs.existsSync(optionsFile)) {
-            let content = fs.readFileSync(optionsFile, 'utf8');
-            if (content.includes('resourcePacks:')) {
-                content = content.replace(/resourcePacks:\[(.*?)\]/, (match, inner) => {
-                    let packs = [];
-                    try {
-                        packs = JSON.parse(`[${inner}]`);
-                    } catch (e) {
-                        packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
-                    }
-                    for (const pId of packIdentifiers) {
-                        if (!packs.includes(pId)) packs.push(pId);
-                    }
-                    return `resourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
-                });
-            } else {
-                content += `\nresourcePacks:[${JSON.stringify('vanilla')},${JSON.stringify('file/mychalsmp-character.zip')},${JSON.stringify('file/mychalsmp-character')}]\n`;
-            }
+        // 5. Automatická aktivace v options.txt (jak v herním profilu, tak v BASE_DIR)
+        const targetOptionsFiles = [
+            path.join(gameDir, 'options.txt'),
+            path.join(BASE_DIR, 'options.txt')
+        ];
 
-            if (content.includes('incompatibleResourcePacks:')) {
-                content = content.replace(/incompatibleResourcePacks:\[(.*?)\]/, (match, inner) => {
-                    let packs = [];
-                    try {
-                        packs = JSON.parse(`[${inner}]`);
-                    } catch (e) {
-                        packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
-                    }
-                    packs = packs.filter(p => !packIdentifiers.includes(p));
-                    return `incompatibleResourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
-                });
+        for (const optionsFile of new Set(targetOptionsFiles)) {
+            const packId = 'file/mychalsmp-character.zip';
+            if (fs.existsSync(optionsFile)) {
+                let content = fs.readFileSync(optionsFile, 'utf8');
+                if (content.includes('resourcePacks:')) {
+                    content = content.replace(/resourcePacks:\[(.*?)\]/, (match, inner) => {
+                        let packs = [];
+                        try {
+                            packs = JSON.parse(`[${inner}]`);
+                        } catch (e) {
+                            packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+                        }
+                        if (!packs.includes(packId)) packs.push(packId);
+                        return `resourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
+                    });
+                } else {
+                    content += `\nresourcePacks:[${JSON.stringify('vanilla')},${JSON.stringify(packId)}]\n`;
+                }
+
+                if (content.includes('incompatibleResourcePacks:')) {
+                    content = content.replace(/incompatibleResourcePacks:\[(.*?)\]/, (match, inner) => {
+                        let packs = [];
+                        try {
+                            packs = JSON.parse(`[${inner}]`);
+                        } catch (e) {
+                            packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+                        }
+                        packs = packs.filter(p => p !== packId && p !== 'file/mychalsmp-character');
+                        return `incompatibleResourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
+                    });
+                }
+                fs.writeFileSync(optionsFile, content, 'utf8');
+            } else {
+                fs.writeFileSync(optionsFile, `resourcePacks:["vanilla","${packId}"]\nincompatibleResourcePacks:[]\n`, 'utf8');
             }
-            fs.writeFileSync(optionsFile, content, 'utf8');
-            onLog(`[POSTAVA] ✓ Resource pack postavy aktivován v options.txt.`);
-        } else {
-            fs.writeFileSync(optionsFile, `resourcePacks:["vanilla","file/mychalsmp-character.zip","file/mychalsmp-character"]\nincompatibleResourcePacks:[]\n`, 'utf8');
-            onLog(`[POSTAVA] ✓ Vytvořen options.txt s aktivovaným resource packem postavy.`);
         }
+        onLog(`[POSTAVA] ✓ Resource pack postavy aktivován v options.txt.`);
     } catch (err) {
         onLog(`[POSTAVA] ⚠ Chyba při přípravě offline skinu/pláště: ${err.message}`);
     }
@@ -1008,9 +1233,7 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
         client: launcher
     };
 
-    const javaExecutable = config.javaPath && fs.existsSync(config.javaPath)
-        ? config.javaPath
-        : detectJavaPath();
+    const javaExecutable = await ensureJavaExecutable(config, onLog, onProgress);
 
     if (!fs.existsSync(BASE_DIR)) {
         fs.mkdirSync(BASE_DIR, { recursive: true });
@@ -1023,7 +1246,7 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     linkOrShareExistingMinecraftData(BASE_DIR, onLog);
 
     // 🎭 Aplikace vlastního offline skinu a pláště pro warez / offline režim
-    setupOfflineCustomSkinAndCape(gameInstanceDir, config, onLog);
+    await setupOfflineCustomSkinAndCape(gameInstanceDir, config, onLog);
 
     // JVM Arguments (supports modern Java 21/25 Generational ZGC and G1GC)
     let jvmArgs = [];
@@ -1638,5 +1861,6 @@ module.exports = {
     checkAudioDlcStatus,
     downloadAudioDlc,
     cancelAudioDlcDownload,
-    setupOfflineCustomSkinAndCape
+    setupOfflineCustomSkinAndCape,
+    ensureJavaExecutable
 };

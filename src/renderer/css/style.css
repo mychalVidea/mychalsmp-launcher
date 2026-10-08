@@ -1854,50 +1854,91 @@ body {
 
 .capes-selector-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 8px;
-    min-height: 48px;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 10px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 4px;
 }
 
 .cape-item-card {
     background: var(--surface);
     border: 1px solid var(--surface-border);
-    border-radius: 6px;
-    padding: 8px;
+    border-radius: 8px;
+    padding: 10px 6px 8px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 6px;
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    user-select: none;
 }
 
 .cape-item-card:hover {
+    background: var(--surface2);
     border-color: rgba(255, 255, 255, 0.2);
     transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .cape-item-card.active-cape {
     border-color: var(--brand-green);
     background: rgba(33, 222, 0, 0.08);
+    box-shadow: 0 0 16px rgba(33, 222, 0, 0.15);
+}
+
+.cape-item-preview-box {
+    width: 44px;
+    height: 70px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.05) 0%, transparent 70%);
+    border-radius: 4px;
+}
+
+.cape-canvas-render {
+    width: 38px;
+    height: 61px;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
+    border-radius: 2px;
 }
 
 .cape-item-thumb {
-    width: 32px;
-    height: 48px;
+    width: 38px;
+    height: 61px;
     image-rendering: pixelated;
-    object-fit: contain;
+    object-fit: cover;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
+    border-radius: 2px;
 }
 
 .cape-item-name {
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 700;
     color: #e2e8f0;
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 110px;
+    max-width: 96px;
+}
+
+.cape-active-indicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: var(--brand-green);
+    color: #000;
+    font-size: 8px;
+    font-weight: 800;
+    padding: 1px 4px;
+    border-radius: 4px;
+    text-transform: uppercase;
 }
 
 .cape-loading-hint {
@@ -2588,41 +2629,73 @@ body {
     cursor: grabbing;
 }
 
-.viewer-3d-toolbar {
+.viewer-3d-toolbar-clean {
     display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    justify-content: center;
-    margin-top: 10px;
+    gap: 4px;
     background: var(--surface2);
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
     border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    padding: 3px;
+    width: 100%;
     max-width: 280px;
+    margin: 8px auto 0;
 }
 
-.btn-3d-tool {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--surface-border);
-    color: var(--text-muted);
+.btn-3d-chip {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
     font-size: 11px;
     font-weight: 600;
-    padding: 4px 8px;
-    border-radius: 4px;
+    padding: 6px 4px;
+    border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
 }
 
-.btn-3d-tool:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text);
-    border-color: rgba(255, 255, 255, 0.2);
+.btn-3d-chip:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
 }
 
-.btn-3d-tool.active {
-    background: rgba(10, 103, 229, 0.2);
-    border-color: #0a67e5;
-    color: #ffffff;
+.btn-3d-chip.active {
+    background: var(--brand-blue);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(10, 103, 229, 0.35);
+}
+
+/* Nick Lock Badge & Header */
+.label-with-badge {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.label-with-badge label {
+    margin-bottom: 0 !important;
+}
+
+.nick-lock-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    padding: 2px 7px;
+    border-radius: 4px;
+}
+
+.input-text:disabled, .input-text[readonly] {
+    opacity: 0.75;
+    cursor: not-allowed;
+    background: rgba(18, 20, 31, 0.5);
+    border-color: rgba(255, 255, 255, 0.08);
 }
 
 /* ── Warden Banner & Modal ────────────────────────────────────────── */
@@ -3661,5 +3734,242 @@ body {
     border-radius: 999px;
     box-shadow: 0 0 10px rgba(33, 222, 0, 0.4);
     transition: width 0.15s ease-out;
+}
+
+/* ── Profile Mods Manager Styles ────────────────────────────────────────── */
+.mods-pane-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.mods-topbar-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.mods-picker-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mods-profile-dropdown {
+    background: var(--surface2);
+    border: 1px solid var(--surface-border);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    min-width: 220px;
+    cursor: pointer;
+}
+
+.mods-profile-dropdown:focus {
+    outline: none;
+    border-color: var(--brand-blue);
+}
+
+.mods-topbar-switch {
+    display: flex;
+    gap: 6px;
+    background: var(--surface2);
+    padding: 3px;
+    border-radius: 8px;
+    border: 1px solid var(--surface-border);
+}
+
+.mods-switch-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.mods-switch-btn:hover {
+    color: #fff;
+}
+
+.mods-switch-btn.active {
+    background: var(--brand-blue);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(10, 103, 229, 0.3);
+}
+
+.installed-mods-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 18px;
+    gap: 12px;
+    background: rgba(18, 20, 31, 0.6);
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.installed-mods-meta {
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.installed-mods-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 18px;
+    max-height: calc(100vh - 210px);
+    overflow-y: auto;
+}
+
+.installed-mod-row {
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    transition: var(--transition);
+}
+
+.installed-mod-row:hover {
+    background: var(--surface2);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.installed-mod-row.disabled-mod {
+    opacity: 0.6;
+}
+
+.installed-mod-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+
+.mod-dot-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.mod-dot-status.active {
+    background: var(--brand-green);
+    box-shadow: 0 0 8px rgba(33, 222, 0, 0.6);
+}
+
+.mod-dot-status.disabled {
+    background: #64748b;
+}
+
+.installed-mod-details {
+    min-width: 0;
+    flex: 1;
+}
+
+.installed-mod-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #f1f5f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.installed-mod-sub {
+    font-size: 11px;
+    color: #94a3b8;
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.installed-mod-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.btn-mod-toggle {
+    background: var(--surface2);
+    border: 1px solid var(--surface-border);
+    color: #e2e8f0;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-mod-toggle:hover {
+    border-color: #38bdf8;
+    color: #fff;
+}
+
+.btn-mod-toggle.btn-mod-active {
+    background: rgba(33, 222, 0, 0.12);
+    border-color: rgba(33, 222, 0, 0.4);
+    color: #21de00;
+}
+
+.btn-mod-toggle.btn-mod-disabled {
+    background: rgba(245, 21, 21, 0.08);
+    border-color: rgba(245, 21, 21, 0.3);
+    color: #f87171;
+}
+
+.btn-mod-delete {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #94a3b8;
+    font-size: 12px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-mod-delete:hover {
+    background: rgba(245, 21, 21, 0.15);
+    border-color: rgba(245, 21, 21, 0.4);
+    color: #f51515;
+}
+
+.empty-mods-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+    background: var(--surface);
+    border: 1px dashed var(--surface-border);
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+.empty-mods-state h4 {
+    color: #fff;
+    margin-bottom: 6px;
 }
 
