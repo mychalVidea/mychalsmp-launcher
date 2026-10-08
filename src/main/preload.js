@@ -76,5 +76,8 @@ contextBridge.exposeInMainWorld('api', {
     restartLauncher: () => ipcRenderer.invoke('restart-launcher'),
     getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
     openGameDir: () => ipcRenderer.send('open-game-dir'),
-    openUrl: (url) => ipcRenderer.send('open-url', url)
+    openUrl: (url) => ipcRenderer.send('open-url', url),
+    onAuthStatus: (callback) => {
+        ipcRenderer.on('auth-status', (event, status) => callback(status));
+    }
 });

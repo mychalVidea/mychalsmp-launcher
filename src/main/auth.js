@@ -41,10 +41,72 @@ function createOfflineAuth(username) {
 async function loginMicrosoft(parentWindow) {
     return new Promise(async (resolve) => {
         let authWin = null;
+        let handled = false;
+
+        const updateStatus = (statusText) => {
+            if (parentWindow && !parentWindow.isDestroyed()) {
+                parentWindow.webContents.send('auth-status', statusText);
+            }
+        };
+
+        const safeCloseAuthWin = () => {
+            if (authWin && !authWin.isDestroyed()) {
+                try {
+                    authWin.close();
+                } catch (e) {}
+            }
+            authWin = null;
+        };
+
+        const translateAuthError = (err) => {
+            if (!err) return "Přihlášení k Microsoft účtu selhalo.";
+            const raw = typeof err === 'string' ? err : (err.ts || err.message || String(err));
+            if (raw.includes('userNotFound')) {
+                return "Tento Microsoft účet zatím nemá vytvořený profil Xbox. Vytvoř si ho zdarma na xbox.com.";
+            }
+            if (raw.includes('child')) {
+                return "Tento účet je vedený jako dětský a vyžaduje schválení rodinným účtem Microsoft Family.";
+            }
+            if (raw.includes('bannedCountry')) {
+                return "Xbox Live není v této zemi dostupné.";
+            }
+            if (raw.includes('minecraft.login') || raw.includes('entitlements')) {
+                return "K tomuto Microsoft účtu nebyla nalezena zakoupená licence hry Minecraft Java Edition.";
+            }
+            if (raw.includes('microsoft')) {
+                return "Chyba při komunikaci s přihlašovacím serverem Microsoftu.";
+            }
+            return raw;
+        };
+
         try {
             const authManager = new msmc.Auth("select_account");
             const redirectUri = authManager.token.redirect; // https://login.live.com/oauth20_desktop.srf
             const authUrl = authManager.createLink();
+
+            authManager.on('load', (eventCode) => {
+                switch (eventCode) {
+                    case 'load.auth.microsoft':
+                        updateStatus('Ověřuji Microsoft token...');
+                        break;
+                    case 'load.auth.xboxLive.1':
+                    case 'load.auth.xboxLive.2':
+                        updateStatus('Přihlašuji k Xbox Live...');
+                        break;
+                    case 'load.auth.xsts':
+                        updateStatus('Získávám Xbox Security Token...');
+                        break;
+                    case 'load.auth.minecraft.login':
+                        updateStatus('Ověřuji Minecraft účet u Mojangu...');
+                        break;
+                    case 'load.auth.minecraft.profile':
+                        updateStatus('Stahuji Minecraft profil a skin...');
+                        break;
+                    default:
+                        updateStatus('Komunikuji se servery...');
+                        break;
+                }
+            });
 
             authWin = new BrowserWindow({
                 width: 540,
@@ -80,11 +142,9 @@ async function loginMicrosoft(parentWindow) {
                 `).catch(() => {});
             });
 
-            let handled = false;
-
             const handlePotentialRedirect = async (url) => {
                 if (handled || !url) return;
-                if (url.startsWith(redirectUri)) {
+                if (url.startsWith(redirectUri) || url.includes('oauth20_desktop.srf') || url.includes('/nativeclient')) {
                     handled = true;
                     try {
                         const parsed = new URL(url);
@@ -93,23 +153,40 @@ async function loginMicrosoft(parentWindow) {
                         const errorDescription = parsed.searchParams.get("error_description");
 
                         if (error) {
-                            if (authWin && !authWin.isDestroyed()) authWin.close();
+                            safeCloseAuthWin();
                             resolve({
                                 success: false,
-                                error: errorDescription || error || "Přihlášení selhalo."
+                                error: translateAuthError(errorDescription || error)
                             });
                             return;
                         }
 
                         if (code) {
-                            if (authWin && !authWin.isDestroyed()) authWin.close();
+                            safeCloseAuthWin();
+                            updateStatus('Ověřuji Xbox účet...');
 
-                            // Exchange authorization code for Xbox Live & Minecraft tokens
-                            const xbox = await authManager.login(code);
-                            const token = await xbox.getMinecraft();
+                            // Exchange authorization code for Xbox Live & Minecraft tokens with timeout
+                            const exchangePromise = (async () => {
+                                const xbox = await authManager.login(code);
+                                updateStatus('Načítám Minecraft profil...');
+                                const token = await xbox.getMinecraft();
+                                return token;
+                            })();
+
+                            const timeoutPromise = new Promise((_, reject) => {
+                                setTimeout(() => {
+                                    reject(new Error("Časový limit pro spojení se servery Microsoft vypršel (35s). Zkontroluj internetové připojení."));
+                                }, 35000);
+                            });
+
+                            const token = await Promise.race([exchangePromise, timeoutPromise]);
 
                             if (!token || !token.mclc()) {
                                 throw new Error("Nepodařilo se získat Minecraft přístupový token.");
+                            }
+
+                            if (token.isDemo && token.isDemo()) {
+                                throw new Error("Tento Microsoft účet nemá zakoupenou licenci hry Minecraft Java Edition (demo účet).");
                             }
 
                             const mclcAuth = token.mclc();
@@ -131,15 +208,31 @@ async function loginMicrosoft(parentWindow) {
                             return;
                         }
                     } catch (e) {
-                        if (authWin && !authWin.isDestroyed()) authWin.close();
+                        safeCloseAuthWin();
                         resolve({
                             success: false,
-                            error: e.message || "Chyba při zpracování tokenu Microsoft."
+                            error: translateAuthError(e)
                         });
                     }
                 }
             };
 
+            // 1. Intercept at network level immediately (before page body loads)
+            authWin.webContents.session.webRequest.onBeforeRequest({
+                urls: [
+                    'https://login.live.com/oauth20_desktop.srf*',
+                    'https://login.microsoftonline.com/common/oauth2/nativeclient*'
+                ]
+            }, (details, callback) => {
+                if (details.url && (details.url.includes('code=') || details.url.includes('error='))) {
+                    handlePotentialRedirect(details.url);
+                    callback({ cancel: true });
+                } else {
+                    callback({});
+                }
+            });
+
+            // 2. Navigation events fallbacks
             authWin.webContents.on('will-navigate', (e, targetUrl) => {
                 handlePotentialRedirect(targetUrl);
             });
@@ -163,18 +256,18 @@ async function loginMicrosoft(parentWindow) {
                 if (!handled) {
                     resolve({
                         success: false,
-                        error: "Přihlašovací okno bylo zavřeno uživatelem."
+                        error: "Přihlašovací okno bylo zavřeno."
                     });
                 }
             });
 
             await authWin.loadURL(authUrl);
         } catch (err) {
-            if (authWin && !authWin.isDestroyed()) authWin.close();
+            safeCloseAuthWin();
             console.error("Chyba při Microsoft přihlášení:", err);
             resolve({
                 success: false,
-                error: err.message || "Přihlášení bylo zrušeno nebo selhalo."
+                error: translateAuthError(err)
             });
         }
     });

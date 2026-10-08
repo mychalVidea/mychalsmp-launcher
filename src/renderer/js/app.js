@@ -1732,11 +1732,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Microsoft Account Interactive Login
+    if (window.api && window.api.onAuthStatus) {
+        window.api.onAuthStatus((statusText) => {
+            if (authMicrosoftBtn && authMicrosoftBtn.disabled) {
+                authMicrosoftBtn.textContent = `⏳ ${statusText}`;
+            }
+            appendLog(`[AUTH] ${statusText}`);
+        });
+    }
+
     if (authMicrosoftBtn) {
         authMicrosoftBtn.addEventListener('click', async () => {
             authMicrosoftBtn.disabled = true;
             const originalText = authMicrosoftBtn.textContent;
-            authMicrosoftBtn.textContent = '⏳ Čekám na Microsoft...';
+            authMicrosoftBtn.textContent = '⏳ Čekám na okno Microsoftu...';
             appendLog('[AUTH] Otevírám oficiální Microsoft přihlašovací okno...');
 
             try {
@@ -1749,11 +1758,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     appendLog(`[AUTH] Úspěšné přihlášení Microsoft účtu: ${res.profile.name}`);
                     showToast(`✓ Úspěšně přihlášen Microsoft účet: ${res.profile.name}`, 'success');
                 } else {
-                    appendLog(`[AUTH] Přihlášení k Microsoft účtu selhalo: ${res.error || 'Zrušeno'}`);
-                    showToast(`Přihlášení k Microsoft účtu: ${res.error || 'Bylo zrušeno'}`, 'error');
+                    appendLog(`[AUTH] Přihlášení k Microsoft účtu: ${res.error || 'Zrušeno'}`);
+                    showToast(res.error || 'Přihlášení bylo zrušeno', 'error');
                 }
             } catch (err) {
                 appendLog(`[AUTH] Chyba při přihlašování: ${err.message}`);
+                showToast(`Chyba: ${err.message}`, 'error');
             } finally {
                 authMicrosoftBtn.disabled = false;
                 authMicrosoftBtn.textContent = originalText;
