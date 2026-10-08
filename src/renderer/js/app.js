@@ -3,31 +3,6 @@
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // ── Ultra Clean Satisfying Boot Splash Screen ───────────────────────────
-    const bootSplash = document.getElementById('bootSplashScreen');
-    const bootProgressFill = document.getElementById('bootProgressFill');
-
-    if (bootSplash && bootProgressFill) {
-        setTimeout(() => {
-            bootProgressFill.style.width = '35%';
-        }, 80);
-
-        setTimeout(() => {
-            bootProgressFill.style.width = '75%';
-        }, 360);
-
-        setTimeout(() => {
-            bootProgressFill.style.width = '100%';
-        }, 680);
-
-        setTimeout(() => {
-            bootSplash.classList.add('boot-splash-exit');
-            setTimeout(() => {
-                try { bootSplash.remove(); } catch (e) {}
-            }, 600);
-        }, 880);
-    }
-
     // ── Element References ──────────────────────────────────────────────────
     // Window Controls
     const btnMin = document.getElementById('btnMinimize');
@@ -305,8 +280,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             refreshVersionStatuses();
             detectAvailableJavas();
             checkWardenProbe();
-            initSkinViewer3D();
-            initHeroSkinViewer3D();
             checkLauncherUpdates(true);
 
             // Audio DLC
@@ -1004,11 +977,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (data.status === 'extracting') {
                 if (updateProgressBar) updateProgressBar.style.width = '100%';
                 if (updateProgressText) {
-                    updateProgressText.textContent = data.isDelta
+                    updateProgressText.textContent = data.step || (data.isDelta
                         ? '⚡ Aplikuji delta změny v kódu launcheru...'
-                        : 'Rozbaluji a instaluji novou verzi...';
+                        : 'Rozbaluji aktualizační archiv...');
                 }
-                if (updateProgressSize) updateProgressSize.textContent = data.isDelta ? 'Delta instalace' : 'Instalace';
+                if (updateProgressSize) updateProgressSize.textContent = data.isDelta ? 'Delta instalace' : 'Rozbalování';
+            } else if (data.status === 'installing') {
+                if (updateProgressBar) updateProgressBar.style.width = '100%';
+                if (updateProgressText) {
+                    updateProgressText.textContent = data.step || 'Instaluji aktualizované soubory...';
+                }
+                if (updateProgressSize) updateProgressSize.textContent = 'Instalace';
             }
         });
     }
@@ -1748,22 +1727,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     /**
      * Initializes the 3D skin viewer on the main hero dashboard card.
      */
-    function initHeroSkinViewer3D() {
+    function initHeroSkinViewer3D(force = false) {
         const canvas = document.getElementById('heroSkinCanvas3D');
         if (!canvas || !window.skinview3d) return;
+        if (heroSkinViewer && !force) return;
 
         try {
             cancelHeroReturn();
             if (heroSkinViewer) {
-                heroSkinViewer.dispose();
+                try { heroSkinViewer.dispose(); } catch (_) {}
                 heroSkinViewer = null;
             }
 
+            const isSlim = currentConfig ? (currentConfig.customSkinVariant === 'slim') : false;
             heroSkinViewer = new window.skinview3d.SkinViewer({
                 canvas: canvas,
                 width: 160,
                 height: 220,
-                model: currentConfig.customSkinVariant === 'slim' ? 'slim' : 'default'
+                model: isSlim ? 'slim' : 'default'
             });
 
             heroSkinViewer.camera.position.set(0, 0, 70);
@@ -1825,6 +1806,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             canvas.onpointerup = onPointerEnd;
             canvas.onpointercancel = onPointerEnd;
+
+            // Load current skin & cape immediately
+            if (currentConfig) {
+                const isMicrosoft = currentConfig.authType === 'microsoft';
+                const effectiveSkin = currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
+                const name = (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.username : currentConfig.username) || 'Steve';
+                const skinSrc = effectiveSkin
+                    ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
+                    : `https://minotar.net/skin/${encodeURIComponent(name)}`;
+                const effectiveCape = getEffectiveCape();
+
+                heroSkinViewer.loadSkin(skinSrc, { model: isSlim ? 'slim' : 'default' });
+                if (effectiveCape) {
+                    heroSkinViewer.loadCape(effectiveCape, { backEquipment: 'cape' });
+                }
+            }
         } catch (e) {
             console.warn('[HERO 3D] Inicializace hero 3D prohlížeče selhala:', e);
             if (heroSkinImg) heroSkinImg.style.display = 'block';
@@ -1841,6 +1838,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!heroSkinViewer) return;
 
         try {
+            heroSkinViewer.setSize(160, 220);
             if (skinUrl) {
                 heroSkinViewer.loadSkin(skinUrl, { model: isSlim ? 'slim' : 'default' });
             }

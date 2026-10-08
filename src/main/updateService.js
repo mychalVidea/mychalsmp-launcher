@@ -106,6 +106,25 @@ function isNewerVersion(remote, local) {
 }
 
 /**
+ * Safely copies a file, avoiding Linux 'ETXTBSY: text file busy' on running binaries
+ * by unlinking/renaming the destination first.
+ */
+function safeCopyFile(src, dst) {
+    if (fs.existsSync(dst)) {
+        try {
+            fs.unlinkSync(dst);
+        } catch (e1) {
+            try {
+                const oldPath = dst + '.old.' + Date.now();
+                fs.renameSync(dst, oldPath);
+                try { fs.unlinkSync(oldPath); } catch (_) {}
+            } catch (e2) {}
+        }
+    }
+    fs.copyFileSync(src, dst);
+}
+
+/**
  * Downloads and applies the update.
  * Podporuje:
  * 1. Bleskovou delta aktualizaci přes update.asar (~3 MB namísto ~90 MB).
@@ -191,11 +210,11 @@ async function applyUpdate(assetUrl, onProgress) {
         } catch (e) {}
 
         try {
-            fs.copyFileSync(tmpAsar, targetAsar);
+            safeCopyFile(tmpAsar, targetAsar);
             try { fs.unlinkSync(tmpAsar); } catch (e) {}
         } catch (copyErr) {
             if (fs.existsSync(backupAsar)) {
-                try { fs.copyFileSync(backupAsar, targetAsar); } catch (e) {}
+                try { safeCopyFile(backupAsar, targetAsar); } catch (e) {}
             }
             throw new Error(`Chyba při zápisu delta balíčku: ${copyErr.message}`);
         }
@@ -262,15 +281,19 @@ async function applyUpdate(assetUrl, onProgress) {
                 total: totalBytes,
                 percent: 100,
                 status: 'extracting',
-                isDelta: false
+                isDelta: false,
+                step: 'Rozbaluji aktualizační archiv...'
             });
         }
 
         const tmpExtractDir = path.join(os.tmpdir(), `mychalsmp-extract-${Date.now()}`);
         fs.mkdirSync(tmpExtractDir, { recursive: true });
 
-        const { execSync } = require('child_process');
-        execSync(`tar -xzf "${tmpTar}" -C "${tmpExtractDir}"`);
+        // Asynchronní rozbalení - nezamrzne hlavní proces ani okno
+        const util = require('util');
+        const { exec } = require('child_process');
+        const execAsync = util.promisify(exec);
+        await execAsync(`tar -xzf "${tmpTar}" -C "${tmpExtractDir}"`);
 
         function findBinaryDir(dir) {
             if (fs.existsSync(path.join(dir, 'mychalsmp-launcher'))) {
@@ -290,10 +313,21 @@ async function applyUpdate(assetUrl, onProgress) {
 
         const sourceDir = findBinaryDir(tmpExtractDir);
 
+        if (onProgress) {
+            onProgress({
+                current: receivedBytes,
+                total: totalBytes,
+                percent: 100,
+                status: 'installing',
+                isDelta: false,
+                step: 'Instaluji aktualizované soubory...'
+            });
+        }
+
         // Inteligentní souborový diff sync: přepisuje pouze novější nebo změněné soubory
         fs.mkdirSync(installDir, { recursive: true });
 
-        function syncDirDiff(src, dst) {
+        async function syncDirDiffAsync(src, dst) {
             fs.mkdirSync(dst, { recursive: true });
             const entries = fs.readdirSync(src, { withFileTypes: true });
             let modified = 0;
@@ -304,7 +338,7 @@ async function applyUpdate(assetUrl, onProgress) {
                 const dstPath = path.join(dst, entry.name);
 
                 if (entry.isDirectory()) {
-                    const sub = syncDirDiff(srcPath, dstPath);
+                    const sub = await syncDirDiffAsync(srcPath, dstPath);
                     modified += sub.modified;
                     skipped += sub.skipped;
                 } else if (entry.isFile()) {
@@ -320,19 +354,25 @@ async function applyUpdate(assetUrl, onProgress) {
                         } catch (e) {}
                     }
                     if (needsCopy) {
-                        fs.copyFileSync(srcPath, dstPath);
-                        modified++;
+                        try {
+                            safeCopyFile(srcPath, dstPath);
+                            modified++;
+                        } catch (copyErr) {
+                            console.warn(`[UPDATER] Nelze přepsat ${dstPath}:`, copyErr.message);
+                        }
                     }
                 }
+                // Dovolí Node.js event loop zpracovávat události (nulové zamrzání)
+                await new Promise(r => setImmediate(r));
             }
             return { modified, skipped };
         }
 
-        const syncStats = syncDirDiff(sourceDir, installDir);
+        const syncStats = await syncDirDiffAsync(sourceDir, installDir);
         console.log(`[DIFF UPDATER] Synchronizováno ${syncStats.modified} změněných souborů, ${syncStats.skipped} nezměněných knihoven zachováno.`);
 
         const targetExe = path.join(installDir, 'mychalsmp-launcher');
-        try { execSync(`chmod +x "${targetExe}"`); } catch (e) {}
+        try { fs.chmodSync(targetExe, 0o755); } catch (e) {}
 
         try {
             const appsDir = path.join(os.homedir(), '.local', 'share', 'applications');

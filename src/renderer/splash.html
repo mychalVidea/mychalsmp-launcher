@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MYCHAL SMP</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-app-region: drag;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            overflow: hidden;
+            -webkit-app-region: drag;
+        }
+
+        .splash-card {
+            width: 290px;
+            height: 330px;
+            background: #12141f;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 35px rgba(10, 103, 229, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            animation: splashAppear 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes splashAppear {
+            0% { opacity: 0; transform: scale(0.95); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .splash-glow {
+            position: absolute;
+            top: 15%;
+            width: 180px;
+            height: 180px;
+            background: radial-gradient(circle, rgba(10, 103, 229, 0.3) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: pulseGlow 2.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulseGlow {
+            0% { transform: scale(0.9); opacity: 0.6; }
+            100% { transform: scale(1.15); opacity: 1; }
+        }
+
+        .logo-box {
+            position: relative;
+            width: 76px;
+            height: 76px;
+            margin-bottom: 18px;
+            z-index: 2;
+        }
+
+        .logo-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 16px;
+            filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.6));
+            animation: floatLogo 3s ease-in-out infinite;
+        }
+
+        @keyframes floatLogo {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        .splash-title {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: #ffffff;
+            margin-bottom: 6px;
+            z-index: 2;
+        }
+
+        .splash-title span {
+            color: #0a67e5;
+        }
+
+        .splash-status {
+            font-size: 12px;
+            font-weight: 500;
+            color: #94a3b8;
+            letter-spacing: 0.3px;
+            margin-bottom: 22px;
+            z-index: 2;
+        }
+
+        .progress-box {
+            width: 180px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            z-index: 2;
+        }
+
+        .progress-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 35%;
+            background: linear-gradient(90deg, #0a67e5, #38bdf8);
+            border-radius: 999px;
+            box-shadow: 0 0 10px #38bdf8;
+            animation: indeterminate 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        @keyframes indeterminate {
+            0% { left: -35%; width: 30%; }
+            50% { width: 45%; }
+            100% { left: 100%; width: 20%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-card">
+        <div class="splash-glow"></div>
+        <div class="logo-box">
+            <img src="assets/server-icon.png" alt="MYCHAL SMP" class="logo-img">
+        </div>
+        <h1 class="splash-title">MYCHAL<span>SMP</span></h1>
+        <div class="splash-status" id="splashStatus">Spouštění launcheru...</div>
+        <div class="progress-box">
+            <div class="progress-line"></div>
+        </div>
+    </div>
+</body>
+</html>

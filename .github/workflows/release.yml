@@ -125,7 +125,7 @@ jobs:
           fi
 
           # Připravit bleskový delta balíček update.asar (~3 MB namísto 90 MB)
-          ASAR_FILE=$(ls *app.asar* 2>/dev/null | head -n 1)
+          ASAR_FILE=$(find . -name "app.asar" -type f 2>/dev/null | head -n 1)
           if [ -n "$ASAR_FILE" ]; then
             cp "$ASAR_FILE" "update.asar"
             cp "$ASAR_FILE" "app.asar"

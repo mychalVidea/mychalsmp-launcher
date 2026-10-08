@@ -39,6 +39,34 @@ const { scanLauncherCache, cleanLauncherCache } = require('./cleaner');
 const { discordRpc } = require('./discordRpc');
 
 let mainWindow = null;
+let splashWindow = null;
+
+function createSplashWindow() {
+    splashWindow = new BrowserWindow({
+        width: 320,
+        height: 360,
+        frame: false,
+        transparent: true,
+        resizable: false,
+        center: true,
+        alwaysOnTop: true,
+        show: true,
+        backgroundColor: '#00000000',
+        icon: path.join(__dirname, '../renderer/assets/server-icon.png'),
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
+        }
+    });
+
+    if (splashWindow.removeMenu) splashWindow.removeMenu();
+    splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
+
+    splashWindow.on('closed', () => {
+        splashWindow = null;
+    });
+}
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -61,7 +89,12 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
     mainWindow.once('ready-to-show', () => {
+        if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.destroy();
+            splashWindow = null;
+        }
         mainWindow.show();
+        mainWindow.focus();
     });
 
     mainWindow.on('closed', () => {
@@ -127,11 +160,15 @@ if (!gotTheLock) {
         if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.focus();
+        } else if (splashWindow && !splashWindow.isDestroyed()) {
+            if (splashWindow.isMinimized()) splashWindow.restore();
+            splashWindow.focus();
         }
     });
 
     app.whenReady().then(() => {
         ensureLinuxDesktopShortcut();
+        createSplashWindow();
         createWindow();
 
         // Initialize Discord Rich Presence
