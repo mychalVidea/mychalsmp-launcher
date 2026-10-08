@@ -8,6 +8,7 @@ const {
     launchGame,
     isGameRunning,
     killGame,
+    cancelLaunch,
     detectJavaPath,
     getAvailableJavas,
     getInstalledVersions
@@ -30,6 +31,9 @@ const {
     disableAllIllegalMods
 } = require('./wardenProbeChecker');
 const { checkForUpdates, applyUpdate } = require('./updateService');
+const { analyzeCrash, executeCrashFix } = require('./crashAnalyzer');
+const { scanLauncherCache, cleanLauncherCache } = require('./cleaner');
+const { discordRpc } = require('./discordRpc');
 
 let mainWindow = null;
 
@@ -127,6 +131,22 @@ if (!gotTheLock) {
         ensureLinuxDesktopShortcut();
         createWindow();
 
+        // Initialize Discord Rich Presence
+        try {
+            const config = loadConfig();
+            if (config.enableDiscordRpc !== false) {
+                const activeProfile = (config.profiles || []).find(p => p.id === config.activeProfileId);
+                discordRpc.updateActivity({
+                    username: config.username || 'Hráč',
+                    server: config.serverIp || 'mychalsmp.xyz',
+                    profileName: activeProfile ? activeProfile.name : 'Minecraft 26.2',
+                    isPlaying: false
+                });
+            }
+        } catch (e) {
+            console.warn('[DISCORD RPC] Nelze spustit RPC při startu:', e.message);
+        }
+
         app.on('activate', () => {
             if (BrowserWindow.getAllWindows().length === 0) createWindow();
         });
@@ -139,6 +159,12 @@ app.on('window-all-closed', () => {
     }
 });
 
+app.on('will-quit', () => {
+    try {
+        discordRpc.shutdown();
+    } catch (e) {}
+});
+
 // ── IPC Handlers ─────────────────────────────────────────────────────────────
 
 ipcMain.handle('get-config', () => {
@@ -146,7 +172,21 @@ ipcMain.handle('get-config', () => {
 });
 
 ipcMain.handle('save-config', (event, newConfig) => {
-    return saveConfig(newConfig);
+    const saved = saveConfig(newConfig);
+    try {
+        if (saved.enableDiscordRpc === false) {
+            discordRpc.clearActivity();
+        } else if (!isGameRunning()) {
+            const activeProfile = (saved.profiles || []).find(p => p.id === saved.activeProfileId);
+            discordRpc.updateActivity({
+                username: saved.username || 'Hráč',
+                server: saved.serverIp || 'mychalsmp.xyz',
+                profileName: activeProfile ? activeProfile.name : 'Minecraft 26.2',
+                isPlaying: false
+            });
+        }
+    } catch (e) {}
+    return saved;
 });
 
 ipcMain.handle('ping-server', async (event, ip = 'mychalsmp.xyz', port = 25565) => {
@@ -237,6 +277,11 @@ ipcMain.handle('kill-game', () => {
     return true;
 });
 
+ipcMain.handle('cancel-launch', () => {
+    cancelLaunch();
+    return true;
+});
+
 ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
     const config = loadConfig();
     let authData;
@@ -300,8 +345,26 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
         }
     }
 
+    const recentGameLogs = [];
+    const gameSessionStart = Date.now();
+
+    // Update Discord RPC to In-Game status
     try {
-        await launchGame(
+        const currentCfg = loadConfig();
+        if (currentCfg.enableDiscordRpc !== false) {
+            const isMychal = !serverIp || serverIp.toLowerCase().includes('mychalsmp');
+            discordRpc.updateActivity({
+                username: authData?.name || currentCfg.username || 'Hráč',
+                server: isMychal ? 'mychalsmp.xyz' : serverIp,
+                profileName: profile ? profile.name : 'Minecraft 26.2',
+                isPlaying: true,
+                startTime: gameSessionStart
+            });
+        }
+    } catch (e) {}
+
+    try {
+        const proc = await launchGame(
             launchConfig,
             authData,
             serverIp,
@@ -311,18 +374,76 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
                 }
             },
             (logLine) => {
+                recentGameLogs.push(logLine);
+                if (recentGameLogs.length > 200) recentGameLogs.shift();
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('launch-log', logLine);
                 }
             },
             (exitCode) => {
+                const durationSec = Math.max(0, Math.floor((Date.now() - gameSessionStart) / 1000));
+                let totalPlaytime = 0;
+                if (durationSec > 0) {
+                    try {
+                        const freshConfig = loadConfig();
+                        const updated = (freshConfig.profiles || []).map(p => {
+                            if (p.id === activeId) {
+                                const newTotal = (p.playtimeSeconds || 0) + durationSec;
+                                totalPlaytime = newTotal;
+                                return { ...p, playtimeSeconds: newTotal, lastPlayed: Date.now() };
+                            }
+                            return p;
+                        });
+                        saveConfig({ profiles: updated });
+                    } catch (e) {
+                        console.error('Chyba při ukládání odehraného času:', e);
+                    }
+                }
+
+                // Reset Discord RPC back to Launcher status
+                try {
+                    const freshConfig = loadConfig();
+                    if (freshConfig.enableDiscordRpc !== false) {
+                        const activeP = (freshConfig.profiles || []).find(p => p.id === activeId);
+                        discordRpc.updateActivity({
+                            username: freshConfig.username || 'Hráč',
+                            server: freshConfig.serverIp || 'mychalsmp.xyz',
+                            profileName: activeP ? activeP.name : 'Minecraft 26.2',
+                            isPlaying: false
+                        });
+                    }
+                } catch (e) {}
+
                 if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('launch-exit', exitCode);
+                    mainWindow.webContents.send('launch-exit', {
+                        exitCode,
+                        profileId: activeId,
+                        sessionSeconds: durationSec,
+                        totalPlaytime
+                    });
+                }
+
+                // Trigger Intelligent Crash Analyzer on non-zero exit code
+                if (exitCode !== 0) {
+                    try {
+                        const crashData = analyzeCrash(launchConfig.baseDir, exitCode, recentGameLogs);
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.webContents.send('launch-crash', crashData);
+                        }
+                    } catch (crashErr) {
+                        console.error('Chyba při analýze pádu hry:', crashErr);
+                    }
                 }
             }
         );
+        if (!proc) {
+            return { success: false, cancelled: true };
+        }
         return { success: true };
     } catch (err) {
+        if (err && err.message === 'LAUNCH_CANCELLED') {
+            return { success: false, cancelled: true };
+        }
         console.error('Chyba při spouštění hry:', err);
         return { success: false, error: err.message };
     }
@@ -563,5 +684,58 @@ ipcMain.handle('check-for-updates', async () => {
 
 ipcMain.handle('apply-update', async (event, assetUrl) => {
     return await applyUpdate(assetUrl);
+});
+
+ipcMain.handle('restart-launcher', () => {
+    app.relaunch();
+    app.exit(0);
+});
+
+// Crash Analyzer & Storage Cleaner IPC Handlers
+ipcMain.handle('apply-crash-fix', async (event, autoFix, profileId) => {
+    try {
+        const config = loadConfig();
+        const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+        const gameDir = (profile && profile.gameDir) ? profile.gameDir : config.baseDir;
+        return await executeCrashFix(autoFix, gameDir, config, saveConfig, detectJavaPath);
+    } catch (err) {
+        console.error('Chyba při aplikaci opravy pádu:', err);
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('scan-launcher-cache', async () => {
+    try {
+        const config = loadConfig();
+        return scanLauncherCache(config.baseDir, config.profiles || []);
+    } catch (err) {
+        console.error('Chyba při skenování cache:', err);
+        return { fileCount: 0, totalBytes: 0, formattedSize: '0 B', breakdown: {} };
+    }
+});
+
+ipcMain.handle('clean-launcher-cache', async () => {
+    try {
+        const config = loadConfig();
+        return cleanLauncherCache(config.baseDir, config.profiles || []);
+    } catch (err) {
+        console.error('Chyba při čištění cache:', err);
+        return { success: false, error: err.message };
+    }
+});
+
+// System Info & Hardware IPC Handlers
+ipcMain.handle('get-system-info', async () => {
+    const os = require('os');
+    const totalBytes = os.totalmem();
+    const totalRamGB = Math.round(totalBytes / (1024 * 1024 * 1024));
+    // Up to 80% of total system RAM
+    const maxAllowedRamGB = Math.max(4, Math.floor((totalBytes * 0.8) / (1024 * 1024 * 1024)));
+    return {
+        platform: process.platform,
+        arch: process.arch,
+        totalRamGB: totalRamGB,
+        maxAllowedRamGB: maxAllowedRamGB
+    };
 });
 

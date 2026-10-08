@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('api', {
     // Launch & Process
     launchGame: (profileId, serverIp) => ipcRenderer.invoke('launch-game', profileId, serverIp),
     killGame: () => ipcRenderer.invoke('kill-game'),
+    cancelLaunch: () => ipcRenderer.invoke('cancel-launch'),
     isGameRunning: () => ipcRenderer.invoke('is-game-running'),
     detectJava: () => ipcRenderer.invoke('detect-java'),
     getAvailableJavas: () => ipcRenderer.invoke('get-available-javas'),
@@ -48,6 +49,9 @@ contextBridge.exposeInMainWorld('api', {
     onExit: (callback) => {
         ipcRenderer.on('launch-exit', (event, code) => callback(code));
     },
+    onCrash: (callback) => {
+        ipcRenderer.on('launch-crash', (event, crashData) => callback(crashData));
+    },
 
     // Window controls
     minimizeWindow: () => ipcRenderer.send('window-minimize'),
@@ -64,8 +68,13 @@ contextBridge.exposeInMainWorld('api', {
     setMojangCape: (capeId) => ipcRenderer.invoke('set-mojang-cape', capeId),
     checkWardenProbe: (profileId) => ipcRenderer.invoke('check-warden-probe', profileId),
     disableIllegalMods: (profileId, filename) => ipcRenderer.invoke('disable-illegal-mods', profileId, filename),
+    applyCrashFix: (autoFix, profileId) => ipcRenderer.invoke('apply-crash-fix', autoFix, profileId),
+    scanLauncherCache: () => ipcRenderer.invoke('scan-launcher-cache'),
+    cleanLauncherCache: () => ipcRenderer.invoke('clean-launcher-cache'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     applyUpdate: (assetUrl) => ipcRenderer.invoke('apply-update', assetUrl),
+    restartLauncher: () => ipcRenderer.invoke('restart-launcher'),
+    getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
     openGameDir: () => ipcRenderer.send('open-game-dir'),
     openUrl: (url) => ipcRenderer.send('open-url', url)
 });

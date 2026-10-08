@@ -103,20 +103,17 @@
                         </path>
                     </svg>
                 </button>
-                <button class="nav-icon-btn" data-tab="settings" title="Nastavení & Java 25/21">
+            </div>
+
+            <!-- Bottom Sidebar: Settings -->
+            <div class="sidebar-nav-bottom">
+                <button class="nav-icon-btn" data-tab="settings" title="Nastavení & Optimalizace">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path
                             d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
                         </path>
                     </svg>
-                </button>
-            </div>
-
-            <!-- Bottom Fast Launch Trigger Button -->
-            <div class="sidebar-nav-bottom">
-                <button class="nav-play-trigger" id="sidebarPlayBtn" title="Spustit aktivní profil">
-                    <span>▶</span>
                 </button>
             </div>
         </aside>
@@ -160,12 +157,18 @@
                         <!-- Last Played Profiles List (Dawn Client Inspiration) -->
                         <div class="profiles-section">
                             <div class="section-title-row">
-                                <div class="section-heading">
-                                    <span class="clock-icon">🕒</span>
-                                    <span>Naposledy hrané profily</span>
+                                <div class="section-heading" id="profilesSectionHeading">
+                                    <span class="clock-icon" id="profilesSectionIcon">🎮</span>
+                                    <span id="profilesSectionTitle">Dostupné herní profily</span>
                                 </div>
-                                <div class="edition-badges">
-                                    <span class="edition-badge active">Java Edition</span>
+                                <div class="section-header-actions">
+                                    <button type="button" class="btn-create-profile-main"
+                                        id="btnOpenCreateProfileModal">
+                                        <span>➕ Vytvořit profil</span>
+                                    </button>
+                                    <div class="edition-badges">
+                                        <span class="edition-badge active">Java Edition</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -301,11 +304,11 @@
                                 <div class="warden-banner-content">
                                     <span class="warden-banner-icon">🛡️</span>
                                     <div class="warden-banner-text">
-                                        <strong>Quick Play zablokován</strong>
-                                        <span id="wardenBlockedCountText">Nalezeny nepovolené módy</span>
+                                        <strong>MYCHAL SMP Quick Play zablokován</strong>
+                                        <span id="wardenBlockedCountText">Nalezeny nepovolené módy (povoleny pro singleplayer a jiné servery)</span>
                                     </div>
                                 </div>
-                                <button type="button" class="btn-warden-action" id="btnOpenWardenModal">Zobrazit & Vyřešit</button>
+                                <button type="button" class="btn-warden-action" id="btnOpenWardenModal">Vyřešit</button>
                             </div>
                         </div>
 
@@ -363,7 +366,8 @@
                             <span class="v-status-badge" id="vStatus262">Kontrola...</span>
                         </div>
                         <h3 class="v-card-title">Minecraft 26.2</h3>
-                        <p class="v-card-desc">Doporučená síťová verze pro server mychalsmp.xyz. Začíná čistě, mody nebo modloader (Fabric, Forge, NeoForge) si můžeš zvolit sám.</p>
+                        <p class="v-card-desc">Doporučená síťová verze pro server mychalsmp.xyz. Začíná čistě, mody nebo
+                            modloader (Fabric, Forge, NeoForge) si můžeš zvolit sám.</p>
                         <div class="v-card-meta">
                             <span>Verze: <strong>26.2</strong></span>
                             <span>Java: <strong>Java 25 / 21</strong></span>
@@ -382,7 +386,8 @@
                             <span class="v-status-badge" id="vStatus263">Kontrola...</span>
                         </div>
                         <h3 class="v-card-title">Minecraft 26.3</h3>
-                        <p class="v-card-desc">Nejnovější oficiální vydání hry. Začíná čistě, mody nebo modloader (Fabric, Forge, NeoForge) si můžeš zvolit sám.</p>
+                        <p class="v-card-desc">Nejnovější oficiální vydání hry. Začíná čistě, mody nebo modloader
+                            (Fabric, Forge, NeoForge) si můžeš zvolit sám.</p>
                         <div class="v-card-meta">
                             <span>Verze: <strong>26.3</strong></span>
                             <span>Java: <strong>Java 25 (Doporučeno)</strong></span>
@@ -401,7 +406,8 @@
                             <span class="v-status-badge" id="vStatus2612">Kontrola...</span>
                         </div>
                         <h3 class="v-card-title">Minecraft 26.1.2</h3>
-                        <p class="v-card-desc">Starší vydání hry pro předchozí světy. Čistá instalace bez zbytečností.</p>
+                        <p class="v-card-desc">Starší vydání hry pro předchozí světy. Čistá instalace bez zbytečností.
+                        </p>
                         <div class="v-card-meta">
                             <span>Verze: <strong>26.1.2</strong></span>
                             <span>Java: <strong>Java 21+</strong></span>
@@ -524,7 +530,8 @@
             <section class="tab-pane" id="tab-character">
                 <div class="pane-header">
                     <h2>Správa postavy & Skinu</h2>
-                    <p>Správa skinů a plášťů. Pro Microsoft účty se změny ukládají přímo na tvůj Mojang účet. Pro offline hráče je skin trvale uložen v launcheru.</p>
+                    <p>Správa skinů a plášťů. Pro Microsoft účty se změny ukládají přímo na tvůj Mojang účet. Pro
+                        offline hráče je skin trvale uložen v launcheru.</p>
                 </div>
 
                 <div class="character-grid">
@@ -532,7 +539,8 @@
                     <div class="skin-stage-card">
                         <div class="skin-canvas-wrapper" id="skinCanvasWrapper">
                             <canvas id="skinCanvas3D" class="skin-3d-canvas"></canvas>
-                            <canvas id="skinCanvas2D" width="128" height="256" class="skin-2d-canvas" style="display:none;"></canvas>
+                            <canvas id="skinCanvas2D" width="128" height="256" class="skin-2d-canvas"
+                                style="display:none;"></canvas>
                             <img src="https://minotar.net/armor/body/Steve/220.png" alt="Skin 2D" id="skinPreviewImg"
                                 class="skin-2d-render" style="display:none;">
                         </div>
@@ -544,16 +552,20 @@
                             <button type="button" class="btn-3d-tool active" id="btn3DFrontView" title="Pohled zepředu">
                                 <span>Předek</span>
                             </button>
-                            <button type="button" class="btn-3d-tool" id="btn3DBackView" title="Otočit o 180° – prohlédnout plášť">
+                            <button type="button" class="btn-3d-tool" id="btn3DBackView"
+                                title="Otočit o 180° – prohlédnout plášť">
                                 <span>Plášť (Záda)</span>
                             </button>
-                            <button type="button" class="btn-3d-tool" id="btn3DRotateToggle" title="Plynulé automatické otáčení 360°">
+                            <button type="button" class="btn-3d-tool" id="btn3DRotateToggle"
+                                title="Plynulé automatické otáčení 360°">
                                 <span>🔄 360°</span>
                             </button>
-                            <button type="button" class="btn-3d-tool" id="btn3DElytraToggle" title="Přepnout zobrazení Plášť vs. Elytra">
+                            <button type="button" class="btn-3d-tool" id="btn3DElytraToggle"
+                                title="Přepnout zobrazení Plášť vs. Elytra">
                                 <span id="label3DElytra">🪽 Elytra</span>
                             </button>
-                            <button type="button" class="btn-3d-tool" id="btn3DFlyingToggle" title="Přepnout do pozice létání">
+                            <button type="button" class="btn-3d-tool" id="btn3DFlyingToggle"
+                                title="Přepnout do pozice létání">
                                 <span id="label3DFlying">🚀 Létání</span>
                             </button>
                         </div>
@@ -561,8 +573,10 @@
                         <div class="skin-variant-picker">
                             <span class="variant-label">Model těla:</span>
                             <div class="variant-btns">
-                                <button type="button" class="btn-variant-toggle active" id="btnVariantClassic" data-variant="classic">Classic (4px)</button>
-                                <button type="button" class="btn-variant-toggle" id="btnVariantSlim" data-variant="slim">Slim (3px)</button>
+                                <button type="button" class="btn-variant-toggle active" id="btnVariantClassic"
+                                    data-variant="classic">Classic (4px)</button>
+                                <button type="button" class="btn-variant-toggle" id="btnVariantSlim"
+                                    data-variant="slim">Slim (3px)</button>
                             </div>
                         </div>
 
@@ -597,13 +611,15 @@
                             <div class="panel-section-title">
                                 <span>☁️ Oficiální Mojang správa (Uloží se na účet)</span>
                             </div>
-                            <p class="panel-desc">Skin i plášť nahraný zde se okamžitě propíše na tvůj oficiální Minecraft účet a uvidí ho všichni hráči.</p>
+                            <p class="panel-desc">Skin i plášť nahraný zde se okamžitě propíše na tvůj oficiální
+                                Minecraft účet a uvidí ho všichni hráči.</p>
 
                             <div class="form-actions-row">
                                 <button class="mc-btn mc-btn-green" id="btnUploadMojangSkin">
                                     <span>☁️ Nahrát skin na Mojang účet</span>
                                 </button>
-                                <button class="mc-btn mc-btn-secondary" id="btnResetMojangSkin" title="Vrátí základní Steve/Alex skin">
+                                <button class="mc-btn mc-btn-secondary" id="btnResetMojangSkin"
+                                    title="Vrátí základní Steve/Alex skin">
                                     <span>🔄 Resetovat skin</span>
                                 </button>
                             </div>
@@ -628,14 +644,16 @@
                                 <span class="notice-icon">ℹ️</span>
                                 <div>
                                     <strong>Vlastní skin pro offline režim:</strong><br>
-                                    Tvůj offline skin a plášť jsou uloženy v launcheru a uvidíš je u sebe bez ohledu na to, jaký nick si zadáš. Přepíší se pouze pokud se přihlásíš přes Microsoft účet.
+                                    Tvůj offline skin a plášť jsou uloženy v launcheru a uvidíš je u sebe bez ohledu na
+                                    to, jaký nick si zadáš. Přepíší se pouze pokud se přihlásíš přes Microsoft účet.
                                 </div>
                             </div>
 
                             <div class="form-group">
                                 <label>Vlastní offline skin (.png)</label>
                                 <div class="file-picker-row">
-                                    <button class="mc-btn mc-btn-secondary" id="btnSelectSkinFile">📁 Vybrat soubor skinu</button>
+                                    <button class="mc-btn mc-btn-secondary" id="btnSelectSkinFile">📁 Vybrat soubor
+                                        skinu</button>
                                     <span id="offlineSkinPathLabel" class="skin-file-label">Výchozí skin</span>
                                 </div>
                             </div>
@@ -643,14 +661,17 @@
                             <div class="form-group">
                                 <label>Vlastní offline plášť (.png)</label>
                                 <div class="file-picker-row">
-                                    <button class="mc-btn mc-btn-secondary" id="btnSelectCapeFile">🧥 Vybrat soubor pláště</button>
-                                    <button class="mc-btn mc-btn-secondary" id="btnRemoveOfflineCape" title="Odebrat plášť">✕</button>
+                                    <button class="mc-btn mc-btn-secondary" id="btnSelectCapeFile">🧥 Vybrat soubor
+                                        pláště</button>
+                                    <button class="mc-btn mc-btn-secondary" id="btnRemoveOfflineCape"
+                                        title="Odebrat plášť">✕</button>
                                     <span id="offlineCapePathLabel" class="skin-file-label">Žádný plášť</span>
                                 </div>
                             </div>
 
                             <div class="form-actions">
-                                <button class="mc-btn mc-btn-green" id="btnSaveCharacter">Uložit postavu & nastavení</button>
+                                <button class="mc-btn mc-btn-green" id="btnSaveCharacter">Uložit postavu &
+                                    nastavení</button>
                             </div>
                         </div>
                     </div>
@@ -661,9 +682,15 @@
                  TAB 5: SERVERS & QUICK PLAY TRACKER
             ══════════════════════════════════════════════════════════════════ -->
             <section class="tab-pane" id="tab-servers">
-                <div class="pane-header">
-                    <h2>Servery sítě & Historie připojení</h2>
-                    <p>Trackování serverů na které se připojuješ s podporou přímého 1-click Quick Play spuštění.</p>
+                <div class="pane-header"
+                    style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <h2>Servery sítě & Historie připojení</h2>
+                        <p>Trackování serverů na které se připojuješ s podporou přímého 1-click Quick Play spuštění.</p>
+                    </div>
+                    <button class="mc-btn mc-btn-green" id="btnOpenAddServerTab">
+                        <span>+ Přidat server</span>
+                    </button>
                 </div>
 
                 <div class="servers-full-list" id="serversFullList">
@@ -725,17 +752,128 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Přímé Quick Play připojení</label>
+                        <label>Přímé Quick Play připojení & Discord Status</label>
                         <label class="checkbox-label">
                             <input type="checkbox" id="autoConnectCheck" checked>
                             <span>Při kliknutí na Hrát se připojit přímo na <strong>mychalsmp.xyz</strong></span>
                         </label>
+                        <label class="checkbox-label" style="margin-top: 8px;">
+                            <input type="checkbox" id="checkDiscordRpc" checked>
+                            <span>Bohatý stav na <strong>Discordu (Rich Presence)</strong> – nick, server mychalsmp.xyz, herní čas a profil</span>
+                        </label>
+                    </div>
+
+                    <!-- Linux, Wayland & Hardware Výkon (inspirováno Prism Launcherem) -->
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label>Výkon & Optimalizace systému (Linux & Wayland)</label>
+                        <div class="perf-settings-grid">
+                            <label class="perf-toggle-card">
+                                <input type="checkbox" id="checkGameMode" checked>
+                                <div class="perf-toggle-info">
+                                    <span class="perf-toggle-title">Povolit Feral GameMode</span>
+                                    <span class="perf-toggle-desc">Aktivuje gamemoderun pro maximální prioritu CPU jader
+                                        a GPU scheduleru.</span>
+                                </div>
+                            </label>
+
+                            <label class="perf-toggle-card">
+                                <input type="checkbox" id="checkDiscreteGpu" checked>
+                                <div class="perf-toggle-info">
+                                    <span class="perf-toggle-title">Použít diskrétní GPU</span>
+                                    <span class="perf-toggle-desc">Vynutí dedikovanou grafickou kartu (DRI_PRIME=1 /
+                                        NVIDIA offload).</span>
+                                </div>
+                            </label>
+
+                            <label class="perf-toggle-card">
+                                <input type="checkbox" id="checkMangoHud">
+                                <div class="perf-toggle-info">
+                                    <span class="perf-toggle-title">Povolit MangoHud</span>
+                                    <span class="perf-toggle-desc">Herní překryv s FPS, frametimes a vytížením GPU/RAM
+                                        (MANGOHUD=1).</span>
+                                </div>
+                            </label>
+
+                            <label class="perf-toggle-card">
+                                <input type="checkbox" id="checkZink">
+                                <div class="perf-toggle-info">
+                                    <span class="perf-toggle-title">Použít Zink (OpenGL přes Vulkan)</span>
+                                    <span class="perf-toggle-desc">Mesa ovladač převádějící OpenGL volání do Vulkan
+                                        API.</span>
+                                </div>
+                            </label>
+
+                            <label class="perf-toggle-card">
+                                <input type="checkbox" id="checkDisableVsync">
+                                <div class="perf-toggle-info">
+                                    <span class="perf-toggle-title">Vypnout V-Sync ovladače</span>
+                                    <span class="perf-toggle-desc">Odstraní input lag na Waylandu a NVIDIA/Mesa
+                                        (__GL_SYNC_TO_VBLANK=0).</span>
+                                </div>
+                            </label>
+
+                            <label class="perf-toggle-card">
+                                <input type="checkbox" id="checkNativeWayland">
+                                <div class="perf-toggle-info">
+                                    <span class="perf-toggle-title">Nativní Wayland okno (GLFW)</span>
+                                    <span class="perf-toggle-desc">Vynutí čisté Wayland okno bez XWayland pro nejnižší možný input lag myši (GLFW_PLATFORM=wayland).</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Argumenty Javy (Generational ZGC pro Java 21 / 25)</label>
+                        <input type="text" id="jvmArgsInput" class="input-text"
+                            placeholder="-XX:+UseZGC -XX:+ZGenerational...">
+                        <div class="jvm-args-actions">
+                            <button type="button" class="btn-pill-small" id="btnPresetZgc">⚡ Nastavit Generational
+                                ZGC</button>
+                            <button type="button" class="btn-pill-small" id="btnPresetG1gc">Standardní G1GC</button>
+                        </div>
+                        <span class="input-hint">Generational ZGC drasticky snižuje lag spiky a mikro-zášeky garbage
+                            collectoru.</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Vlastní proměnné prostředí (Environment Variables)</label>
+                        <textarea id="customEnvVarsInput" class="input-text" rows="2"
+                            style="font-family: var(--font-mono); font-size: 11px; resize: vertical;"
+                            placeholder="KEY=VALUE (jeden záznam na řádek, např. __GL_SYNC_TO_VBLANK=0)"></textarea>
+                        <span class="input-hint">Předává proměnné přímo spouštěnému hernímu procesu Minecraftu (Wayland,
+                            Mesa, GPU).</span>
                     </div>
 
                     <div class="settings-bottom-actions">
                         <button class="mc-btn mc-btn-secondary" id="btnOpenGameDir">📂 Otevřít složku hry
                             (.mychalsmp)</button>
                         <button class="mc-btn mc-btn-green" id="btnSaveSettings">Uložit nastavení</button>
+                    </div>
+
+                    <!-- Automatická detekce a čištění nepotřebné Java cache -->
+                    <div class="cache-cleaner-card" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 16px; margin-top: 18px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap;">
+                            <div style="flex: 1; min-width: 240px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                    <span style="font-size: 18px;">🧹</span>
+                                    <strong style="color: #f1f5f9; font-size: 14px;">Čištění nepotřebné Java cache & logů</strong>
+                                </div>
+                                <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin: 0;">
+                                    Automaticky detekuje a promaže staré komprimované logy (.log.gz), crash reporty starší než 30 dní a dočasná data.
+                                </p>
+                                <div id="cacheCleanerSummary" style="font-size: 12px; color: #38bdf8; margin-top: 8px; font-weight: 500;">
+                                    Stav: Připraveno k analýze uvolnitelného místa.
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <button type="button" class="mc-btn mc-btn-secondary" id="btnScanCache" style="padding: 8px 14px; font-size: 12px;">
+                                    <span>🔍 Analyzovat</span>
+                                </button>
+                                <button type="button" class="mc-btn mc-btn-green" id="btnCleanCache" style="padding: 8px 14px; font-size: 12px;">
+                                    <span>🧹 Vyčistit disk (1 klik)</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Danger Zone: Reset launcher data -->
@@ -760,290 +898,543 @@
                     <pre class="console-body" id="consoleOutput">Čekám na spuštění hry...</pre>
                 </div>
             </section>
-        </main>
-        <!-- Modal 1: Import Profilu -->
-        <div class="launcher-modal-overlay" id="modalImportProfile" style="display: none;">
-            <div class="launcher-modal-card">
-                <div class="modal-header">
-                    <div class="modal-title-box">
-                        <span class="modal-icon">📥</span>
-                        <h3>Importovat profil z jiného launcheru</h3>
-                    </div>
-                    <button class="modal-close-btn" id="btnCloseImportModal">✕</button>
-                </div>
-                <div class="modal-body">
-                    <p class="modal-desc">
-                        Vyber složku profilu či instance z Prism Launcheru, CurseForge, Modrinth App nebo .minecraft.
-                        Launcher automaticky přenese tvé nastavení hry, modifikace, konfigurace a texture packy bez
-                        nutnosti začínat od nuly.
-                    </p>
-                    <div class="import-browse-zone" id="importBrowseZone">
-                        <button class="mc-btn mc-btn-primary" id="btnSelectImportFolder">
-                            <span>📁 Procházet a vybrat složku instance</span>
-                        </button>
-                        <div class="import-path-label" id="importPathLabel">Zatím nebyla vybrána žádná složka</div>
-                    </div>
-
-                    <!-- Scanned details section -->
-                    <div class="scanned-instance-preview" id="scannedInstancePreview" style="display: none;">
-                        <div class="form-group">
-                            <label>Název importovaného profilu</label>
-                            <input type="text" class="text-input" id="importProfileNameInput"
-                                placeholder="Název profilu">
+            <!-- Modal 0: Vytvořit nový profil (New Profile) -->
+            <div class="launcher-modal-overlay" id="modalCreateProfile" style="display: none;">
+                <div class="launcher-modal-card">
+                    <div class="modal-header">
+                        <div class="modal-title-box">
+                            <span class="modal-icon">➕</span>
+                            <h3>Vytvořit profil</h3>
                         </div>
+                        <button class="modal-close-btn" id="btnCloseCreateProfileModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>Název profilu</label>
+                            <input type="text" class="text-input" id="newProfileNameInput"
+                                placeholder="Např. Fabric 26.2">
+                        </div>
+
                         <div class="form-row-2">
                             <div class="form-group">
                                 <label>Verze Minecraftu</label>
-                                <select class="text-input select-input" id="importVersionSelect">
-                                    <option value="26.2">Minecraft 26.2 (Doporučeno MYCHAL SMP)</option>
-                                    <option value="26.3">Minecraft 26.3 (Nejnovější)</option>
-                                    <option value="26.1.2">Minecraft 26.1.2</option>
-                                </select>
+                                <div class="custom-dropdown" id="dropdownNewProfileVersion" data-value="26.2">
+                                    <button type="button" class="custom-dropdown-trigger">
+                                        <div class="custom-dropdown-selected">
+                                            <span class="custom-dropdown-selected-icon">⚔️</span>
+                                            <span class="custom-dropdown-selected-text">26.2 (Doporučeno)</span>
+                                        </div>
+                                        <span class="custom-dropdown-chevron">▼</span>
+                                    </button>
+                                    <div class="custom-dropdown-menu">
+                                        <div class="custom-dropdown-option active" data-value="26.2" data-icon="⚔️">
+                                            <div class="custom-option-left">
+                                                <span class="custom-option-icon">⚔️</span>
+                                                <div class="custom-option-text">
+                                                    <span class="custom-option-title">Minecraft 26.2</span>
+                                                    <span class="custom-option-desc">Doporučená síťová verze MYCHAL
+                                                        SMP</span>
+                                                </div>
+                                            </div>
+                                            <span class="custom-option-check">✓</span>
+                                        </div>
+                                        <div class="custom-dropdown-option" data-value="26.3" data-icon="✨">
+                                            <div class="custom-option-left">
+                                                <span class="custom-option-icon">✨</span>
+                                                <div class="custom-option-text">
+                                                    <span class="custom-option-title">Minecraft 26.3</span>
+                                                    <span class="custom-option-desc">Nejnovější aktivní vydání</span>
+                                                </div>
+                                            </div>
+                                            <span class="custom-option-check"></span>
+                                        </div>
+                                        <div class="custom-dropdown-option" data-value="26.1.2" data-icon="📦">
+                                            <div class="custom-option-left">
+                                                <span class="custom-option-icon">📦</span>
+                                                <div class="custom-option-text">
+                                                    <span class="custom-option-title">Minecraft 26.1.2</span>
+                                                    <span class="custom-option-desc">Legacy stabilní verze</span>
+                                                </div>
+                                            </div>
+                                            <span class="custom-option-check"></span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+
                             <div class="form-group">
                                 <label>Mod Loader</label>
-                                <select class="text-input select-input" id="importLoaderSelect">
-                                    <option value="vanilla">Vanilla</option>
-                                    <option value="fabric">Fabric</option>
-                                    <option value="forge">Forge</option>
-                                    <option value="neoforge">NeoForge</option>
-                                </select>
+                                <div class="custom-dropdown" id="dropdownNewProfileLoader" data-value="vanilla">
+                                    <button type="button" class="custom-dropdown-trigger">
+                                        <div class="custom-dropdown-selected">
+                                            <span class="custom-dropdown-selected-icon">🧱</span>
+                                            <span class="custom-dropdown-selected-text">Vanilla</span>
+                                        </div>
+                                        <span class="custom-dropdown-chevron">▼</span>
+                                    </button>
+                                    <div class="custom-dropdown-menu">
+                                        <div class="custom-dropdown-option active" data-value="vanilla" data-icon="🧱">
+                                            <div class="custom-option-left">
+                                                <span class="custom-option-icon">🧱</span>
+                                                <div class="custom-option-text">
+                                                    <span class="custom-option-title">Vanilla</span>
+                                                    <span class="custom-option-desc">Čistá neupravená hra</span>
+                                                </div>
+                                            </div>
+                                            <span class="custom-option-check">✓</span>
+                                        </div>
+                                        <div class="custom-dropdown-option" data-value="fabric" data-icon="🧵">
+                                            <div class="custom-option-left">
+                                                <span class="custom-option-icon">🧵</span>
+                                                <div class="custom-option-text">
+                                                    <span class="custom-option-title">Fabric</span>
+                                                    <span class="custom-option-desc">Moderní a rychlý mod loader</span>
+                                                </div>
+                                            </div>
+                                            <span class="custom-option-check"></span>
+                                        </div>
+                                        <div class="custom-dropdown-option" data-value="neoforge" data-icon="⚡">
+                                            <div class="custom-option-left">
+                                                <span class="custom-option-icon">⚡</span>
+                                                <div class="custom-option-text">
+                                                    <span class="custom-option-title">NeoForge</span>
+                                                    <span class="custom-option-desc">Komunikační modding
+                                                        platforma</span>
+                                                </div>
+                                            </div>
+                                            <span class="custom-option-check"></span>
+                                        </div>
+                                        <div class="custom-dropdown-option" data-value="forge" data-icon="🔨">
+                                            <div class="custom-option-left">
+                                                <span class="custom-option-icon">🔨</span>
+                                                <div class="custom-option-text">
+                                                    <span class="custom-option-title">Forge</span>
+                                                    <span class="custom-option-desc">Tradiční mod loader</span>
+                                                </div>
+                                            </div>
+                                            <span class="custom-option-check"></span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="scanned-stats-pills" id="scannedStatsPills"></div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="mc-btn mc-btn-secondary" id="btnCancelImport">Zrušit</button>
-                    <button class="mc-btn mc-btn-green" id="btnConfirmImport" disabled>
-                        <span>✓ Dokončit import profilu</span>
-                    </button>
-                </div>
-            </div>
-        </div>
 
-        <!-- Modal 2: Upgrade Profilu -->
-        <div class="launcher-modal-overlay" id="modalUpgradeProfile" style="display: none;">
-            <div class="launcher-modal-card">
-                <div class="modal-header">
-                    <div class="modal-title-box">
-                        <span class="modal-icon">⚡</span>
-                        <h3>Upgrade profilu na novou verzi</h3>
-                    </div>
-                    <button class="modal-close-btn" id="btnCloseUpgradeModal">✕</button>
-                </div>
-                <div class="modal-body">
-                    <p class="modal-desc">
-                        Vytvoří nový profil s novější verzí hry, překopíruje veškeré tvé nastavení hry (ovládání,
-                        citlivost myši, video nastavení), konfigurace módů i texture packy. Launcher se navíc pokusí
-                        automaticky vyhledat a stáhnout kompatibilní novější verze tvých módů z Modrinthu!
-                    </p>
-                    <div class="upgrade-source-badge" id="upgradeSourceProfileName">Zdrojový profil: MYCHAL SMP 26.2
-                    </div>
+                        <div class="form-group">
+                            <label>Alokace RAM pro tento profil</label>
+                            <div class="ram-slider-row" style="display: flex; align-items: center; gap: 12px;">
+                                <input type="range" min="2" max="16" step="1" value="4" class="slider"
+                                    id="newProfileRamSlider" style="flex: 1;">
+                                <span class="badge-accent" id="newProfileRamValueBadge"
+                                    style="background: rgba(10, 103, 229, 0.2); color: #38bdf8; border: 1px solid rgba(10, 103, 229, 0.4); padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px;">4
+                                    GB</span>
+                            </div>
+                        </div>
 
-                    <div class="form-group" style="margin-top: 14px;">
-                        <label>Cílová verze Minecraftu</label>
-                        <select class="text-input select-input" id="upgradeTargetVersionSelect">
-                            <option value="26.3">Minecraft 26.3 (Nejnovější jádro 26.3)</option>
-                            <option value="26.2">Minecraft 26.2 (Doporučená verze)</option>
-                        </select>
-                    </div>
-
-                    <div class="upgrade-checkboxes">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="checkUpgradeOptions" checked>
-                            <span>Překopírovat nastavení hry (ovládání, video, zvuk, citlivost)</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="checkUpgradeConfig" checked>
-                            <span>Překopírovat nastavení a konfigurace módů (složka config/)</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="checkUpgradePacks" checked>
-                            <span>Překopírovat texture packy a shadery (resourcepacks/)</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="checkUpgradeMods" checked>
-                            <span>Automaticky vyhledat a aktualizovat módy pro novou verzi na Modrinthu</span>
-                        </label>
-                    </div>
-
-                    <!-- Live Upgrade Progress Status -->
-                    <div class="upgrade-progress-area" id="upgradeProgressArea" style="display: none;">
-                        <div class="upgrade-spinner-row">
-                            <span class="upgrade-spinner">⏳</span>
-                            <span class="upgrade-status-text" id="upgradeStatusText">Probíhá upgrade profilu...</span>
+                        <div class="form-group">
+                            <label>Ikona profilu</label>
+                            <div class="icon-picker-grid" id="newProfileIconPicker">
+                                <button type="button" class="icon-picker-item active" data-icon="sword">⚔️</button>
+                                <button type="button" class="icon-picker-item" data-icon="latest">✨</button>
+                                <button type="button" class="icon-picker-item" data-icon="chest">📦</button>
+                                <button type="button" class="icon-picker-item" data-icon="upgrade">⚡</button>
+                                <button type="button" class="icon-picker-item" data-icon="shield">🛡️</button>
+                                <button type="button" class="icon-picker-item" data-icon="rocket">🚀</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="mc-btn mc-btn-secondary" id="btnCancelUpgrade">Zrušit</button>
-                    <button class="mc-btn mc-btn-green" id="btnConfirmUpgrade">
-                        <span>🚀 Spustit upgrade</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal 3: Souhrn Upgradu -->
-        <div class="launcher-modal-overlay" id="modalUpgradeResult" style="display: none;">
-            <div class="launcher-modal-card">
-                <div class="modal-header">
-                    <div class="modal-title-box">
-                        <span class="modal-icon">🎉</span>
-                        <h3>Upgrade byl úspěšně dokončen!</h3>
-                    </div>
-                    <button class="modal-close-btn" id="btnCloseResultModal">✕</button>
-                </div>
-                <div class="modal-body">
-                    <div class="result-summary-box" id="upgradeResultSummaryText"></div>
-                    <div class="result-mods-lists" id="upgradeResultModsList"></div>
-                </div>
-                <div class="modal-footer">
-                    <button class="mc-btn mc-btn-green" id="btnFinishUpgradeResult">
-                        <span>Skvělé, rozumím</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal 4: Nastavení Profilu (Profile Settings) -->
-        <div class="launcher-modal-overlay" id="modalProfileSettings" style="display: none;">
-            <div class="launcher-modal-card">
-                <div class="modal-header">
-                    <div class="modal-title-box">
-                        <span class="modal-icon">⚙</span>
-                        <h3 id="profileSettingsModalTitle">Nastavení profilu</h3>
-                    </div>
-                    <button class="modal-close-btn" id="btnCloseProfileSettingsModal">✕</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label>Název profilu</label>
-                        <input type="text" class="text-input" id="profileSettingsNameInput">
-                    </div>
-
-                    <div class="form-group">
-                        <label>Mod Loader</label>
-                        <select class="text-input select-input" id="profileSettingsLoaderSelect">
-                            <option value="vanilla">Vanilla</option>
-                            <option value="fabric">Fabric</option>
-                            <option value="forge">Forge</option>
-                            <option value="neoforge">NeoForge</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Přidělená operační paměť RAM pro tento profil</label>
-                        <div class="ram-slider-row" style="display: flex; align-items: center; gap: 12px;">
-                            <input type="range" min="2" max="16" step="1" value="4" class="slider" id="profileRamSlider"
-                                style="flex: 1;">
-                            <span class="badge-accent" id="profileRamValueBadge"
-                                style="background: rgba(10, 103, 229, 0.2); color: #38bdf8; border: 1px solid rgba(10, 103, 229, 0.4); padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px;">4
-                                GB</span>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Složky a soubory tohoto profilu</label>
-                        <div class="profile-folders-quick-grid"
-                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
-                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder=""
-                                style="padding: 8px; font-size: 11px;">📂 Celá složka</button>
-                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="mods"
-                                style="padding: 8px; font-size: 11px;">📁 mods/</button>
-                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="config"
-                                style="padding: 8px; font-size: 11px;">📁 config/</button>
-                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
-                                data-subfolder="resourcepacks" style="padding: 8px; font-size: 11px;">🎨
-                                textury/</button>
-                            <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
-                                data-subfolder="shaderpacks" style="padding: 8px; font-size: 11px;">✨ shadery/</button>
-                        </div>
-                    </div>
-
-                    <div class="profile-delete-section" id="profileDeleteSection"
-                        style="margin-top: 10px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: flex-end;">
-                        <button class="btn-danger-reset" id="btnDeleteCurrentProfile"
-                            style="padding: 6px 12px; font-size: 12px;">
-                            🗑️ Smazat profil
+                    <div class="modal-footer">
+                        <button class="mc-btn mc-btn-secondary" id="btnCancelCreateProfile">Zrušit</button>
+                        <button class="mc-btn mc-btn-green" id="btnConfirmCreateProfile">
+                            <span>✓ Vytvořit profil</span>
                         </button>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button class="mc-btn mc-btn-secondary" id="btnCancelProfileSettings">Zrušit</button>
-                    <button class="mc-btn mc-btn-green" id="btnSaveProfileSettings">
-                        <span>✓ Uložit změny</span>
-                    </button>
-                </div>
             </div>
-        </div>
 
-        <!-- MOD SAFETY WARNING MODAL -->
-        <div class="custom-modal-overlay" id="wardenModal" style="display: none;">
-            <div class="custom-modal-box warden-modal-box">
-                <div class="modal-head">
-                    <div class="modal-title-with-icon">
-                        <span class="icon-danger-shield">🛡️</span>
-                        <div>
-                            <h3>Bezpečnostní kontrola modifikací</h3>
-                            <p class="modal-subtitle">Ochrana účtu před porušením pravidel na mychalsmp.xyz</p>
+            <!-- Modal 1: Import Profilu -->
+            <div class="launcher-modal-overlay" id="modalImportProfile" style="display: none;">
+                <div class="launcher-modal-card">
+                    <div class="modal-header">
+                        <div class="modal-title-box">
+                            <span class="modal-icon">📥</span>
+                            <h3>Importovat profil z jiného launcheru</h3>
+                        </div>
+                        <button class="modal-close-btn" id="btnCloseImportModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="modal-desc">
+                            Vyber složku profilu či instance z Prism Launcheru, CurseForge, Modrinth App nebo
+                            .minecraft.
+                            Launcher automaticky přenese tvé nastavení hry, modifikace, konfigurace a texture packy bez
+                            nutnosti začínat od nuly.
+                        </p>
+                        <div class="import-browse-zone" id="importBrowseZone">
+                            <button class="mc-btn mc-btn-primary" id="btnSelectImportFolder">
+                                <span>📁 Procházet a vybrat složku instance</span>
+                            </button>
+                            <div class="import-path-label" id="importPathLabel">Zatím nebyla vybrána žádná složka</div>
+                        </div>
+
+                        <!-- Scanned details section -->
+                        <div class="scanned-instance-preview" id="scannedInstancePreview" style="display: none;">
+                            <div class="form-group">
+                                <label>Název importovaného profilu</label>
+                                <input type="text" class="text-input" id="importProfileNameInput"
+                                    placeholder="Název profilu">
+                            </div>
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label>Verze Minecraftu</label>
+                                    <select class="text-input select-input" id="importVersionSelect">
+                                        <option value="26.2">Minecraft 26.2 (Doporučeno MYCHAL SMP)</option>
+                                        <option value="26.3">Minecraft 26.3 (Nejnovější)</option>
+                                        <option value="26.1.2">Minecraft 26.1.2</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Mod Loader</label>
+                                    <select class="text-input select-input" id="importLoaderSelect">
+                                        <option value="vanilla">Vanilla</option>
+                                        <option value="fabric">Fabric</option>
+                                        <option value="forge">Forge</option>
+                                        <option value="neoforge">NeoForge</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="scanned-stats-pills" id="scannedStatsPills"></div>
                         </div>
                     </div>
-                    <button class="modal-close-x" id="btnCloseWardenModal">✕</button>
-                </div>
-                <div class="modal-body">
-                    <div class="warden-warning-notice">
-                        <p>V aktivním profilu byly nalezeny modifikace, které nejsou na síti MYCHAL SMP povoleny. Před připojením k serveru je nutné tyto módy zakázat nebo odebrat.</p>
-                        <p class="warden-allowed-hint">💡 <em>Poznámka: Replay Mod, optimalizace (Sodium, Iris) a estetické doplňky jsou povoleny.</em></p>
+                    <div class="modal-footer">
+                        <button class="mc-btn mc-btn-secondary" id="btnCancelImport">Zrušit</button>
+                        <button class="mc-btn mc-btn-green" id="btnConfirmImport" disabled>
+                            <span>✓ Dokončit import profilu</span>
+                        </button>
                     </div>
-                    <div class="illegal-mods-list-title">Nepovolené modifikace v aktivním profilu:</div>
-                    <div class="illegal-mods-list" id="wardenIllegalModsList">
-                        <!-- Dynamicky vloženo -->
-                    </div>
-                </div>
-                <div class="modal-foot">
-                    <button class="mc-btn mc-btn-secondary" id="btnIgnoreWardenClose">Ponechat (Nespouštět Quick Play)</button>
-                    <button class="mc-btn mc-btn-green" id="btnCleanIllegalMods">
-                        <span>🧹 Zakázat tyto módy a odemknout Quick Play</span>
-                    </button>
                 </div>
             </div>
-        </div>
 
-        <!-- AUTO-UPDATE MODAL -->
-        <div class="custom-modal-overlay" id="updateModal" style="display: none;">
-            <div class="custom-modal-box" style="max-width: 500px;">
-                <div class="modal-head">
-                    <div class="modal-title-with-icon">
-                        <span style="font-size: 26px;">🚀</span>
-                        <div>
-                            <h3 id="updateModalTitle">Dostupná nová verze</h3>
-                            <p class="modal-subtitle" id="updateModalSubtitle">MYCHAL SMP Launcher</p>
+            <!-- Modal 2: Upgrade Profilu -->
+            <div class="launcher-modal-overlay" id="modalUpgradeProfile" style="display: none;">
+                <div class="launcher-modal-card">
+                    <div class="modal-header">
+                        <div class="modal-title-box">
+                            <span class="modal-icon">⚡</span>
+                            <h3>Upgrade profilu na novou verzi</h3>
+                        </div>
+                        <button class="modal-close-btn" id="btnCloseUpgradeModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="modal-desc">
+                            Vytvoří nový profil s novější verzí hry, překopíruje veškeré tvé nastavení hry (ovládání,
+                            citlivost myši, video nastavení), konfigurace módů i texture packy. Launcher se navíc pokusí
+                            automaticky vyhledat a stáhnout kompatibilní novější verze tvých módů z Modrinthu!
+                        </p>
+                        <div class="upgrade-source-badge" id="upgradeSourceProfileName">Zdrojový profil: MYCHAL SMP 26.2
+                        </div>
+
+                        <div class="form-group" style="margin-top: 14px;">
+                            <label>Cílová verze Minecraftu</label>
+                            <select class="text-input select-input" id="upgradeTargetVersionSelect">
+                                <option value="26.3">Minecraft 26.3 (Nejnovější jádro 26.3)</option>
+                                <option value="26.2">Minecraft 26.2 (Doporučená verze)</option>
+                            </select>
+                        </div>
+
+                        <div class="upgrade-checkboxes">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="checkUpgradeOptions" checked>
+                                <span>Překopírovat nastavení hry (ovládání, video, zvuk, citlivost)</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="checkUpgradeConfig" checked>
+                                <span>Překopírovat nastavení a konfigurace módů (složka config/)</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="checkUpgradePacks" checked>
+                                <span>Překopírovat texture packy a shadery (resourcepacks/)</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="checkUpgradeMods" checked>
+                                <span>Automaticky vyhledat a aktualizovat módy pro novou verzi na Modrinthu</span>
+                            </label>
+                        </div>
+
+                        <!-- Live Upgrade Progress Status -->
+                        <div class="upgrade-progress-area" id="upgradeProgressArea" style="display: none;">
+                            <div class="upgrade-spinner-row">
+                                <span class="upgrade-spinner">⏳</span>
+                                <span class="upgrade-status-text" id="upgradeStatusText">Probíhá upgrade
+                                    profilu...</span>
+                            </div>
                         </div>
                     </div>
-                    <button class="modal-close-x" id="btnCloseUpdateModal">✕</button>
-                </div>
-                <div class="modal-body">
-                    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5; margin-bottom: 12px;" id="updateModalDesc">
-                        Byla vydána nová verze launcheru. Chceš ji nyní stáhnout a nainstalovat?
-                    </p>
-                    <div id="updateReleaseNotes" style="max-height: 140px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; font-size: 12px; color: #cbd5e1; white-space: pre-wrap; display: none;"></div>
-                </div>
-                <div class="modal-foot">
-                    <button class="mc-btn mc-btn-secondary" id="btnDismissUpdate">Později</button>
-                    <button class="mc-btn mc-btn-green" id="btnConfirmUpdate">
-                        <span>⬇️ Aktualizovat nyní</span>
-                    </button>
+                    <div class="modal-footer">
+                        <button class="mc-btn mc-btn-secondary" id="btnCancelUpgrade">Zrušit</button>
+                        <button class="mc-btn mc-btn-green" id="btnConfirmUpgrade">
+                            <span>🚀 Spustit upgrade</span>
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Toast Notification Container -->
-        <div class="toast-container" id="toastContainer"></div>
+            <!-- Modal 3: Souhrn Upgradu -->
+            <div class="launcher-modal-overlay" id="modalUpgradeResult" style="display: none;">
+                <div class="launcher-modal-card">
+                    <div class="modal-header">
+                        <div class="modal-title-box">
+                            <span class="modal-icon">🎉</span>
+                            <h3>Upgrade byl úspěšně dokončen!</h3>
+                        </div>
+                        <button class="modal-close-btn" id="btnCloseResultModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="result-summary-box" id="upgradeResultSummaryText"></div>
+                        <div class="result-mods-lists" id="upgradeResultModsList"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="mc-btn mc-btn-green" id="btnFinishUpgradeResult">
+                            <span>Skvělé, rozumím</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
 
-        <script src="js/lib/skinview3d.bundle.js"></script>
-        <script src="js/app.js"></script>
+            <!-- Modal 4: Nastavení Profilu (Profile Settings) -->
+            <div class="launcher-modal-overlay" id="modalProfileSettings" style="display: none;">
+                <div class="launcher-modal-card">
+                    <div class="modal-header">
+                        <div class="modal-title-box">
+                            <span class="modal-icon">⚙</span>
+                            <h3 id="profileSettingsModalTitle">Nastavení profilu</h3>
+                        </div>
+                        <button class="modal-close-btn" id="btnCloseProfileSettingsModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>Název profilu</label>
+                            <input type="text" class="text-input" id="profileSettingsNameInput">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Mod Loader</label>
+                            <select class="text-input select-input" id="profileSettingsLoaderSelect">
+                                <option value="vanilla">Vanilla</option>
+                                <option value="fabric">Fabric</option>
+                                <option value="forge">Forge</option>
+                                <option value="neoforge">NeoForge</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Přidělená operační paměť RAM pro tento profil</label>
+                            <div class="ram-slider-row" style="display: flex; align-items: center; gap: 12px;">
+                                <input type="range" min="2" max="16" step="1" value="4" class="slider"
+                                    id="profileRamSlider" style="flex: 1;">
+                                <span class="badge-accent" id="profileRamValueBadge"
+                                    style="background: rgba(10, 103, 229, 0.2); color: #38bdf8; border: 1px solid rgba(10, 103, 229, 0.4); padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px;">4
+                                    GB</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Složky a soubory tohoto profilu</label>
+                            <div class="profile-folders-quick-grid"
+                                style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                                <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder=""
+                                    style="padding: 8px; font-size: 11px;">📂 Celá složka</button>
+                                <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="mods"
+                                    style="padding: 8px; font-size: 11px;">📁 mods/</button>
+                                <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                                    data-subfolder="config" style="padding: 8px; font-size: 11px;">📁 config/</button>
+                                <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                                    data-subfolder="resourcepacks" style="padding: 8px; font-size: 11px;">🎨
+                                    textury/</button>
+                                <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                                    data-subfolder="shaderpacks" style="padding: 8px; font-size: 11px;">✨
+                                    shadery/</button>
+                            </div>
+                        </div>
+
+                        <div class="profile-delete-section" id="profileDeleteSection"
+                            style="margin-top: 10px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: flex-end;">
+                            <button class="btn-danger-reset" id="btnDeleteCurrentProfile"
+                                style="padding: 6px 12px; font-size: 12px;">
+                                🗑️ Smazat profil
+                            </button>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="mc-btn mc-btn-secondary" id="btnCancelProfileSettings">Zrušit</button>
+                        <button class="mc-btn mc-btn-green" id="btnSaveProfileSettings">
+                            <span>✓ Uložit změny</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MOD SAFETY WARNING MODAL -->
+            <div class="custom-modal-overlay" id="wardenModal" style="display: none;">
+                <div class="custom-modal-box warden-modal-box">
+                    <div class="modal-head">
+                        <div class="modal-title-with-icon">
+                            <span class="icon-danger-shield">🛡️</span>
+                            <div>
+                                <h3>Bezpečnostní kontrola modifikací</h3>
+                                <p class="modal-subtitle">Ochrana účtu před porušením pravidel na mychalsmp.xyz</p>
+                            </div>
+                        </div>
+                        <button class="modal-close-x" id="btnCloseWardenModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="warden-warning-notice">
+                            <p>V aktivním profilu byly nalezeny modifikace, které nejsou na síti MYCHAL SMP povoleny.
+                                Na <strong>ostatních serverech a v singleplayeru</strong> můžeš tyto módy volně používat, pro připojení na MYCHAL SMP je však nutné je zakázat.</p>
+                            <p class="warden-allowed-hint">💡 <em>Poznámka: Replay Mod, optimalizace (Sodium, Iris) a
+                                    estetické doplňky jsou povoleny.</em></p>
+                        </div>
+                        <div class="illegal-mods-list-title">Nepovolené modifikace pro síť MYCHAL SMP:</div>
+                        <div class="illegal-mods-list" id="wardenIllegalModsList">
+                            <!-- Dynamicky vloženo -->
+                        </div>
+                    </div>
+                    <div class="modal-foot">
+                        <button class="mc-btn mc-btn-secondary" id="btnIgnoreWardenClose">Zavřít</button>
+                        <button class="mc-btn mc-btn-secondary" id="btnLaunchWithoutSmp" style="color: #60a5fa;">
+                            <span>🎮 Hrát bez SMP (Povolit módy)</span>
+                        </button>
+                        <button class="mc-btn mc-btn-green" id="btnCleanIllegalMods">
+                            <span>🧹 Zakázat tyto módy a odemknout Quick Play</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal 4: Přidat custom server (Custom Server Modal with Pinning) -->
+            <div class="launcher-modal-overlay" id="modalAddServer" style="display: none;">
+                <div class="launcher-modal-card">
+                    <div class="modal-header">
+                        <div class="modal-title-box">
+                            <span class="modal-icon">🌐</span>
+                            <h3>Přidat server</h3>
+                        </div>
+                        <button class="modal-close-btn" id="btnCloseAddServerModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>Název serveru</label>
+                            <input type="text" class="text-input" id="newServerNameInput"
+                                placeholder="Např. Survival s přáteli">
+                        </div>
+                        <div class="form-group">
+                            <label>IP adresa / Doména serveru</label>
+                            <input type="text" class="text-input" id="newServerIpInput"
+                                placeholder="Např. mc.example.com nebo 130.61.89.37:25565">
+                        </div>
+                        <div class="form-group" style="margin-top: 14px;">
+                            <label
+                                style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-secondary); font-size: 13px; user-select: none;">
+                                <input type="checkbox" id="newServerPinnedCheck" checked
+                                    style="width: 18px; height: 18px; accent-color: var(--brand-blue); cursor: pointer;">
+                                <span>📌 Připnout server na začátek seznamu</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="mc-btn mc-btn-secondary" id="btnCancelAddServer">Zrušit</button>
+                        <button class="mc-btn mc-btn-green" id="btnConfirmAddServer">
+                            <span>✓ Přidat server</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AUTO-UPDATE MODAL -->
+            <div class="custom-modal-overlay" id="updateModal" style="display: none;">
+                <div class="custom-modal-box" style="max-width: 500px;">
+                    <div class="modal-head">
+                        <div class="modal-title-with-icon">
+                            <span style="font-size: 26px;">🚀</span>
+                            <div>
+                                <h3 id="updateModalTitle">Dostupná nová verze</h3>
+                                <p class="modal-subtitle" id="updateModalSubtitle">MYCHAL SMP Launcher</p>
+                            </div>
+                        </div>
+                        <button class="modal-close-x" id="btnCloseUpdateModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <p style="font-size: 13px; color: #94a3b8; line-height: 1.5; margin-bottom: 12px;"
+                            id="updateModalDesc">
+                            Byla vydána nová verze launcheru. Chceš ji nyní stáhnout a nainstalovat?
+                        </p>
+                        <div id="updateReleaseNotes"
+                            style="max-height: 140px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; font-size: 12px; color: #cbd5e1; white-space: pre-wrap; display: none;">
+                        </div>
+                    </div>
+                    <div class="modal-foot">
+                        <button class="mc-btn mc-btn-secondary" id="btnDismissUpdate">Později</button>
+                        <button class="mc-btn mc-btn-green" id="btnConfirmUpdate">
+                            <span>⬇️ Aktualizovat nyní</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- INTELIGENTNÍ ANALYZÁTOR PÁDŮ (CRASH ANALYZER MODAL) -->
+            <div class="custom-modal-overlay" id="modalCrashAnalyzer" style="display: none;">
+                <div class="custom-modal-box" style="max-width: 620px;">
+                    <div class="modal-head">
+                        <div class="modal-title-with-icon">
+                            <span style="font-size: 26px;">⚠️</span>
+                            <div>
+                                <h3 id="crashAnalyzerTitle" style="color: #f51515;">Analyzátor pádů Minecraftu</h3>
+                                <p class="modal-subtitle" id="crashAnalyzerSubtitle">Detekován pád hry (Exit kód: 1)</p>
+                            </div>
+                        </div>
+                        <button class="modal-close-x" id="btnCloseCrashModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Diagnostic Result Banner -->
+                        <div class="crash-diag-card" style="background: rgba(245, 21, 21, 0.08); border: 1px solid rgba(245, 21, 21, 0.25); border-radius: 10px; padding: 14px; margin-bottom: 14px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                                <strong id="crashCauseHead" style="color: #f87171; font-size: 15px;">Příčina: Nedostatek paměti RAM</strong>
+                                <span class="badge" id="crashExitCodeBadge" style="background: #f51515; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Kód 1</span>
+                            </div>
+                            <p id="crashCauseDesc" style="font-size: 13px; color: #e2e8f0; line-height: 1.5; margin: 0 0 10px 0;">
+                                Hře došla přidělená operační paměť RAM. Minecraft nebo nainstalované modifikace vyžadují více paměti.
+                            </p>
+                            <div style="background: rgba(0,0,0,0.3); border-left: 3px solid #0a67e5; padding: 8px 12px; border-radius: 4px;">
+                                <span style="font-size: 12px; color: #94a3b8;">Doporučené řešení:</span>
+                                <div id="crashRecommendation" style="font-size: 13px; color: #60a5fa; font-weight: 500; margin-top: 2px;">
+                                    Zvyš posuvník RAM na alespoň 6 GB.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Technical Log Excerpt -->
+                        <div style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 12px; color: #94a3b8; font-weight: 600;">Výňatek z chybového hlášení:</span>
+                        </div>
+                        <pre id="crashLogExcerpt" style="max-height: 140px; overflow-y: auto; background: #0c0e17; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; font-size: 11px; font-family: monospace; color: #cbd5e1; white-space: pre-wrap; user-select: text; margin: 0;"></pre>
+                    </div>
+                    <div class="modal-foot" style="display: flex; justify-content: space-between; align-items: center;">
+                        <button class="mc-btn mc-btn-secondary" id="btnOpenCrashFullReport">
+                            <span>📄 Otevřít report</span>
+                        </button>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="mc-btn mc-btn-secondary" id="btnDismissCrashModal">Zavřít</button>
+                            <button class="mc-btn mc-btn-green" id="btnApplyCrashFix">
+                                <span id="btnApplyCrashFixText">⚡ Automatická oprava</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toast Notification Container -->
+            <div class="toast-container" id="toastContainer"></div>
+
+            <script src="js/lib/skinview3d.bundle.js"></script>
+            <script src="js/app.js"></script>
 </body>
 
 </html>

@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const path = require('path');
 const { BrowserWindow } = require('electron');
 const msmc = require('msmc');
 
@@ -55,14 +56,29 @@ async function loginMicrosoft(parentWindow) {
                 autoHideMenuBar: true,
                 webPreferences: {
                     nodeIntegration: false,
-                    contextIsolation: true
+                    contextIsolation: true,
+                    preload: path.join(__dirname, 'msAuthPreload.js')
                 }
             });
 
-            // Modern Chrome User-Agent so Microsoft does not flag or block Electron on Linux
-            authWin.webContents.setUserAgent(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-            );
+            // Match real OS User-Agent: on Linux, do NOT spoof Windows NT, otherwise Microsoft prompts for Windows Hello
+            const userAgent = process.platform === 'linux'
+                ? "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+                : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+            authWin.webContents.setUserAgent(userAgent);
+
+            // Extra safeguard: suppress WebAuthn / Passkeys on every page transition in the main world
+            authWin.webContents.on('dom-ready', () => {
+                authWin.webContents.executeJavaScript(`
+                    try {
+                        delete window.PublicKeyCredential;
+                        Object.defineProperty(window, 'PublicKeyCredential', {
+                            get: () => undefined,
+                            configurable: false
+                        });
+                    } catch (e) {}
+                `).catch(() => {});
+            });
 
             let handled = false;
 

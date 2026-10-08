@@ -24,7 +24,8 @@ const DEFAULT_PROFILES = [
         loader: 'vanilla',
         desc: 'Minecraft 26.3',
         icon: 'latest',
-        lastPlayed: null
+        lastPlayed: null,
+        playtimeSeconds: 0
     },
     {
         id: 'minecraft-26.2',
@@ -33,7 +34,8 @@ const DEFAULT_PROFILES = [
         loader: 'vanilla',
         desc: 'Minecraft 26.2',
         icon: 'sword',
-        lastPlayed: null
+        lastPlayed: null,
+        playtimeSeconds: 0
     },
     {
         id: 'minecraft-26.1.2',
@@ -42,7 +44,8 @@ const DEFAULT_PROFILES = [
         loader: 'vanilla',
         desc: 'Minecraft 26.1.2',
         icon: 'chest',
-        lastPlayed: null
+        lastPlayed: null,
+        playtimeSeconds: 0
     }
 ];
 
@@ -51,6 +54,7 @@ const DEFAULT_SERVERS = [
         id: 'mychalsmp',
         name: 'MYCHAL SMP',
         ip: 'mychalsmp.xyz',
+        backupIp: '130.61.89.37',
         port: 25565,
         pinned: true,
         lastJoined: Date.now()
@@ -77,8 +81,16 @@ const DEFAULT_CONFIG = {
     autoConnectServer: true,
     serverIp: 'mychalsmp.xyz',
     serverPort: 25565,
-    customJvmArgs: '-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions -XX:MaxGCPauseMillis=200',
+    customJvmArgs: '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC',
+    enableGameMode: true,
+    enableMangoHud: false,
+    enableDiscreteGpu: true,
+    enableZink: false,
+    disableVsync: false,
+    customEnvVars: '',
     installedMods: [],
+    enableNativeWayland: false,
+    enableDiscordRpc: true,
     customSkinPath: null,
     customSkinVariant: 'classic',
     customCapePath: null
@@ -111,10 +123,19 @@ function loadConfig() {
                     if (p.name && (p.name.includes('Beacon') || p.name.includes('MYCHAL SMP') || p.name.startsWith('Vanilla ') || p.name.toLowerCase().includes('vanilla'))) {
                         p.name = `Minecraft ${p.version}`;
                     }
+                    if (typeof p.playtimeSeconds !== 'number') {
+                        p.playtimeSeconds = 0;
+                    }
                 });
             }
             if (!merged.servers || merged.servers.length === 0) {
                 merged.servers = DEFAULT_SERVERS;
+            } else {
+                merged.servers.forEach(s => {
+                    if (s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz') {
+                        s.backupIp = '130.61.89.37';
+                    }
+                });
             }
             return merged;
         }

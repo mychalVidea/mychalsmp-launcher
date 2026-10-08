@@ -321,33 +321,10 @@ body {
     flex-direction: column;
     align-items: center;
     width: 100%;
+    margin-top: auto;
+    padding-bottom: 6px;
 }
 
-.nav-play-trigger {
-    width: 44px;
-    height: 44px;
-    border-radius: var(--radius-md);
-    background: linear-gradient(135deg, var(--brand-green) 0%, #17a800 100%);
-    border: 2px solid #3dff1e;
-    color: #000;
-    font-size: 16px;
-    font-weight: 900;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 0 4px 14px rgba(33, 222, 0, 0.4);
-    transition: var(--transition);
-}
-
-.nav-play-trigger:hover {
-    transform: scale(1.06);
-    box-shadow: 0 6px 18px rgba(33, 222, 0, 0.6);
-}
-
-.nav-play-trigger:active {
-    transform: scale(0.98);
-}
 
 /* ── Content Viewport ─────────────────────────────────────────────────── */
 .content-viewport {
@@ -937,6 +914,73 @@ body {
     color: #000;
 }
 
+.tracked-server-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-pin-server {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 3px 5px;
+    border-radius: 4px;
+    transition: var(--transition);
+    opacity: 0.6;
+}
+
+.btn-pin-server:hover {
+    background: rgba(255, 255, 255, 0.08);
+    opacity: 1;
+}
+
+.btn-pin-server.pinned {
+    opacity: 1;
+    color: var(--brand-blue);
+    text-shadow: 0 0 8px rgba(10, 103, 229, 0.5);
+}
+
+.btn-del-server {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 3px 5px;
+    border-radius: 4px;
+    opacity: 0.6;
+    transition: var(--transition);
+}
+
+.btn-del-server:hover {
+    opacity: 1;
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.server-backup-badge {
+    display: inline-block;
+    font-size: 9px;
+    background: rgba(10, 103, 229, 0.18);
+    color: #60a5fa;
+    border: 1px solid rgba(10, 103, 229, 0.35);
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.is-pinned {
+    border-color: rgba(10, 103, 229, 0.35) !important;
+}
+
+.is-pinned-card {
+    border-color: rgba(10, 103, 229, 0.35) !important;
+    background: linear-gradient(180deg, rgba(10, 103, 229, 0.04) 0%, var(--surface) 100%) !important;
+}
+
 /* Side Console Card */
 .side-console-card {
     background: var(--surface);
@@ -1346,15 +1390,20 @@ body {
 }
 
 .skin-canvas-wrapper {
-    width: 140px;
+    width: 220px;
+    height: 320px;
     display: flex;
     justify-content: center;
+    align-items: center;
+    position: relative;
+    margin: 0 auto;
 }
 
+#skinCanvas2D,
+.skin-2d-canvas,
+#skinPreviewImg,
 .skin-2d-render {
-    width: 100%;
-    image-rendering: pixelated;
-    filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.6));
+    display: none !important;
 }
 
 .skin-caption {
@@ -2312,8 +2361,8 @@ body {
 
 /* ── 3D Skin Viewer & Controls ────────────────────────────────────── */
 .skin-3d-canvas {
-    width: 200px;
-    height: 300px;
+    width: 220px !important;
+    height: 310px !important;
     display: block;
     cursor: grab;
     filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.75));
@@ -2531,3 +2580,326 @@ body {
     border-color: #f51515;
     color: #fca5a5;
 }
+
+/* ── Custom Sleek Dropdown Component ───────────────────────────────── */
+.custom-dropdown {
+    position: relative;
+    width: 100%;
+    user-select: none;
+}
+
+.custom-dropdown-trigger {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: pointer;
+    outline: none;
+    transition: var(--transition);
+}
+
+.custom-dropdown-trigger:hover,
+.custom-dropdown.open .custom-dropdown-trigger {
+    border-color: var(--brand-blue);
+    background: #181b2a;
+    box-shadow: 0 0 12px rgba(10, 103, 229, 0.2);
+}
+
+.custom-dropdown-selected {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.custom-dropdown-selected-icon {
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.custom-dropdown-chevron {
+    font-size: 11px;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.custom-dropdown.open .custom-dropdown-chevron {
+    transform: rotate(180deg);
+    color: var(--brand-blue);
+}
+
+.custom-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: #12141f;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 1000;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
+    max-height: 240px;
+    overflow-y: auto;
+    animation: dropdownPop 0.15s ease-out;
+}
+
+@keyframes dropdownPop {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.custom-dropdown.open .custom-dropdown-menu {
+    display: flex;
+}
+
+.custom-dropdown-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.custom-dropdown-option:hover {
+    background: var(--surface2);
+}
+
+.custom-dropdown-option.active {
+    background: rgba(10, 103, 229, 0.15);
+    border: 1px solid rgba(10, 103, 229, 0.3);
+}
+
+.custom-option-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.custom-option-icon {
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.custom-option-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.custom-option-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.custom-dropdown-option.active .custom-option-title {
+    color: #38bdf8;
+}
+
+.custom-option-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.custom-option-check {
+    color: var(--brand-blue);
+    font-weight: 700;
+    font-size: 13px;
+}
+
+/* ── Create Profile Button & Header Row ────────────────────────────── */
+.section-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-create-profile-main {
+    background: linear-gradient(135deg, #0a67e5 0%, #084eb0 100%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 7px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 4px 12px rgba(10, 103, 229, 0.3);
+    transition: all 0.18s ease;
+}
+
+.btn-create-profile-main:hover {
+    background: linear-gradient(135deg, #1b7cfc 0%, #0a67e5 100%);
+    box-shadow: 0 6px 18px rgba(10, 103, 229, 0.45);
+    transform: translateY(-1px);
+}
+
+.btn-create-profile-main:active {
+    transform: translateY(0);
+}
+
+/* Icon picker inside Create Profile modal */
+.icon-picker-grid {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.icon-picker-item {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--surface-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.icon-picker-item:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: #1e2235;
+}
+
+.icon-picker-item.active {
+    border-color: var(--brand-blue);
+    background: rgba(10, 103, 229, 0.2);
+    box-shadow: 0 0 10px rgba(10, 103, 229, 0.35);
+}
+
+/* ── Linux & Wayland Performance Grid (Settings) ───────────────────── */
+.perf-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.perf-toggle-card {
+    background: var(--surface2);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.perf-toggle-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: #181b2a;
+}
+
+.perf-toggle-card input[type="checkbox"] {
+    margin-top: 2px;
+    accent-color: var(--brand-blue);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.perf-toggle-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.perf-toggle-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.perf-toggle-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.jvm-args-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.btn-pill-small {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--surface-border);
+    color: var(--brand-blue);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-pill-small:hover {
+    background: rgba(10, 103, 229, 0.15);
+    border-color: var(--brand-blue);
+    color: #ffffff;
+}
+
+/* ── Cache Cleaner Card ────────────────────────────────────────────── */
+.cache-cleaner-card {
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-md);
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cache-cleaner-card:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: var(--surface2);
+}
+
+/* ── Crash Analyzer Modal ──────────────────────────────────────────── */
+.crash-diag-card {
+    background: rgba(245, 21, 21, 0.08);
+    border: 1px solid rgba(245, 21, 21, 0.28);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    margin-bottom: 14px;
+}
+
+#crashLogExcerpt::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+#crashLogExcerpt::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+

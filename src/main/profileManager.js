@@ -205,6 +205,7 @@ async function importInstanceProfile(data, baseDir) {
         desc: `Importováno z ${path.basename(sourceDir)} • ${importedModCount} módů`,
         icon: 'import',
         lastPlayed: 'Právě importováno',
+        playtimeSeconds: 0,
         gameDir: instanceDir
     };
 
@@ -399,6 +400,7 @@ async function upgradeProfile(sourceProfileId, targetVersion, baseDir, onProgres
         desc: `Upgradováno z ${sourceProfile.version} • ${upgradedMods.length} aktualizovaných módů`,
         icon: 'upgrade',
         lastPlayed: 'Právě upgradováno',
+        playtimeSeconds: 0,
         gameDir: targetGameDir
     };
 

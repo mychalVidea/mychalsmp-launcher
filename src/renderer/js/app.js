@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else if (tabId === 'servers') {
             renderServersFullTab();
         } else if (tabId === 'character') {
-            if (!skinViewer) initSkinViewer3D();
+            updateCharacterTabSkinPreview();
         }
     }
 
@@ -169,6 +169,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             const name = currentConfig.username || 'Steve';
             updateUserUI(name, currentConfig.authType || 'offline', currentConfig.customSkinPath);
 
+            // System Hardware & RAM detection (up to 80% of system RAM)
+            try {
+                const sysInfo = await window.api.getSystemInfo();
+                if (sysInfo && sysInfo.maxAllowedRamGB) {
+                    if (ramSlider) ramSlider.max = sysInfo.maxAllowedRamGB;
+                    if (profileRamSlider) profileRamSlider.max = sysInfo.maxAllowedRamGB;
+                    const newProfRam = document.getElementById('newProfileRamSlider');
+                    if (newProfRam) newProfRam.max = sysInfo.maxAllowedRamGB;
+
+                    const marks = document.querySelector('.slider-marks');
+                    if (marks) {
+                        marks.innerHTML = `
+                            <span>2 GB</span>
+                            <span>4 GB (Doporučeno)</span>
+                            <span>8 GB</span>
+                            <span>${sysInfo.maxAllowedRamGB} GB (Max 80% RAM)</span>
+                        `;
+                    }
+                }
+            } catch (sysErr) {
+                console.warn('Detekce hardware RAM selhala:', sysErr);
+            }
+
             // RAM
             if (ramSlider && ramValueBadge && currentConfig.ramMax) {
                 ramSlider.value = currentConfig.ramMax;
@@ -193,6 +216,34 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const radio = document.querySelector(`input[name="res"][value="${resVal}"]`);
                 if (radio) radio.checked = true;
             }
+
+            // Linux & Wayland Performance Settings
+            const checkGameMode = document.getElementById('checkGameMode');
+            if (checkGameMode) checkGameMode.checked = currentConfig.enableGameMode !== false;
+
+            const checkDiscreteGpu = document.getElementById('checkDiscreteGpu');
+            if (checkDiscreteGpu) checkDiscreteGpu.checked = currentConfig.enableDiscreteGpu !== false;
+
+            const checkMangoHud = document.getElementById('checkMangoHud');
+            if (checkMangoHud) checkMangoHud.checked = !!currentConfig.enableMangoHud;
+
+            const checkZink = document.getElementById('checkZink');
+            if (checkZink) checkZink.checked = !!currentConfig.enableZink;
+
+            const checkDisableVsync = document.getElementById('checkDisableVsync');
+            if (checkDisableVsync) checkDisableVsync.checked = !!currentConfig.disableVsync;
+
+            const checkNativeWayland = document.getElementById('checkNativeWayland');
+            if (checkNativeWayland) checkNativeWayland.checked = !!currentConfig.enableNativeWayland;
+
+            const checkDiscordRpc = document.getElementById('checkDiscordRpc');
+            if (checkDiscordRpc) checkDiscordRpc.checked = currentConfig.enableDiscordRpc !== false;
+
+            const jvmArgsInput = document.getElementById('jvmArgsInput');
+            if (jvmArgsInput) jvmArgsInput.value = currentConfig.customJvmArgs || '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC';
+
+            const customEnvVarsInput = document.getElementById('customEnvVarsInput');
+            if (customEnvVarsInput) customEnvVarsInput.value = currentConfig.customEnvVars || '';
 
             // Render Server Tracker & Profiles
             renderServerTracker();
@@ -302,23 +353,47 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (e) {}
     }
 
-    // ── Server Tracker Rendering ────────────────────────────────────────────
+    // ── Server Tracker & Pinning Rendering ──────────────────────────────────
+    function getSortedServers() {
+        const servers = currentConfig.servers || [];
+        return [...servers].sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            return (b.lastJoined || 0) - (a.lastJoined || 0);
+        });
+    }
+
     function renderServerTracker() {
         if (!trackedServersList) return;
-        const servers = currentConfig.servers || [];
+        const servers = getSortedServers();
 
-        trackedServersList.innerHTML = servers.map(s => `
-            <div class="tracked-server-item">
-                <img src="${s.ip.includes('mychalsmp') ? 'assets/server-icon.png' : 'assets/server-icon.png'}" class="item-server-icon">
-                <div class="item-info">
-                    <div class="item-name">${escapeHtml(s.name)}</div>
-                    <div class="item-ip">${escapeHtml(s.ip)}</div>
+        trackedServersList.innerHTML = servers.map(s => {
+            const isMychal = s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz';
+            const isPinned = !!s.pinned;
+            const backupBadge = isMychal ? '<span class="server-backup-badge" title="Záložní číselná IP při výpadku DNS: 130.61.89.37:25565">Záloha: 130.61.89.37</span>' : '';
+
+            return `
+                <div class="tracked-server-item ${isPinned ? 'is-pinned' : ''}">
+                    <img src="assets/server-icon.png" class="item-server-icon">
+                    <div class="item-info">
+                        <div class="item-name">
+                            ${escapeHtml(s.name)}
+                            ${isPinned ? '<span title="Připnutý server" style="font-size: 11px; margin-left: 4px;">📌</span>' : ''}
+                        </div>
+                        <div class="item-ip">${escapeHtml(s.ip)}${backupBadge}</div>
+                    </div>
+                    <div class="tracked-server-actions">
+                        <button class="btn-pin-server ${isPinned ? 'pinned' : ''}" data-server-id="${escapeHtml(s.id)}" title="${isPinned ? 'Odepnout server' : 'Připnout server na začátek'}">
+                            📌
+                        </button>
+                        <button class="btn-quick-join" data-server="${escapeHtml(s.ip)}" title="Rychlé připojení">
+                            ▶ Join
+                        </button>
+                        ${!isMychal ? `<button class="btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Smazat server">✕</button>` : ''}
+                    </div>
                 </div>
-                <button class="btn-quick-join" data-server="${escapeHtml(s.ip)}" title="Rychlé připojení">
-                    ▶ Join
-                </button>
-            </div>
-        `).join('');
+            `;
+        }).join('');
 
         // Bind quick join buttons
         trackedServersList.querySelectorAll('.btn-quick-join').forEach(btn => {
@@ -327,55 +402,200 @@ document.addEventListener('DOMContentLoaded', async () => {
                 startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
             });
         });
+
+        // Bind pin buttons
+        trackedServersList.querySelectorAll('.btn-pin-server').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const sid = btn.dataset.serverId;
+                togglePinServer(sid);
+            });
+        });
+
+        // Bind delete buttons
+        trackedServersList.querySelectorAll('.btn-del-server').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const sid = btn.dataset.serverId;
+                deleteServer(sid);
+            });
+        });
     }
 
     function renderServersFullTab() {
         const fullList = document.getElementById('serversFullList');
         if (!fullList) return;
-        const servers = currentConfig.servers || [];
+        const servers = getSortedServers();
 
-        fullList.innerHTML = servers.map(s => `
-            <div class="server-full-card">
-                <img src="assets/server-icon.png" class="server-full-icon">
-                <div class="server-full-info">
-                    <div class="server-full-name">${escapeHtml(s.name)}</div>
-                    <div class="server-full-ip">${escapeHtml(s.ip)}</div>
-                    <div class="server-full-telemetry">Oficiální síťová infrastruktura MYCHAL SMP • Port: ${s.port || 25565}</div>
-                </div>
-                <button class="mc-btn mc-btn-green btn-quick-join" data-server="${escapeHtml(s.ip)}">
-                    <span>⚡ Quick Play</span>
+        fullList.innerHTML = servers.map(s => {
+            const isMychal = s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz';
+            const isPinned = !!s.pinned;
+            const port = s.port || 25565;
+
+            const extraInfo = isMychal
+                ? `<div class="server-full-telemetry" style="color: var(--brand-blue);">
+                    Oficiální síťová infrastruktura MYCHAL SMP • Port: ${port}
+                    <br><span style="color: #94a3b8; font-size: 12px;">🛡️ Záložní IP (Unknown host fallback): <strong style="color: #fff;">130.61.89.37:25565</strong></span>
+                   </div>`
+                : `<div class="server-full-telemetry">Vlastní přidaný server • Port: ${port}</div>`;
+
+            const backupJoinBtn = isMychal ? `
+                <button class="mc-btn mc-btn-secondary btn-quick-join-backup" data-server="130.61.89.37:25565" title="Připojit se přímo přes číselnou záložní IP">
+                    <span>🌐 Záložní IP</span>
                 </button>
-            </div>
-        `).join('');
+            ` : '';
 
+            return `
+                <div class="server-full-card ${isPinned ? 'is-pinned-card' : ''}">
+                    <img src="assets/server-icon.png" class="server-full-icon">
+                    <div class="server-full-info">
+                        <div class="server-full-name">
+                            ${escapeHtml(s.name)}
+                            ${isPinned ? '<span title="Připnutý server" style="font-size: 14px; margin-left: 6px;">📌 Pinned</span>' : ''}
+                        </div>
+                        <div class="server-full-ip">${escapeHtml(s.ip)}</div>
+                        ${extraInfo}
+                    </div>
+                    <div class="server-full-actions" style="display: flex; align-items: center; gap: 8px;">
+                        <button class="btn-pin-server ${isPinned ? 'pinned' : ''}" data-server-id="${escapeHtml(s.id)}" title="${isPinned ? 'Odepnout server' : 'Připnout server na začátek'}" style="font-size: 16px; padding: 6px 10px;">
+                            📌
+                        </button>
+                        ${backupJoinBtn}
+                        <button class="mc-btn mc-btn-green btn-quick-join" data-server="${escapeHtml(s.ip)}">
+                            <span>⚡ Quick Play</span>
+                        </button>
+                        ${!isMychal ? `<button class="mc-btn mc-btn-secondary btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Smazat server" style="color: #ef4444;">✕</button>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Bind quick join buttons
         fullList.querySelectorAll('.btn-quick-join').forEach(btn => {
             btn.addEventListener('click', () => {
                 const srv = btn.dataset.server;
                 startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
             });
         });
+
+        // Bind backup quick join buttons
+        fullList.querySelectorAll('.btn-quick-join-backup').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const srv = btn.dataset.server;
+                appendLog('[SÍŤ] Spouštím Quick Play přímo přes záložní číselnou IP 130.61.89.37:25565...');
+                startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
+            });
+        });
+
+        // Bind pin buttons
+        fullList.querySelectorAll('.btn-pin-server').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const sid = btn.dataset.serverId;
+                togglePinServer(sid);
+            });
+        });
+
+        // Bind delete buttons
+        fullList.querySelectorAll('.btn-del-server').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const sid = btn.dataset.serverId;
+                deleteServer(sid);
+            });
+        });
     }
 
-    if (btnAddCustomServer) {
-        btnAddCustomServer.addEventListener('click', async () => {
-            const ip = prompt('Zadej IP adresu Minecraft serveru (např. mc.example.com):');
-            if (!ip || !ip.trim()) return;
-            const name = prompt('Zadej název serveru:') || ip.trim();
+    async function togglePinServer(serverId) {
+        const servers = currentConfig.servers || [];
+        const target = servers.find(s => s.id === serverId);
+        if (target) {
+            target.pinned = !target.pinned;
+            await window.api.saveConfig({ servers });
+            renderServerTracker();
+            renderServersFullTab();
+            showToast(target.pinned ? `📌 Server "${target.name}" byl připnut nahoru!` : `Server "${target.name}" byl odepnut.`, 'info');
+        }
+    }
+
+    async function deleteServer(serverId) {
+        const servers = currentConfig.servers || [];
+        const target = servers.find(s => s.id === serverId);
+        if (!target) return;
+        if (confirm(`Opravdu chceš smazat server "${target.name}" ze seznamu?`)) {
+            const filtered = servers.filter(s => s.id !== serverId);
+            currentConfig.servers = filtered;
+            await window.api.saveConfig({ servers: filtered });
+            renderServerTracker();
+            renderServersFullTab();
+            showToast(`Server "${target.name}" byl odebrán.`, 'info');
+        }
+    }
+
+    // Modal Add Server controls
+    const modalAddServer = document.getElementById('modalAddServer');
+    const btnCloseAddServerModal = document.getElementById('btnCloseAddServerModal');
+    const btnCancelAddServer = document.getElementById('btnCancelAddServer');
+    const btnConfirmAddServer = document.getElementById('btnConfirmAddServer');
+    const newServerNameInput = document.getElementById('newServerNameInput');
+    const newServerIpInput = document.getElementById('newServerIpInput');
+    const newServerPinnedCheck = document.getElementById('newServerPinnedCheck');
+    const btnOpenAddServerTab = document.getElementById('btnOpenAddServerTab');
+
+    function openAddServerModal() {
+        if (!modalAddServer) return;
+        if (newServerNameInput) newServerNameInput.value = '';
+        if (newServerIpInput) newServerIpInput.value = '';
+        if (newServerPinnedCheck) newServerPinnedCheck.checked = true;
+        modalAddServer.style.display = 'flex';
+        setTimeout(() => newServerNameInput?.focus(), 50);
+    }
+
+    function closeAddServerModal() {
+        if (modalAddServer) modalAddServer.style.display = 'none';
+    }
+
+    if (btnAddCustomServer) btnAddCustomServer.addEventListener('click', openAddServerModal);
+    if (btnOpenAddServerTab) btnOpenAddServerTab.addEventListener('click', openAddServerModal);
+    if (btnCloseAddServerModal) btnCloseAddServerModal.addEventListener('click', closeAddServerModal);
+    if (btnCancelAddServer) btnCancelAddServer.addEventListener('click', closeAddServerModal);
+
+    if (btnConfirmAddServer) {
+        btnConfirmAddServer.addEventListener('click', async () => {
+            const rawIp = newServerIpInput?.value?.trim() || '';
+            if (!rawIp) {
+                showToast('Zadej prosím IP adresu nebo doménu serveru.', 'error');
+                return;
+            }
+
+            let cleanIp = rawIp;
+            let port = 25565;
+            if (cleanIp.includes(':')) {
+                const parts = cleanIp.split(':');
+                cleanIp = parts[0].trim();
+                port = parseInt(parts[1], 10) || 25565;
+            }
+
+            const rawName = newServerNameInput?.value?.trim() || cleanIp;
+            const isPinned = !!(newServerPinnedCheck?.checked);
 
             const newServer = {
                 id: 'srv-' + Date.now(),
-                name: name.trim(),
-                ip: ip.trim(),
-                port: 25565,
-                pinned: false,
+                name: rawName,
+                ip: cleanIp,
+                port: port,
+                pinned: isPinned,
                 lastJoined: Date.now()
             };
 
-            const updated = [...(currentConfig.servers || []), newServer];
-            await window.api.saveConfig({ servers: updated });
-            currentConfig.servers = updated;
+            const existing = currentConfig.servers || [];
+            currentConfig.servers = [...existing, newServer];
+            await window.api.saveConfig({ servers: currentConfig.servers });
+
+            closeAddServerModal();
             renderServerTracker();
             renderServersFullTab();
+            showToast(`✓ Server "${rawName}" byl úspěšně přidán${isPinned ? ' a připnut' : ''}!`, 'success');
         });
     }
 
@@ -465,6 +685,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const btnIgnoreWardenClose = document.getElementById('btnIgnoreWardenClose');
     if (btnIgnoreWardenClose) btnIgnoreWardenClose.addEventListener('click', () => closeWardenModal());
+
+    const btnLaunchWithoutSmp = document.getElementById('btnLaunchWithoutSmp');
+    if (btnLaunchWithoutSmp) {
+        btnLaunchWithoutSmp.addEventListener('click', () => {
+            closeWardenModal();
+            appendLog('[PROFIL] Spouštím hru bez připojení k serveru MYCHAL SMP (módy povoleny pro singleplayer a jiné servery)...');
+            showToast('🎮 Spouštím hru bez připojení k SMP – módy povoleny.', 'info');
+            startLaunch(currentConfig.activeProfileId, null);
+        });
+    }
 
     const btnCleanIllegalMods = document.getElementById('btnCleanIllegalMods');
     if (btnCleanIllegalMods) {
@@ -581,8 +811,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const res = await window.api.applyUpdate(downloadUrl);
                 if (res && res.applied) {
                     showToast('✓ ' + res.message, 'success');
-                    setTimeout(() => {
-                        window.location.reload();
+                    setTimeout(async () => {
+                        try {
+                            await window.api.restartLauncher();
+                        } catch (e) {
+                            window.location.reload();
+                        }
                     }, 1500);
                 } else if (res && res.openedInBrowser) {
                     showToast('Odkaz na stažení byl otevřen v prohlížeči.', 'info');
@@ -605,13 +839,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         const profiles = currentConfig.profiles || [];
         const activeId = currentConfig.activeProfileId || (profiles[0] ? profiles[0].id : 'minecraft-26.2');
 
+        const hasAnyPlayed = profiles.some(p => p.lastPlayed);
+        const headingTitle = document.getElementById('profilesSectionTitle');
+        const headingIcon = document.getElementById('profilesSectionIcon');
+        if (headingTitle) {
+            headingTitle.textContent = hasAnyPlayed ? 'Naposledy hrané profily' : 'Dostupné herní profily';
+        }
+        if (headingIcon) {
+            headingIcon.textContent = hasAnyPlayed ? '🕒' : '🎮';
+        }
+
         list.innerHTML = profiles.map(p => {
             const isActive = p.id === activeId;
             const iconSymbol = p.icon === 'sword' ? '⚔️' :
                                p.icon === 'latest' ? '✨' :
                                p.icon === 'chest' ? '📦' :
                                p.icon === 'upgrade' ? '⚡' :
-                               p.icon === 'import' ? '📥' : '🎮';
+                               p.icon === 'import' ? '📥' :
+                               p.icon === 'shield' ? '🛡️' :
+                               p.icon === 'rocket' ? '🚀' : '🎮';
 
             const badgeClass = (p.id === 'minecraft-26.2' || p.id === 'mychalsmp-26.2') ? 'p-recommended' :
                                p.version === '26.3' ? 'p-latest' :
@@ -623,9 +869,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                               p.icon === 'upgrade' ? `Upgrade (${p.version})` :
                               p.icon === 'import' ? `Import (${p.version})` : `Verze ${p.version}`;
 
-            const playedText = p.lastPlayed ? `Hrál: ${formatLastPlayed(p.lastPlayed)}` : 'Zatím nehráno';
-            const loaderTag = (p.loader && p.loader !== 'vanilla') ? `${p.loader.charAt(0).toUpperCase() + p.loader.slice(1)} • ` : '';
-            const meta = `${loaderTag}${p.version} • ${playedText}`;
+            const playtimeStr = (p.playtimeSeconds && p.playtimeSeconds >= 60)
+                ? `Odehráno: ${formatPlaytime(p.playtimeSeconds)}`
+                : 'Zatím nehráno';
+            const lastPlayedStr = p.lastPlayed ? `Naposledy: ${formatLastPlayed(p.lastPlayed)}` : null;
+            const loaderTag = (p.loader && p.loader !== 'vanilla') ? `${p.loader.charAt(0).toUpperCase() + p.loader.slice(1)}` : null;
+
+            const metaParts = [loaderTag, `Verze ${p.version}`, playtimeStr, lastPlayedStr].filter(Boolean);
+            const meta = metaParts.join(' • ');
 
             // Upgrade button is ONLY displayed for versions older than the latest (26.3)
             const canUpgrade = p.version !== '26.3' && p.version !== '26.4';
@@ -734,12 +985,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnCancelDownload = document.getElementById('btnCancelDownload');
     if (btnCancelDownload) {
         btnCancelDownload.addEventListener('click', async () => {
-            appendLog('[LAUNCHER] Stahování / spuštění bylo zrušeno uživatelem.');
-            await window.api.killGame();
-            resetPlayState();
-            if (progressContainer) {
-                progressContainer.style.display = 'none';
+            appendLog('[LAUNCHER] Stahování / instalace byla zrušena uživatelem. Čistím stažené soubory...');
+            if (progressText) progressText.textContent = 'Ruším instalaci a mažu stažená data...';
+            try {
+                await window.api.cancelLaunch();
+            } catch (err) {
+                console.error('Cancel error:', err);
             }
+            resetPlayState();
+            appendLog('[LAUNCHER] Instalace byla úspěšně zrušena a nekompletní soubory byly smazány.');
         });
     }
 
@@ -768,17 +1022,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         appendLog(`[LAUNCHER] Zahajuji spuštění profilu ${profileId || 'aktivní'}...`);
         if (sideConsoleStatus) sideConsoleStatus.textContent = 'Připravuji herní data a knihovny...';
 
+        let actualServerIp = serverIp;
+        if (actualServerIp && (actualServerIp.includes('mychalsmp.xyz') || actualServerIp.includes('mychalsmp'))) {
+            if (currentIllegalMods && currentIllegalMods.length > 0) {
+                // If launch wasn't explicitly triggered from quick play, don't block the user, simply launch without connecting to SMP
+                actualServerIp = null;
+                showToast('🛡️ Připojení na MYCHAL SMP přeskočeno (profil obsahuje nepovolené módy pro SMP). Hra spuštěna bez serveru.', 'info');
+                appendLog('[BEZPEČNOST] Quick Play na MYCHAL SMP přeskočen z důvodu nepovolených módů v profilu. Hra spuštěna bez automatického připojení k serveru.');
+            }
+        }
+
         try {
-            const res = await window.api.launchGame(profileId, serverIp);
+            const res = await window.api.launchGame(profileId, actualServerIp);
             if (res && res.success) {
                 isRunning = true;
                 isLaunching = false;
+
+                // Record real lastPlayed timestamp for profile
+                const targetPid = profileId || currentConfig.activeProfileId;
+                const launchedProfile = (currentConfig.profiles || []).find(x => x.id === targetPid);
+                if (launchedProfile) {
+                    launchedProfile.lastPlayed = Date.now();
+                    window.api.saveConfig({ profiles: currentConfig.profiles });
+                    renderProfilesList();
+                }
+
                 if (sidebarPlayBtn) {
                     sidebarPlayBtn.style.opacity = '1';
                     sidebarPlayBtn.style.background = '#ef4444';
                     sidebarPlayBtn.querySelector('span').textContent = '■';
                 }
-                const activeCard = document.querySelector(`.profile-row-card[data-profile-id="${profileId || currentConfig.activeProfileId}"]`);
+                const activeCard = document.querySelector(`.profile-row-card[data-profile-id="${targetPid}"]`);
                 if (activeCard) {
                     const btn = activeCard.querySelector('.btn-launch-profile');
                     if (btn) {
@@ -789,6 +1063,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 if (sideConsoleStatus) sideConsoleStatus.textContent = 'Hra úspěšně běží!';
                 appendLog('[LAUNCHER] Instance Minecraftu byla úspěšně spuštěna.');
+            } else if (res && res.blockedByWarden) {
+                appendLog(`[BEZPEČNOST] ${res.error}`);
+                showToast('🛡️ Quick Play na MYCHAL SMP zablokován: Nalezeny nepovolené módy.', 'error');
+                openWardenModal();
+                resetPlayState();
+                return;
+            } else if (res && res.cancelled) {
+                appendLog('[LAUNCHER] Spuštění hry bylo zrušeno.');
+                resetPlayState();
             } else {
                 throw new Error(res.error || 'Neznámá chyba při spouštění');
             }
@@ -803,6 +1086,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     function resetPlayState() {
         isRunning = false;
         isLaunching = false;
+        if (progressContainer) {
+            progressContainer.style.display = 'none';
+        }
         if (sidebarPlayBtn) {
             sidebarPlayBtn.style.opacity = '1';
             sidebarPlayBtn.style.background = '#22c55e';
@@ -983,10 +1269,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!canvas3D || !window.skinview3d) return;
 
         try {
+            if (skinViewer) {
+                skinViewer.dispose();
+                skinViewer = null;
+            }
+
             skinViewer = new window.skinview3d.SkinViewer({
                 canvas: canvas3D,
-                width: 200,
-                height: 300,
+                width: 220,
+                height: 310,
                 model: currentConfig.customSkinVariant === 'slim' ? 'slim' : 'default'
             });
 
@@ -1008,46 +1299,59 @@ document.addEventListener('DOMContentLoaded', async () => {
             const labelFlying = document.getElementById('label3DFlying');
 
             if (btnFront) {
-                btnFront.addEventListener('click', () => {
+                btnFront.onclick = () => {
                     if (!skinViewer) return;
-                    skinViewer.playerObject.rotation.y = 0;
+                    isAutoRotateActive = false;
+                    skinViewer.autoRotate = false;
+                    if (btnRotate) btnRotate.classList.remove('active');
+                    skinViewer.resetCameraPose();
+                    skinViewer.playerWrapper.rotation.set(0, 0, 0);
+                    skinViewer.playerObject.rotation.set(0, 0, 0);
                     btnFront.classList.add('active');
                     if (btnBack) btnBack.classList.remove('active');
-                });
+                };
             }
 
             if (btnBack) {
-                btnBack.addEventListener('click', () => {
+                btnBack.onclick = () => {
                     if (!skinViewer) return;
-                    // Rotate 180 deg to view cape / elytra from back
-                    skinViewer.playerObject.rotation.y = Math.PI;
+                    isAutoRotateActive = false;
+                    skinViewer.autoRotate = false;
+                    if (btnRotate) btnRotate.classList.remove('active');
+                    skinViewer.resetCameraPose();
+                    skinViewer.playerWrapper.rotation.set(0, Math.PI, 0);
+                    skinViewer.playerObject.rotation.set(0, 0, 0);
                     btnBack.classList.add('active');
                     if (btnFront) btnFront.classList.remove('active');
-                });
+                };
             }
 
             if (btnRotate) {
-                btnRotate.addEventListener('click', () => {
+                btnRotate.onclick = () => {
                     if (!skinViewer) return;
                     isAutoRotateActive = !isAutoRotateActive;
                     skinViewer.autoRotate = isAutoRotateActive;
                     skinViewer.autoRotateSpeed = 1.8;
                     btnRotate.classList.toggle('active', isAutoRotateActive);
-                });
+                    if (isAutoRotateActive) {
+                        if (btnFront) btnFront.classList.remove('active');
+                        if (btnBack) btnBack.classList.remove('active');
+                    }
+                };
             }
 
             if (btnElytra) {
-                btnElytra.addEventListener('click', () => {
+                btnElytra.onclick = () => {
                     if (!skinViewer) return;
                     isBackEquipmentElytra = !isBackEquipmentElytra;
                     skinViewer.playerObject.backEquipment = isBackEquipmentElytra ? 'elytra' : 'cape';
                     if (labelElytra) labelElytra.textContent = isBackEquipmentElytra ? '🧥 Plášť' : '🪽 Elytra';
                     btnElytra.classList.toggle('active', isBackEquipmentElytra);
-                });
+                };
             }
 
             if (btnFlying) {
-                btnFlying.addEventListener('click', () => {
+                btnFlying.onclick = () => {
                     if (!skinViewer) return;
                     isFlyingAnimationActive = !isFlyingAnimationActive;
                     if (isFlyingAnimationActive) {
@@ -1059,7 +1363,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (labelFlying) labelFlying.textContent = '🚀 Létání';
                         btnFlying.classList.remove('active');
                     }
-                });
+                };
             }
         } catch (e) {
             console.warn('[3D VIEWER] Inicializace 3D prohlížeče selhala:', e);
@@ -1088,6 +1392,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (e) {
             console.warn('[3D VIEWER] Chyba aktualizace skinu/pláště v 3D:', e);
         }
+    }
+
+    function updateCharacterTabSkinPreview() {
+        if (!skinViewer) {
+            initSkinViewer3D();
+        } else {
+            skinViewer.setSize(220, 310);
+        }
+        const isMicrosoft = currentConfig.authType === 'microsoft';
+        const effectiveSkin = currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
+        const effectiveCape = isMicrosoft ? null : (currentConfig.customCapePath ? (currentConfig.customCapePath.startsWith('http') || currentConfig.customCapePath.startsWith('file://') ? currentConfig.customCapePath : `file://${currentConfig.customCapePath}`) : null);
+        const isSlim = currentConfig.customSkinVariant === 'slim';
+        const name = (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.username : currentConfig.username) || 'Steve';
+
+        const skinSrc = effectiveSkin
+            ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
+            : `https://minotar.net/skin/${encodeURIComponent(name)}`;
+
+        updateSkinViewer3D(skinSrc, effectiveCape, isSlim);
+        drawSkinToCanvas(skinSrc, isSlim);
     }
 
     // ── Skin Canvas 2D Renderer ─────────────────────────────────────────────
@@ -1161,7 +1485,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ctx.restore();
             }
 
-            canvas.style.display = 'block';
+            // Strictly keep 2D canvas hidden from Character stage
+            canvas.style.display = 'none';
             if (previewImg) previewImg.style.display = 'none';
 
             // Propagate rendered canvas to hero skin
@@ -1267,14 +1592,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnVariantClassic.classList.add('active');
             btnVariantSlim.classList.remove('active');
             await window.api.saveOfflineSkin({ variant: 'classic' });
-            updateUserUI(currentConfig.username, currentConfig.authType, currentConfig.customSkinPath);
+            if (skinViewer) skinViewer.playerObject.skin.modelType = 'default';
+            updateCharacterTabSkinPreview();
         });
         btnVariantSlim.addEventListener('click', async () => {
             currentConfig.customSkinVariant = 'slim';
             btnVariantSlim.classList.add('active');
             btnVariantClassic.classList.remove('active');
             await window.api.saveOfflineSkin({ variant: 'slim' });
-            updateUserUI(currentConfig.username, currentConfig.authType, currentConfig.customSkinPath);
+            if (skinViewer) skinViewer.playerObject.skin.modelType = 'slim';
+            updateCharacterTabSkinPreview();
         });
     }
 
@@ -1512,17 +1839,58 @@ document.addEventListener('DOMContentLoaded', async () => {
                 resObj.height = parseInt(parts[1], 10) || 720;
             }
 
+            const checkGameMode = document.getElementById('checkGameMode');
+            const checkDiscreteGpu = document.getElementById('checkDiscreteGpu');
+            const checkMangoHud = document.getElementById('checkMangoHud');
+            const checkZink = document.getElementById('checkZink');
+            const checkDisableVsync = document.getElementById('checkDisableVsync');
+            const checkNativeWayland = document.getElementById('checkNativeWayland');
+            const checkDiscordRpc = document.getElementById('checkDiscordRpc');
+            const jvmArgsInput = document.getElementById('jvmArgsInput');
+            const customEnvVarsInput = document.getElementById('customEnvVarsInput');
+
             const updated = {
                 ramMax: parseInt(ramSlider?.value || '4', 10),
                 javaPath: javaPathInput?.value.trim() || null,
                 autoConnectServer: autoConnectCheck?.checked ?? true,
-                resolution: resObj
+                resolution: resObj,
+                enableGameMode: checkGameMode ? checkGameMode.checked : true,
+                enableDiscreteGpu: checkDiscreteGpu ? checkDiscreteGpu.checked : true,
+                enableMangoHud: checkMangoHud ? checkMangoHud.checked : false,
+                enableZink: checkZink ? checkZink.checked : false,
+                disableVsync: checkDisableVsync ? checkDisableVsync.checked : false,
+                enableNativeWayland: checkNativeWayland ? checkNativeWayland.checked : false,
+                enableDiscordRpc: checkDiscordRpc ? checkDiscordRpc.checked : true,
+                customJvmArgs: jvmArgsInput ? jvmArgsInput.value.trim() : null,
+                customEnvVars: customEnvVarsInput ? customEnvVarsInput.value.trim() : ''
             };
 
             await window.api.saveConfig(updated);
             currentConfig = { ...currentConfig, ...updated };
             appendLog('[CONFIG] Nastavení bylo uloženo.');
             temporaryButtonText(btnSaveSettings, '✓ Nastavení uloženo!');
+        });
+    }
+
+    const btnPresetZgc = document.getElementById('btnPresetZgc');
+    if (btnPresetZgc) {
+        btnPresetZgc.addEventListener('click', () => {
+            const jvmInput = document.getElementById('jvmArgsInput');
+            if (jvmInput) {
+                jvmInput.value = '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC';
+                showToast('⚡ Nastaveny doporučené parametry Generational ZGC (Java 21/25)!', 'info');
+            }
+        });
+    }
+
+    const btnPresetG1gc = document.getElementById('btnPresetG1gc');
+    if (btnPresetG1gc) {
+        btnPresetG1gc.addEventListener('click', () => {
+            const jvmInput = document.getElementById('jvmArgsInput');
+            if (jvmInput) {
+                jvmInput.value = '-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch';
+                showToast('Nastaveny standardní parametry G1GC.', 'info');
+            }
         });
     }
 
@@ -1554,15 +1922,338 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.api.onLog((line) => appendLog(line));
 
-    window.api.onExit((code) => {
-        appendLog(`[LAUNCHER] Proces ukončen s kódem ${code}.`);
+    window.api.onExit((data) => {
+        const exitCode = (typeof data === 'object' && data !== null) ? data.exitCode : data;
+        appendLog(`[LAUNCHER] Proces hry ukončen (kód: ${exitCode}).`);
+        if (typeof data === 'object' && data !== null && data.sessionSeconds > 0) {
+            const playedMins = Math.round(data.sessionSeconds / 60);
+            const addedText = playedMins < 1 ? '< 1 min' : `${playedMins} min`;
+            appendLog(`[HERNÍ ČAS] Zaznamenán nový odehraný čas: +${addedText} (Celkem: ${formatPlaytime(data.totalPlaytime)}).`);
+        }
         resetPlayState();
+        // Refresh profiles to display updated playtime
+        window.api.getConfig().then(cfg => {
+            if (cfg) {
+                currentConfig = cfg;
+                renderProfilesList();
+            }
+        });
         setTimeout(() => {
             if (progressContainer && !isRunning && !isLaunching) {
                 progressContainer.style.display = 'none';
             }
-        }, 3000);
+        }, 2000);
     });
+
+    // ── Intelligent Crash Analyzer ──────────────────────────────────────────
+    let currentCrashData = null;
+    const modalCrashAnalyzer = document.getElementById('modalCrashAnalyzer');
+    const btnCloseCrashModal = document.getElementById('btnCloseCrashModal');
+    const btnDismissCrashModal = document.getElementById('btnDismissCrashModal');
+    const btnApplyCrashFix = document.getElementById('btnApplyCrashFix');
+    const btnOpenCrashFullReport = document.getElementById('btnOpenCrashFullReport');
+
+    function closeCrashModal() {
+        if (modalCrashAnalyzer) modalCrashAnalyzer.style.display = 'none';
+        currentCrashData = null;
+    }
+
+    if (btnCloseCrashModal) btnCloseCrashModal.addEventListener('click', closeCrashModal);
+    if (btnDismissCrashModal) btnDismissCrashModal.addEventListener('click', closeCrashModal);
+
+    if (window.api && window.api.onCrash) {
+        window.api.onCrash((crashData) => {
+            if (!crashData || !modalCrashAnalyzer) return;
+            currentCrashData = crashData;
+
+            const titleElem = document.getElementById('crashAnalyzerTitle');
+            const subElem = document.getElementById('crashAnalyzerSubtitle');
+            const badgeElem = document.getElementById('crashExitCodeBadge');
+            const headElem = document.getElementById('crashCauseHead');
+            const descElem = document.getElementById('crashCauseDesc');
+            const recElem = document.getElementById('crashRecommendation');
+            const logElem = document.getElementById('crashLogExcerpt');
+            const fixTextElem = document.getElementById('btnApplyCrashFixText');
+
+            if (titleElem) titleElem.textContent = crashData.title || 'Analyzátor pádů Minecraftu';
+            if (subElem) subElem.textContent = `Detekován pád hry (Exit kód: ${crashData.exitCode || 1})`;
+            if (badgeElem) badgeElem.textContent = `Kód ${crashData.exitCode || 1}`;
+            if (headElem) headElem.textContent = `Příčina: ${crashData.title || 'Neznámá chyba'}`;
+            if (descElem) descElem.textContent = crashData.description || '';
+            if (recElem) recElem.textContent = crashData.recommendation || '';
+            if (logElem) logElem.textContent = crashData.logExcerpt || '';
+
+            if (btnApplyCrashFix) {
+                if (crashData.autoFix) {
+                    btnApplyCrashFix.style.display = 'inline-flex';
+                    if (fixTextElem) fixTextElem.textContent = crashData.autoFix.label || '⚡ Automatická oprava';
+                } else {
+                    btnApplyCrashFix.style.display = 'none';
+                }
+            }
+
+            if (btnOpenCrashFullReport) {
+                if (crashData.reportPath) {
+                    btnOpenCrashFullReport.style.display = 'inline-flex';
+                } else {
+                    btnOpenCrashFullReport.style.display = 'none';
+                }
+            }
+
+            modalCrashAnalyzer.style.display = 'flex';
+            appendLog(`[CRASH ANALYZER] Zjištěna příčina pádu: ${crashData.title}`);
+        });
+    }
+
+    if (btnApplyCrashFix) {
+        btnApplyCrashFix.addEventListener('click', async () => {
+            if (!currentCrashData || !currentCrashData.autoFix) return;
+            btnApplyCrashFix.disabled = true;
+            btnApplyCrashFix.textContent = '⏳ Aplikuji opravu...';
+            try {
+                const res = await window.api.applyCrashFix(currentCrashData.autoFix, currentConfig.activeProfileId);
+                if (res && res.success) {
+                    showToast(`✓ ${res.message}`, 'success');
+                    appendLog(`[OPRAVA PÁDU] ${res.message}`);
+                    closeCrashModal();
+
+                    // Refresh config and UI
+                    const updatedCfg = await window.api.getConfig();
+                    if (updatedCfg) {
+                        currentConfig = updatedCfg;
+                        if (ramSlider && updatedCfg.ramMax) {
+                            ramSlider.value = updatedCfg.ramMax;
+                            if (ramValueBadge) ramValueBadge.textContent = `${updatedCfg.ramMax} GB`;
+                        }
+                        if (javaPathInput && updatedCfg.javaPath) {
+                            javaPathInput.value = updatedCfg.javaPath;
+                        }
+                    }
+                } else {
+                    showToast('Chyba: ' + (res?.error || 'Opravu se nepodařilo aplikovat'), 'error');
+                }
+            } catch (err) {
+                showToast('Chyba: ' + err.message, 'error');
+            } finally {
+                btnApplyCrashFix.disabled = false;
+                btnApplyCrashFix.innerHTML = '<span id="btnApplyCrashFixText">⚡ Automatická oprava</span>';
+            }
+        });
+    }
+
+    if (btnOpenCrashFullReport) {
+        btnOpenCrashFullReport.addEventListener('click', async () => {
+            if (!currentCrashData || !currentCrashData.reportPath) return;
+            try {
+                await window.api.applyCrashFix({ id: 'OPEN_CRASH_REPORT', reportPath: currentCrashData.reportPath }, currentConfig.activeProfileId);
+            } catch (e) {
+                showToast('Nelze otevřít report: ' + e.message, 'error');
+            }
+        });
+    }
+
+    // ── Java & Cache Cleaner UI ─────────────────────────────────────────────
+    const btnScanCache = document.getElementById('btnScanCache');
+    const btnCleanCache = document.getElementById('btnCleanCache');
+    const cacheCleanerSummary = document.getElementById('cacheCleanerSummary');
+
+    if (btnScanCache) {
+        btnScanCache.addEventListener('click', async () => {
+            btnScanCache.disabled = true;
+            if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Probíhá skenování disku a cache...';
+            try {
+                const res = await window.api.scanLauncherCache();
+                if (cacheCleanerSummary) {
+                    cacheCleanerSummary.textContent = `Nalezeno ${res.fileCount} souborů k vyčištění (${res.formattedSize}). Staré logy: ${res.breakdown?.logs?.formatted || '0 B'}, Dočasná data: ${res.breakdown?.temps?.formatted || '0 B'}.`;
+                }
+                showToast(`Analýza dokončena: ${res.formattedSize} volného místa lze uvolnit.`, 'info');
+            } catch (err) {
+                if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Chyba při analýze: ' + err.message;
+            } finally {
+                btnScanCache.disabled = false;
+            }
+        });
+    }
+
+    if (btnCleanCache) {
+        btnCleanCache.addEventListener('click', async () => {
+            btnCleanCache.disabled = true;
+            if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Probíhá bezpečné promazávání starých logů a cache...';
+            try {
+                const res = await window.api.cleanLauncherCache();
+                if (cacheCleanerSummary) {
+                    cacheCleanerSummary.textContent = res.message;
+                }
+                showToast(res.message, 'success');
+                appendLog(`[ČIŠTĚNÍ CACHE] ${res.message}`);
+            } catch (err) {
+                if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Chyba při čištění: ' + err.message;
+                showToast('Chyba při čištění: ' + err.message, 'error');
+            } finally {
+                btnCleanCache.disabled = false;
+            }
+        });
+    }
+
+    // ── Custom Dropdown Helper ──────────────────────────────────────────────
+    function setupCustomDropdown(containerId, onSelect) {
+        const container = document.getElementById(containerId);
+        if (!container) return null;
+
+        const trigger = container.querySelector('.custom-dropdown-trigger');
+        const selectedText = container.querySelector('.custom-dropdown-selected-text') || container.querySelector('.custom-dropdown-selected span:last-child');
+        const selectedIcon = container.querySelector('.custom-dropdown-selected-icon');
+        const options = container.querySelectorAll('.custom-dropdown-option');
+
+        const closeDropdown = () => {
+            container.classList.remove('open');
+        };
+
+        if (trigger) {
+            trigger.onclick = (e) => {
+                e.stopPropagation();
+                document.querySelectorAll('.custom-dropdown.open').forEach(d => {
+                    if (d !== container) d.classList.remove('open');
+                });
+                container.classList.toggle('open');
+            };
+        }
+
+        options.forEach(opt => {
+            opt.onclick = (e) => {
+                e.stopPropagation();
+                const val = opt.dataset.value;
+                const icon = opt.dataset.icon || '';
+                const title = opt.querySelector('.custom-option-title')?.textContent || val;
+
+                container.dataset.value = val;
+                if (selectedText) selectedText.textContent = title;
+                if (selectedIcon) selectedIcon.textContent = icon;
+
+                options.forEach(o => {
+                    o.classList.remove('active');
+                    const check = o.querySelector('.custom-option-check');
+                    if (check) check.textContent = '';
+                });
+                opt.classList.add('active');
+                const check = opt.querySelector('.custom-option-check');
+                if (check) check.textContent = '✓';
+
+                closeDropdown();
+                if (typeof onSelect === 'function') onSelect(val);
+            };
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!container.contains(e.target)) {
+                closeDropdown();
+            }
+        });
+
+        return {
+            setValue: (val) => {
+                const matched = Array.from(options).find(o => o.dataset.value === val);
+                if (matched) {
+                    matched.click();
+                }
+            },
+            getValue: () => container.dataset.value
+        };
+    }
+
+    // ── Create Profile Modal Handlers ───────────────────────────────────────
+    const modalCreateProfile = document.getElementById('modalCreateProfile');
+    const btnOpenCreateProfileModal = document.getElementById('btnOpenCreateProfileModal');
+    const btnCloseCreateProfileModal = document.getElementById('btnCloseCreateProfileModal');
+    const btnCancelCreateProfile = document.getElementById('btnCancelCreateProfile');
+    const btnConfirmCreateProfile = document.getElementById('btnConfirmCreateProfile');
+    const newProfileNameInput = document.getElementById('newProfileNameInput');
+    const newProfileRamSlider = document.getElementById('newProfileRamSlider');
+    const newProfileRamValueBadge = document.getElementById('newProfileRamValueBadge');
+    let newProfileSelectedIcon = 'sword';
+
+    const dropdownNewVersion = setupCustomDropdown('dropdownNewProfileVersion');
+    const dropdownNewLoader = setupCustomDropdown('dropdownNewProfileLoader');
+
+    if (newProfileRamSlider && newProfileRamValueBadge) {
+        newProfileRamSlider.addEventListener('input', (e) => {
+            newProfileRamValueBadge.textContent = `${e.target.value} GB`;
+        });
+    }
+
+    const iconButtons = document.querySelectorAll('#newProfileIconPicker .icon-picker-item');
+    iconButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            iconButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            newProfileSelectedIcon = btn.dataset.icon || 'sword';
+        });
+    });
+
+    function openCreateProfileModal() {
+        if (!modalCreateProfile) return;
+        const count = currentConfig.profiles?.length ? currentConfig.profiles.length + 1 : 1;
+        if (newProfileNameInput) {
+            newProfileNameInput.value = `Nový profil ${count}`;
+        }
+        if (newProfileRamSlider && newProfileRamValueBadge) {
+            newProfileRamSlider.value = 4;
+            newProfileRamValueBadge.textContent = '4 GB';
+        }
+        dropdownNewVersion?.setValue('26.2');
+        dropdownNewLoader?.setValue('vanilla');
+        newProfileSelectedIcon = 'sword';
+        iconButtons.forEach(b => b.classList.toggle('active', b.dataset.icon === 'sword'));
+        modalCreateProfile.style.display = 'flex';
+    }
+
+    function closeCreateProfileModal() {
+        if (modalCreateProfile) modalCreateProfile.style.display = 'none';
+    }
+
+    if (btnOpenCreateProfileModal) btnOpenCreateProfileModal.addEventListener('click', openCreateProfileModal);
+    if (btnCloseCreateProfileModal) btnCloseCreateProfileModal.addEventListener('click', closeCreateProfileModal);
+    if (btnCancelCreateProfile) btnCancelCreateProfile.addEventListener('click', closeCreateProfileModal);
+
+    if (btnConfirmCreateProfile) {
+        btnConfirmCreateProfile.addEventListener('click', async () => {
+            const rawName = newProfileNameInput?.value?.trim() || '';
+            if (!rawName) {
+                showToast('Zadej prosím název nového profilu.', 'error');
+                return;
+            }
+
+            const ver = dropdownNewVersion ? dropdownNewVersion.getValue() : '26.2';
+            const ldr = dropdownNewLoader ? dropdownNewLoader.getValue() : 'vanilla';
+            const ram = parseInt(newProfileRamSlider?.value || '4', 10);
+            const newId = 'profile-' + Date.now();
+
+            const newProf = {
+                id: newId,
+                name: rawName,
+                version: ver,
+                loader: ldr,
+                desc: `${rawName} (${ver}${ldr !== 'vanilla' ? ' • ' + ldr : ''})`,
+                icon: newProfileSelectedIcon,
+                ramMax: ram,
+                lastPlayed: null,
+                playtimeSeconds: 0
+            };
+
+            const existing = currentConfig.profiles || [];
+            currentConfig.profiles = [newProf, ...existing];
+            currentConfig.activeProfileId = newId;
+
+            await window.api.saveConfig({
+                profiles: currentConfig.profiles,
+                activeProfileId: newId
+            });
+
+            closeCreateProfileModal();
+            renderProfilesList();
+            showToast(`✓ Profil "${rawName}" byl úspěšně vytvořen!`, 'success');
+        });
+    }
 
     // ── Import Profile Modal Handlers ───────────────────────────────────────
     const modalImportProfile = document.getElementById('modalImportProfile');
@@ -1949,7 +2640,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 4000);
     }
 
-    // ── Time Formatter (Real Timestamps, No Fake History) ────────────────────
+    // ── Time Formatter (Real Timestamps & Steam-style Playtime) ─────────────
+    function formatPlaytime(seconds) {
+        if (!seconds || seconds < 60) return '0 min';
+        const mins = Math.floor(seconds / 60);
+        if (mins < 60) return `${mins} min`;
+        const hours = (seconds / 3600).toFixed(1);
+        const cleanHours = hours.endsWith('.0') ? parseInt(hours, 10) : hours;
+        return `${cleanHours} hod`;
+    }
+
     function formatLastPlayed(timestamp) {
         if (!timestamp) return 'Zatím nehráno';
         const num = typeof timestamp === 'number' ? timestamp : parseInt(timestamp, 10);
