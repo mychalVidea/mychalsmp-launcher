@@ -35,7 +35,7 @@ const {
     disableIllegalMod,
     disableAllIllegalMods
 } = require('./wardenProbeChecker');
-const { checkForUpdates, applyUpdate } = require('./updateService');
+const { checkForUpdates, applyUpdate, getResourcesDir } = require('./updateService');
 const { analyzeCrash, executeCrashFix } = require('./crashAnalyzer');
 const { scanLauncherCache, cleanLauncherCache } = require('./cleaner');
 const { discordRpc } = require('./discordRpc');
@@ -357,7 +357,24 @@ function getCachedModMetadata(jarPath, mtimeMs) {
                 } catch (_) {}
             }
 
-            meta = { name, version, iconDataUrl };
+            // 5. Fallback z názvu souboru: např. sodium-fabric-0.5.11+mc1.20.4.jar
+            const baseFileName = path.basename(jarPath).replace(/\.disabled$/i, '').replace(/\.jar$/i, '');
+            if (!modId) {
+                const autoMatch = baseFileName.match(/^([a-zA-Z0-9_\-]+?)(?:[-_]v?[0-9]|\+)/);
+                if (autoMatch) {
+                    modId = autoMatch[1].toLowerCase().replace(/[-_](fabric|forge|neoforge|quilt|mc[0-9.]+)$/i, '');
+                } else {
+                    modId = baseFileName.toLowerCase();
+                }
+            }
+            if (!version) {
+                const verMatch = baseFileName.match(/[-_](v?[0-9]+\.[0-9]+[^/]*)$/i);
+                if (verMatch) {
+                    version = verMatch[1];
+                }
+            }
+
+            meta = { modId, name, version, iconDataUrl };
         }
     } catch (_) {}
 
@@ -392,6 +409,7 @@ ipcMain.handle('get-profile-mods', async (event, profileId) => {
                 mods.push({
                     filename: file,
                     cleanName,
+                    modId: meta?.modId || cleanName.toLowerCase(),
                     name: meta?.name || cleanName,
                     version: meta?.version || null,
                     iconDataUrl: meta?.iconDataUrl || null,
@@ -969,26 +987,119 @@ ipcMain.handle('apply-update', async (event, assetUrl) => {
 
 ipcMain.handle('restart-launcher', () => {
     if (process.platform === 'win32') {
-        const exeDir = path.dirname(process.execPath);
-        const candidates = [
-            process.resourcesPath,
-            path.join(exeDir, 'resources')
-        ];
-        let resourcesDir = candidates.find(c => c && fs.existsSync(c)) || process.resourcesPath;
+        const resourcesDir = getResourcesDir();
         const pendingAsar = path.join(resourcesDir, 'app.asar.pending');
         const targetAsar = path.join(resourcesDir, 'app.asar');
 
-        if (fs.existsSync(pendingAsar)) {
-            const pid = process.pid;
-            const psScript = `
-                $proc = Get-Process -Id ${pid} -ErrorAction SilentlyContinue;
-                if ($proc) { $proc.WaitForExit(8000); }
-                Start-Sleep -Milliseconds 400;
-                Move-Item -LiteralPath '${pendingAsar.replace(/'/g, "''")}' -Destination '${targetAsar.replace(/'/g, "''")}' -Force;
-                Start-Process -FilePath '${process.execPath.replace(/'/g, "''")}';
-            `;
+        // Kontrola také pro přenosnou (portable) verzi launcheru
+        const portableTarget = process.env.PORTABLE_EXECUTABLE_FILE;
+        const portablePending = portableTarget ? portableTarget + '.pending' : null;
+        const hasPortablePending = portablePending && fs.existsSync(portablePending);
+        const hasAsarPending = fs.existsSync(pendingAsar);
+
+        if (hasAsarPending || hasPortablePending) {
+            const batPath = path.join(os.tmpdir(), `mychalsmp_update_${Date.now()}.bat`);
+            const exePath = portableTarget || process.execPath;
+            const exeDir = path.dirname(exePath);
+
+            // Escapování procent pro bezpečné použití v dávkovém souboru Windows cmd
+            const cleanTarget = targetAsar.replace(/%/g, '%%');
+            const cleanPending = pendingAsar.replace(/%/g, '%%');
+            const cleanExe = exePath.replace(/%/g, '%%');
+            const cleanExeDir = exeDir.replace(/%/g, '%%');
+            const cleanPortableTarget = portableTarget ? portableTarget.replace(/%/g, '%%') : '';
+            const cleanPortablePending = portablePending ? portablePending.replace(/%/g, '%%') : '';
+
+            const batLines = [
+                '@echo off',
+                'setlocal EnableExtensions',
+                'chcp 65001 >nul',
+                '',
+                ':: 1. Počkáme 2 sekundy na úplné uzavření procesu Electronu a uvolnění systémových zámků',
+                'timeout /t 2 /nobreak >nul',
+                '',
+                `set "TARGET=${cleanTarget}"`,
+                `set "PENDING=${cleanPending}"`,
+                `set "EXE=${cleanExe}"`,
+                `set "EXE_DIR=${cleanExeDir}"`,
+                `set "HAS_PORTABLE=${hasPortablePending ? '1' : '0'}"`,
+                `set "PORTABLE_TARGET=${cleanPortableTarget}"`,
+                `set "PORTABLE_PENDING=${cleanPortablePending}"`,
+                '',
+                ':: 2. Robustní smyčka pro spolehlivou výměnu souborů (až 30 pokusů, 1 pokus/sec)',
+                'set ATTEMPTS=0',
+                ':swap_loop',
+                'set /a ATTEMPTS+=1',
+                '',
+                'if "%HAS_PORTABLE%"=="1" (',
+                '    if exist "%PORTABLE_TARGET%" (',
+                '        del /f /q "%PORTABLE_TARGET%" >nul 2>&1',
+                '    )',
+                '    if exist "%PORTABLE_PENDING%" (',
+                '        move /y "%PORTABLE_PENDING%" "%PORTABLE_TARGET%" >nul 2>&1',
+                '    )',
+                '    if not exist "%PORTABLE_PENDING%" (',
+                '        if exist "%PORTABLE_TARGET%" (',
+                '            goto launch_app',
+                '        )',
+                '    )',
+                ') else (',
+                '    if exist "%TARGET%" (',
+                '        del /f /q "%TARGET%" >nul 2>&1',
+                '    )',
+                '    if exist "%PENDING%" (',
+                '        move /y "%PENDING%" "%TARGET%" >nul 2>&1',
+                '    )',
+                '    if not exist "%PENDING%" (',
+                '        if exist "%TARGET%" (',
+                '            goto launch_app',
+                '        )',
+                '    )',
+                ')',
+                '',
+                'if %ATTEMPTS% lss 30 (',
+                '    timeout /t 1 /nobreak >nul',
+                '    goto swap_loop',
+                ')',
+                '',
+                ':: Záložní fallback řešení: copy /y a del',
+                'if "%HAS_PORTABLE%"=="1" (',
+                '    if exist "%PORTABLE_PENDING%" (',
+                '        copy /y "%PORTABLE_PENDING%" "%PORTABLE_TARGET%" >nul 2>&1',
+                '        if exist "%PORTABLE_TARGET%" (',
+                '            del /f /q "%PORTABLE_PENDING%" >nul 2>&1',
+                '        )',
+                '    )',
+                ') else (',
+                '    if exist "%PENDING%" (',
+                '        copy /y "%PENDING%" "%TARGET%" >nul 2>&1',
+                '        if exist "%TARGET%" (',
+                '            del /f /q "%PENDING%" >nul 2>&1',
+                '        )',
+                '    )',
+                ')',
+                '',
+                ':launch_app',
+                'cd /d "%EXE_DIR%"',
+                'start "" "%EXE%"',
+                '',
+                ':: Samomazání dávkového souboru a čisté ukončení',
+                '(goto) 2>nul & del "%~f0"',
+                'exit /b 0'
+            ];
+
+            const batContent = batLines.join('\r\n') + '\r\n';
+            try {
+                fs.writeFileSync(batPath, batContent, 'utf8');
+            } catch (err) {
+                console.error('[UPDATER] Nelze zapsat Windows swap dávkový soubor:', err);
+                app.relaunch();
+                app.exit(0);
+                return;
+            }
+
             const { spawn } = require('child_process');
-            const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript], {
+            const child = spawn('cmd.exe', ['/c', batPath], {
                 detached: true,
                 stdio: 'ignore',
                 windowsHide: true

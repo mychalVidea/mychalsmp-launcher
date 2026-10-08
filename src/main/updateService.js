@@ -54,18 +54,25 @@ async function checkForUpdates() {
         const deltaAsset = assets.find(a => a.name === 'update.asar' || a.name === 'app.asar');
         const tarAsset = assets.find(a => a.name.endsWith('.tar.gz') && !a.name.includes('blockmap'));
         const winAsset = assets.find(a => a.name.endsWith('.exe') && !a.name.includes('blockmap'));
+        const winSetupAsset = assets.find(a => a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup') && !a.name.includes('blockmap'));
+        const winPortableAsset = assets.find(a => a.name.endsWith('.exe') && !a.name.toLowerCase().includes('setup') && !a.name.includes('blockmap'));
+
+        const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 
         let preferredAsset = null;
         let isDelta = false;
 
-        // Pokud máme k dispozici lehký delta balíček, preferujeme ho pro okamžitou aktualizaci
-        if (deltaAsset) {
+        // Pokud je uživatel v portable módu na Windows, nemůže použít delta balíček (který je zabalený uvnitř exe)
+        if (isPortable) {
+            preferredAsset = winPortableAsset || winAsset;
+            isDelta = false;
+        } else if (deltaAsset) {
             preferredAsset = deltaAsset;
             isDelta = true;
         } else if (process.platform === 'linux' && tarAsset) {
             preferredAsset = tarAsset;
         } else if (process.platform === 'win32' && winAsset) {
-            preferredAsset = winAsset;
+            preferredAsset = winSetupAsset || winAsset;
         } else if (assets.length > 0) {
             preferredAsset = assets[0];
         }
@@ -136,6 +143,28 @@ function safeCopyFile(src, dst) {
 }
 
 /**
+ * Spolehlivě vrátí cestu ke složce resources, kde leží app.asar
+ */
+function getResourcesDir() {
+    const exeDir = path.dirname(process.execPath);
+    const candidates = [
+        process.resourcesPath,
+        path.join(exeDir, 'resources'),
+        path.join(os.homedir(), '.local', 'share', 'mychalsmp-launcher', 'resources')
+    ];
+
+    for (const cand of candidates) {
+        if (cand && fs.existsSync(cand) && (fs.existsSync(path.join(cand, 'app.asar')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher.exe')))) {
+            return cand;
+        }
+    }
+
+    const defaultDir = process.resourcesPath || path.join(exeDir, 'resources');
+    try { fs.mkdirSync(defaultDir, { recursive: true }); } catch (e) {}
+    return defaultDir;
+}
+
+/**
  * Downloads and applies the update.
  * Podporuje:
  * 1. Bleskovou delta aktualizaci přes update.asar (~3 MB namísto ~90 MB).
@@ -151,26 +180,7 @@ async function applyUpdate(assetUrl, onProgress) {
         const prevNoAsar = process.noAsar;
         process.noAsar = true;
         try {
-            let resourcesDir = null;
-            const exeDir = path.dirname(process.execPath);
-            const candidates = [
-                process.resourcesPath,
-                path.join(exeDir, 'resources'),
-                path.join(os.homedir(), '.local', 'share', 'mychalsmp-launcher', 'resources')
-            ];
-
-            for (const cand of candidates) {
-                if (cand && fs.existsSync(cand) && (fs.existsSync(path.join(cand, 'app.asar')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher.exe')))) {
-                    resourcesDir = cand;
-                    break;
-                }
-            }
-
-            if (!resourcesDir) {
-                resourcesDir = process.resourcesPath || path.join(exeDir, 'resources');
-                try { fs.mkdirSync(resourcesDir, { recursive: true }); } catch (e) {}
-            }
-
+            const resourcesDir = getResourcesDir();
             const targetAsar = path.join(resourcesDir, 'app.asar');
             // Použijeme .download příponu během streamu, aby Electron nezkoušel balíček parsovat
             const tmpAsar = path.join(os.tmpdir(), `mychalsmp-update-${Date.now()}.download`);
@@ -428,6 +438,74 @@ async function applyUpdate(assetUrl, onProgress) {
             targetExe: targetExe,
             message: 'Aktualizace byla úspěšně nainstalována.'
         };
+    } else if (process.platform === 'win32' && assetUrl.endsWith('.exe')) {
+        const tmpExe = path.join(os.tmpdir(), `mychalsmp-update-${Date.now()}.exe`);
+        const res = await fetch(assetUrl, {
+            headers: { 'User-Agent': 'mychalsmp-launcher-updater' }
+        });
+        if (!res.ok) throw new Error(`Chyba stahování instalačního balíčku: HTTP ${res.status}`);
+
+        const totalBytes = parseInt(res.headers.get('content-length')) || 0;
+        let receivedBytes = 0;
+        const fileStream = fs.createWriteStream(tmpExe);
+        const nodeStream = Readable.fromWeb(res.body);
+
+        let lastReport = 0;
+        nodeStream.on('data', (chunk) => {
+            receivedBytes += chunk.length;
+            const now = Date.now();
+            if (now - lastReport > 50 || receivedBytes === totalBytes) {
+                lastReport = now;
+                const percent = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0;
+                if (onProgress) {
+                    onProgress({
+                        current: receivedBytes,
+                        total: totalBytes,
+                        percent: Math.min(percent, 100),
+                        status: 'downloading',
+                        isDelta: false
+                    });
+                }
+            }
+        });
+
+        await pipeline(nodeStream, fileStream);
+
+        if (onProgress) {
+            onProgress({
+                current: totalBytes,
+                total: totalBytes,
+                percent: 100,
+                status: 'installing',
+                isDelta: false,
+                step: 'Příprava instalace...'
+            });
+        }
+
+        const isPortable = !!process.env.PORTABLE_EXECUTABLE_FILE;
+        if (isPortable) {
+            const pendingExe = process.env.PORTABLE_EXECUTABLE_FILE + '.pending';
+            fs.copyFileSync(tmpExe, pendingExe);
+            try { fs.unlinkSync(tmpExe); } catch (_) {}
+            return {
+                success: true,
+                applied: true,
+                isDelta: false,
+                message: 'Aktualizace byla úspěšně stažena a bude aplikována při restartu.'
+            };
+        } else {
+            const { spawn } = require('child_process');
+            spawn(tmpExe, [], { detached: true, stdio: 'ignore' }).unref();
+            setTimeout(() => {
+                app.exit(0);
+            }, 800);
+            return {
+                success: true,
+                applied: true,
+                isDelta: false,
+                message: 'Instalátor aktualizace byl spuštěn.'
+            };
+        }
     } else {
         shell.openExternal(assetUrl);
         return {
@@ -442,5 +520,6 @@ async function applyUpdate(assetUrl, onProgress) {
 module.exports = {
     checkForUpdates,
     applyUpdate,
+    getResourcesDir,
     CURRENT_VERSION
 };

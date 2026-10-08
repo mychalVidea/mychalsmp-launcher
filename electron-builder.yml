@@ -21,9 +21,12 @@ win:
       arch:
         - x64
   icon: build/icon.ico
+  publisherName: "mychalVidea"
+  verifyUpdateCodeSignature: false
 
 nsis:
   oneClick: false
+  perMachine: false
   allowToChangeInstallationDirectory: true
   shortcutName: MYCHAL SMP Launcher
   uninstallDisplayName: MYCHAL SMP Launcher

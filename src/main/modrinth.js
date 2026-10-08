@@ -188,8 +188,29 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
         const data = await res.json();
 
         if (data.hits && data.hits.length > 0) {
+            // Získáme verze pro jednotlivé hity pro spolehlivou detekci verzí
+            const versionIds = data.hits.map(h => h.latest_version).filter(Boolean);
+            const versionMap = new Map();
+            if (versionIds.length > 0) {
+                try {
+                    const vRes = await fetch(`https://api.modrinth.com/v2/versions?ids=${encodeURIComponent(JSON.stringify(versionIds))}`, {
+                        headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' },
+                        signal: AbortSignal.timeout(3000)
+                    });
+                    if (vRes.ok) {
+                        const vList = await vRes.json();
+                        for (const v of vList) {
+                            if (v.id) versionMap.set(v.id, v.version_number);
+                            if (v.project_id) versionMap.set(v.project_id, v.version_number);
+                        }
+                    }
+                } catch (_) {}
+            }
+
             return data.hits.map(h => ({
                 id: h.slug || h.project_id,
+                slug: h.slug || h.id,
+                project_id: h.project_id,
                 title: h.title,
                 author: h.author,
                 downloads: h.downloads,
@@ -198,7 +219,9 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
                 description: h.description,
                 project_type: h.project_type || type,
                 categories: h.categories || [],
-                loaders: (h.categories || []).filter(c => ['fabric', 'forge', 'neoforge'].includes(c))
+                loaders: (h.categories || []).filter(c => ['fabric', 'forge', 'neoforge'].includes(c)),
+                latest_version_id: h.latest_version,
+                latest_version_number: versionMap.get(h.latest_version) || versionMap.get(h.project_id) || null
             }));
         }
     } catch (err) {
@@ -221,7 +244,7 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
  * Downloads a mod, resourcepack, or shader from Modrinth directly into the profile's directory.
  */
 async function downloadModOrPack(options, targetDir) {
-    const { id, title, projectType = 'mod', version = '26.2', loader = 'fabric' } = options;
+    const { id, title, projectType = 'mod', version = '26.2', loader = 'fabric', oldFilename } = options;
     const directUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(id)}/version`;
     const res = await fetch(directUrl, {
         headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
@@ -241,6 +264,14 @@ async function downloadModOrPack(options, targetDir) {
     const destDir = path.join(targetDir, subfolder);
     if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
 
+    // Pokud aktualizujeme existující mód, smažeme původní starší jar, aby nedošlo ke konfliktu duplicitních módů
+    if (oldFilename) {
+        const oldPath = path.join(destDir, oldFilename);
+        try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch (_) {}
+        const oldDisabled = oldPath + '.disabled';
+        try { if (fs.existsSync(oldDisabled)) fs.unlinkSync(oldDisabled); } catch (_) {}
+    }
+
     const destPath = path.join(destDir, file.filename);
     const dlRes = await fetch(file.url, {
         headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
@@ -253,6 +284,7 @@ async function downloadModOrPack(options, targetDir) {
     return {
         success: true,
         filename: file.filename,
+        version_number: picked.version_number,
         subfolder,
         destPath
     };

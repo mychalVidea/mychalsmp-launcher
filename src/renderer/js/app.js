@@ -1694,6 +1694,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             renderFilteredInstalledMods();
+            if (lastLoadedCatalogMods && lastLoadedCatalogMods.length > 0 && viewCatalogMods && viewCatalogMods.style.display !== 'none') {
+                renderModCards(lastLoadedCatalogMods);
+            }
         } catch (e) {
             listEl.innerHTML = `<div class="empty-mods-state"><p>Chyba při načítání módů: ${escapeHtml(e.message)}</p></div>`;
         }
@@ -1852,6 +1855,84 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
+    /**
+     * Zjistí, zda je vzdálená verze z Modrinthu novější než lokálně nainstalovaná verze v profilu.
+     */
+    function isModVersionNewer(remoteVer, localVer) {
+        if (!remoteVer || !localVer) return false;
+        if (remoteVer === localVer) return false;
+
+        const clean = (v) => {
+            const raw = (v || '').trim();
+            const withoutPrefix = raw.replace(/^v/i, '').replace(/^mc[0-9.]*[-_]/i, '');
+            const base = withoutPrefix.split('+')[0].split('-')[0].trim();
+            return base;
+        };
+
+        const rClean = clean(remoteVer);
+        const lClean = clean(localVer);
+        if (rClean === lClean) return false;
+
+        const rParts = rClean.split('.').map(n => parseInt(n, 10) || 0);
+        const lParts = lClean.split('.').map(n => parseInt(n, 10) || 0);
+
+        for (let i = 0; i < Math.max(rParts.length, lParts.length); i++) {
+            const r = rParts[i] || 0;
+            const l = lParts[i] || 0;
+            if (r > l) return true;
+            if (r < l) return false;
+        }
+
+        return false;
+    }
+
+    /**
+     * Inteligentně najde odpovídající nainstalovaný mód v profilu pro danou položku z katalogu Modrinth.
+     */
+    function findInstalledModForCatalog(catalogMod, profileMods) {
+        if (!profileMods || profileMods.length === 0) return null;
+
+        const catSlug = (catalogMod.slug || catalogMod.id || '').toLowerCase().trim();
+        const catTitle = (catalogMod.title || '').toLowerCase().trim();
+
+        const clean = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanSlug = clean(catSlug);
+        const cleanTitle = clean(catTitle);
+
+        for (const inst of profileMods) {
+            const instModId = (inst.modId || '').toLowerCase().trim();
+            const instName = (inst.name || '').toLowerCase().trim();
+            const instFile = (inst.filename || '').toLowerCase().trim();
+            const cleanInstId = clean(instModId);
+            const cleanInstName = clean(instName);
+
+            // 1. Přesná shoda ID / slug
+            if (cleanSlug && (cleanSlug === cleanInstId || catSlug === instModId)) {
+                return inst;
+            }
+
+            // 2. Přesná shoda názvu módu
+            if (cleanTitle && (cleanTitle === cleanInstName || catTitle === instName)) {
+                return inst;
+            }
+
+            // 3. Shoda začátku názvu souboru (např. sodium-fabric-0.6.6 vs slug sodium)
+            if (catSlug && catSlug.length >= 3) {
+                if (instFile.startsWith(catSlug + '-') || instFile.startsWith(catSlug + '_') || instFile.startsWith(catSlug + '.')) {
+                    return inst;
+                }
+            }
+
+            // 4. Fallback na cleanName
+            if (cleanSlug && cleanSlug.length >= 4 && cleanInstName.startsWith(cleanSlug)) {
+                return inst;
+            }
+        }
+        return null;
+    }
+
+    let lastLoadedCatalogMods = [];
+
     async function loadModrinthMods() {
         if (!modsCardsList) return;
         const typeLabels = { mod: 'mody', resourcepack: 'resource packy', shader: 'shadery' };
@@ -1859,6 +1940,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         modsCardsList.innerHTML = `<div class="mods-loading">Načítám ${label} z katalogu Modrinth...</div>`;
 
         try {
+            // Zajistíme, že máme načtené aktuální módy profilu pro přesnou detekci stavu stažení
+            const profId = selectedModsProfileId || currentConfig.activeProfileId;
+            if (profId && (!currentProfileModsList || currentProfileModsList.length === 0)) {
+                try {
+                    const pRes = await window.api.getProfileMods(profId);
+                    if (pRes && pRes.success) {
+                        currentProfileModsList = pRes.mods || [];
+                    }
+                } catch (_) {}
+            }
+
             const mods = await window.api.searchModrinth(
                 currentModFilter.query,
                 currentModFilter.version,
@@ -1867,6 +1959,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentModFilter.projectType || 'mod'
             );
 
+            lastLoadedCatalogMods = mods || [];
             renderModCards(mods);
         } catch (e) {
             modsCardsList.innerHTML = `<div class="mods-loading">Nepodařilo se načíst data z katalogu.</div>`;
@@ -1883,10 +1976,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         const installedList = currentConfig.installedMods || [];
 
         modsCardsList.innerHTML = mods.map(m => {
-            const isInstalled = installedList.includes(m.id) || m.installed;
+            const installedMod = findInstalledModForCatalog(m, currentProfileModsList);
+            const isInstalled = !!installedMod || installedList.includes(m.id) || m.installed;
+            const currentVer = installedMod ? (installedMod.version || '') : '';
+            const latestVer = m.latest_version_number || '';
+            const hasUpdate = isInstalled && isModVersionNewer(latestVer, currentVer);
+
             const downloadsFormatted = m.downloads > 1000000
                 ? (m.downloads / 1000000).toFixed(1) + 'M'
                 : (m.downloads / 1000).toFixed(0) + 'k';
+
+            let btnHtml = '';
+            let statusPill = '';
+
+            if (hasUpdate) {
+                statusPill = `<span class="mod-status-pill mod-status-update">⬆ Nová verze v${escapeHtml(latestVer)}</span>`;
+                btnHtml = `
+                    <button class="mc-btn btn-update-mod btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="update" data-old-file="${escapeHtml(installedMod?.filename || '')}" title="Aktualizovat na novější verzi v${escapeHtml(latestVer)}">
+                        <span>⬆ AKTUALIZOVAT</span>
+                    </button>
+                `;
+            } else if (isInstalled) {
+                statusPill = `<span class="mod-status-pill mod-status-installed">✓ Staženo${currentVer ? ` (v${escapeHtml(currentVer)})` : ''}</span>`;
+                btnHtml = `
+                    <button class="mc-btn btn-download-success btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="installed" title="Již staženo v profilu">
+                        <span>✓ STAŽENO</span>
+                    </button>
+                `;
+            } else {
+                btnHtml = `
+                    <button class="mc-btn mc-btn-green btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="download" title="Stáhnout do profilu">
+                        <span>📥 STÁHNOUT</span>
+                    </button>
+                `;
+            }
 
             return `
                 <div class="mod-card-row">
@@ -1894,6 +2017,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="mod-info-area">
                         <div class="mod-name-row">
                             <span class="mod-name-title">${escapeHtml(m.title)}</span>
+                            ${statusPill}
                             <span class="mod-author-lbl">od ${escapeHtml(m.author)}</span>
                         </div>
                         <div class="mod-desc-text">${escapeHtml(m.description)}</div>
@@ -1903,25 +2027,32 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <span>Verze: ${currentModFilter.version}</span>
                         </div>
                     </div>
-                    <button class="mc-btn ${isInstalled ? 'btn-download-success' : 'mc-btn-green'} btn-toggle-mod" data-mod="${escapeHtml(m.id)}">
-                        <span>${isInstalled ? '✓ NAINSTALOVÁNO' : '📥 STÁHNOUT'}</span>
-                    </button>
+                    ${btnHtml}
                 </div>
             `;
         }).join('');
 
-        // Bind interactive download with real feedback animations
+        // Bind interactive download and update buttons
         modsCardsList.querySelectorAll('.btn-toggle-mod').forEach(btn => {
             btn.addEventListener('click', async () => {
+                const action = btn.dataset.action;
                 const modId = btn.dataset.mod;
+                const oldFile = btn.dataset.oldFile;
                 const modItem = (mods || []).find(x => x.id === modId);
                 const title = modItem ? modItem.title : modId;
                 const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
 
+                if (action === 'installed') {
+                    showToast(`Mód ${title} je již v profilu stažen.`, 'info');
+                    return;
+                }
+
+                const isUpdate = action === 'update';
+
                 // Micro-animation: Button spinner state
                 btn.disabled = true;
                 btn.classList.add('btn-downloading');
-                btn.innerHTML = `<span class="spinner-inline">⏳</span> <span>Stahuji...</span>`;
+                btn.innerHTML = `<span class="spinner-inline">⏳</span> <span>${isUpdate ? 'Aktualizuji...' : 'Stahuji...'}</span>`;
 
                 try {
                     const res = await window.api.downloadModOrPack({
@@ -1930,20 +2061,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                         projectType: currentModFilter.projectType || 'mod',
                         version: currentModFilter.version,
                         loader: currentModFilter.loader,
-                        profileId: targetProfileId
+                        profileId: targetProfileId,
+                        oldFilename: oldFile || null
                     });
 
                     if (res && res.success) {
-                        btn.classList.remove('btn-downloading');
+                        btn.classList.remove('btn-downloading', 'btn-update-mod', 'mc-btn-green', 'mc-btn-primary');
                         btn.classList.add('btn-download-success');
+                        btn.dataset.action = 'installed';
                         btn.innerHTML = `<span class="checkmark-anim">✓</span> <span>STAŽENO</span>`;
 
                         const sub = res.subfolder || 'mods';
-                        showToast(`✓ ${title} byl úspěšně stažen do ${sub}/!`, 'success');
-                        appendLog(`[DOWNLOAD] Soubor ${res.filename} stažen do složky ${sub}/ v profilu ${targetProfileId}.`);
+                        const toastMsg = isUpdate
+                            ? `✓ ${title} byl úspěšně aktualizován na novou verzi!`
+                            : `✓ ${title} byl úspěšně stažen do ${sub}/!`;
+                        showToast(toastMsg, 'success');
+                        appendLog(`[DOWNLOAD] ${title} (${res.filename}) ${isUpdate ? 'aktualizován' : 'stažen'} do ${sub}/ v profilu ${targetProfileId}.`);
 
                         const updatedList = await window.api.toggleMod(modId);
                         currentConfig.installedMods = updatedList;
+
+                        // Synchronizujeme módy profilu
                         await loadProfileMods(targetProfileId);
                         await checkWardenProbe();
                     } else {
@@ -1958,7 +2096,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } finally {
                     setTimeout(() => {
                         btn.disabled = false;
-                    }, 1200);
+                    }, 1000);
                 }
             });
         });
@@ -2084,7 +2222,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // Organické vlnění pláště v jemném vánku při stání
                         player.cape.rotation.x = 0.28 + 0.11 * Math.sin(t) + 0.04 * Math.sin(t * 2.3);
                         player.cape.rotation.z = 0.04 * Math.sin(t * 0.9);
-                        player.cape.rotation.y = 0.02 * Math.cos(t * 1.1);
+                        player.cape.rotation.y = Math.PI + 0.02 * Math.cos(t * 1.1);
                     }
                 }
             }
@@ -2108,7 +2246,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // Aerodynamické plachtění / vlání pláště za letícím hráčem
                         player.cape.rotation.x = 1.18 + 0.16 * Math.sin(t * 2) + 0.05 * Math.sin(t * 4.3);
                         player.cape.rotation.z = 0.05 * Math.sin(t * 1.5);
-                        player.cape.rotation.y = 0.03 * Math.cos(t * 1.8);
+                        player.cape.rotation.y = Math.PI + 0.03 * Math.cos(t * 1.8);
                     }
                 }
             }
@@ -2312,42 +2450,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             skinViewer.controls.enablePan = false;
             skinViewer.animation = createCapeIdleAnimation() || new window.skinview3d.IdleAnimation();
 
-            // 3D Toolbar Buttons
-            const btnFront = document.getElementById('btn3DFrontView');
-            const btnBack = document.getElementById('btn3DBackView');
+            // 3D Toolbar Buttons: [ 🔄 360° ] [ 🧥 Plášť ] [ 🚀 Létání ]
             const btnRotate = document.getElementById('btn3DRotateToggle');
             const btnElytra = document.getElementById('btn3DElytraToggle');
             const btnFlying = document.getElementById('btn3DFlyingToggle');
             const labelElytra = document.getElementById('label3DElytra');
             const labelFlying = document.getElementById('label3DFlying');
-
-            if (btnFront) {
-                btnFront.onclick = () => {
-                    if (!skinViewer) return;
-                    isAutoRotateActive = false;
-                    skinViewer.autoRotate = false;
-                    if (btnRotate) btnRotate.classList.remove('active');
-                    skinViewer.resetCameraPose();
-                    skinViewer.playerWrapper.rotation.set(0, 0, 0);
-                    skinViewer.playerObject.rotation.set(0, 0, 0);
-                    btnFront.classList.add('active');
-                    if (btnBack) btnBack.classList.remove('active');
-                };
-            }
-
-            if (btnBack) {
-                btnBack.onclick = () => {
-                    if (!skinViewer) return;
-                    isAutoRotateActive = false;
-                    skinViewer.autoRotate = false;
-                    if (btnRotate) btnRotate.classList.remove('active');
-                    skinViewer.resetCameraPose();
-                    skinViewer.playerWrapper.rotation.set(0, Math.PI, 0);
-                    skinViewer.playerObject.rotation.set(0, 0, 0);
-                    btnBack.classList.add('active');
-                    if (btnFront) btnFront.classList.remove('active');
-                };
-            }
 
             if (btnRotate) {
                 btnRotate.onclick = () => {
@@ -2356,10 +2464,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     skinViewer.autoRotate = isAutoRotateActive;
                     skinViewer.autoRotateSpeed = 1.8;
                     btnRotate.classList.toggle('active', isAutoRotateActive);
-                    if (isAutoRotateActive) {
-                        if (btnFront) btnFront.classList.remove('active');
-                        if (btnBack) btnBack.classList.remove('active');
-                    }
                 };
             }
 
@@ -2368,8 +2472,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!skinViewer) return;
                     isBackEquipmentElytra = !isBackEquipmentElytra;
                     skinViewer.playerObject.backEquipment = isBackEquipmentElytra ? 'elytra' : 'cape';
-                    if (labelElytra) labelElytra.textContent = isBackEquipmentElytra ? '🧥 Plášť' : '🪽 Elytra';
-                    btnElytra.classList.toggle('active', isBackEquipmentElytra);
+                    if (labelElytra) labelElytra.textContent = isBackEquipmentElytra ? '🪽 Elytra' : '🧥 Plášť';
+                    btnElytra.classList.toggle('active', !isBackEquipmentElytra);
                 };
             }
 
@@ -2559,9 +2663,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // V Minecraft 64x32 texturách je zadní strana pláště na souřadnicích (1, 1, 10, 16)
+            // V Minecraft 64x32 texturách je vnější lícová strana pláště (back face) na souřadnicích (12, 1, 10, 16)
+            // (souřadnice 1, 1 je vnitřní rubová strana přivrácená k tělu hráče)
             const scale = (img.naturalWidth || 64) / 64;
-            const sx = 1 * scale;
+            const sx = 12 * scale;
             const sy = 1 * scale;
             const sw = 10 * scale;
             const sh = 16 * scale;
