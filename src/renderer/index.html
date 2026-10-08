@@ -132,8 +132,11 @@
                         <div class="hero-character-stage">
                             <div class="stage-bg-overlay"></div>
                             <div class="stage-character">
-                                <img src="https://minotar.net/armor/body/Steve/180.png" alt="Skin" id="heroSkinImg"
-                                    class="stage-skin">
+                                <div class="stage-skin-wrapper" id="heroSkinWrapper" title="3D Skin – Otáčej tažením myši">
+                                    <canvas id="heroSkinCanvas3D" class="hero-3d-canvas" width="160" height="220"></canvas>
+                                    <img src="https://minotar.net/armor/body/Steve/180.png" alt="Skin" id="heroSkinImg"
+                                        class="stage-skin" style="display: none;">
+                                </div>
                                 <div class="stage-nick-pill" id="stageNickPill">
                                     <span id="heroNickLabel">Steve</span>
                                     <button class="stage-edit-btn" id="btnEditNickFromHero"

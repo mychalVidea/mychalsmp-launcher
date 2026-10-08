@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Hero Stage
     const heroSkinImg = document.getElementById('heroSkinImg');
+    const heroSkinCanvas3D = document.getElementById('heroSkinCanvas3D');
     const heroNickLabel = document.getElementById('heroNickLabel');
     const btnEditNickFromHero = document.getElementById('btnEditNickFromHero');
     const btnManageProfiles = document.getElementById('btnManageProfiles');
@@ -112,6 +113,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderServersFullTab();
         } else if (tabId === 'character') {
             updateCharacterTabSkinPreview();
+        }
+
+        if (heroSkinViewer) {
+            heroSkinViewer.renderPaused = (tabId !== 'play');
+            if (tabId === 'play') {
+                heroSkinViewer.setSize(160, 220);
+                scheduleHeroReturn();
+            } else {
+                cancelHeroReturn();
+            }
+        }
+        if (skinViewer) {
+            skinViewer.renderPaused = (tabId !== 'character');
+            if (tabId === 'character') {
+                skinViewer.setSize(220, 310);
+            }
         }
     }
 
@@ -252,6 +269,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             detectAvailableJavas();
             checkWardenProbe();
             initSkinViewer3D();
+            initHeroSkinViewer3D();
             checkLauncherUpdates(true);
         } catch (e) {
             console.error('Chyba při načítání konfigurace:', e);
@@ -317,21 +335,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (greetingAvatar) greetingAvatar.src = avatarUrl;
         if (skinCaption) skinCaption.textContent = `3D Náhled: ${name}`;
 
-        const effectiveCape = isMicrosoft
-            ? null // handled by loadMojangCapes
-            : (currentConfig.customCapePath ? (currentConfig.customCapePath.startsWith('http') || currentConfig.customCapePath.startsWith('file://') ? currentConfig.customCapePath : `file://${currentConfig.customCapePath}`) : null);
+        const effectiveCape = getEffectiveCape();
 
-        if (effectiveSkin) {
-            const skinSrc = (effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://'))
-                ? effectiveSkin
-                : `file://${effectiveSkin}`;
-            drawSkinToCanvas(skinSrc, isSlim);
-            updateSkinViewer3D(skinSrc, effectiveCape, isSlim);
-        } else {
-            const minotarSkin = `https://minotar.net/skin/${encodeURIComponent(name)}`;
-            drawSkinToCanvas(minotarSkin, isSlim);
-            updateSkinViewer3D(minotarSkin, effectiveCape, isSlim);
-        }
+        const skinSrc = effectiveSkin
+            ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
+            : `https://minotar.net/skin/${encodeURIComponent(name)}`;
+
+        drawSkinToCanvas(skinSrc, isSlim);
+        updateSkinViewer3D(skinSrc, effectiveCape, isSlim);
+        updateHeroSkinViewer3D(skinSrc, effectiveCape, isSlim);
     }
 
     // ── Version Statuses ────────────────────────────────────────────────────
@@ -1288,11 +1300,267 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── 3D Skin Viewer (skinview3d) Integration ────────────────────────────
     let skinViewer = null;
+    let heroSkinViewer = null;
+    let activeMojangCapeUrl = null;
+    let defaultServerCapeDataUrl = null;
     let isBackEquipmentElytra = false;
     let isFlyingAnimationActive = false;
     let isAutoRotateActive = false;
     let lastLoadedSkinUrl = null;
     let lastLoadedCapeUrl = null;
+
+    // Smooth return physics & drag controls for hero card
+    const DEFAULT_HERO_ROT_Y = -0.30; // ~17° default angle: front, 3D depth, and cape are visible
+    const DEFAULT_HERO_ROT_X = 0;
+    const HERO_RETURN_DELAY_MS = 1800; // 1.8s delay after releasing mouse before returning
+    let isDraggingHero = false;
+    let startPointerX = 0;
+    let startPointerY = 0;
+    let startHeroRotY = DEFAULT_HERO_ROT_Y;
+    let startHeroRotX = DEFAULT_HERO_ROT_X;
+    let heroReturnTimeout = null;
+    let heroReturnAnimId = null;
+
+    function cancelHeroReturn() {
+        if (heroReturnTimeout) {
+            clearTimeout(heroReturnTimeout);
+            heroReturnTimeout = null;
+        }
+        if (heroReturnAnimId) {
+            cancelAnimationFrame(heroReturnAnimId);
+            heroReturnAnimId = null;
+        }
+    }
+
+    function scheduleHeroReturn() {
+        cancelHeroReturn();
+        heroReturnTimeout = setTimeout(() => {
+            animateHeroSmoothReturn();
+        }, HERO_RETURN_DELAY_MS);
+    }
+
+    function animateHeroSmoothReturn() {
+        if (!heroSkinViewer || isDraggingHero) return;
+
+        const currentY = heroSkinViewer.playerWrapper.rotation.y;
+        const currentX = heroSkinViewer.playerWrapper.rotation.x;
+
+        // Shortest angular difference around circle [-PI, PI]
+        const diffY = ((DEFAULT_HERO_ROT_Y - currentY + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+        const diffX = DEFAULT_HERO_ROT_X - currentX;
+
+        // Threshold check to finish smoothly
+        if (Math.abs(diffY) < 0.0015 && Math.abs(diffX) < 0.0015) {
+            heroSkinViewer.playerWrapper.rotation.y = DEFAULT_HERO_ROT_Y;
+            heroSkinViewer.playerWrapper.rotation.x = DEFAULT_HERO_ROT_X;
+            heroReturnAnimId = null;
+            return;
+        }
+
+        // Smooth ease-out lerp (0.065 damping factor)
+        heroSkinViewer.playerWrapper.rotation.y += diffY * 0.065;
+        heroSkinViewer.playerWrapper.rotation.x += diffX * 0.065;
+
+        heroReturnAnimId = requestAnimationFrame(animateHeroSmoothReturn);
+    }
+
+    /**
+     * Generates the official MYCHAL SMP server cape texture as a data URI.
+     * Dimensions: 64x32 Minecraft 1.8+ format.
+     */
+    function getDefaultServerCapeUrl() {
+        if (defaultServerCapeDataUrl) return defaultServerCapeDataUrl;
+        try {
+            const c = document.createElement('canvas');
+            c.width = 64;
+            c.height = 32;
+            const ctx = c.getContext('2d');
+            if (!ctx) return null;
+
+            ctx.clearRect(0, 0, 64, 32);
+
+            // Edges & Top/Bottom border (#0a67e5)
+            ctx.fillStyle = '#0a67e5';
+            ctx.fillRect(1, 0, 10, 1);  // top
+            ctx.fillRect(11, 0, 10, 1); // bottom
+            ctx.fillRect(0, 1, 1, 16);  // left edge
+            ctx.fillRect(11, 1, 1, 16); // right edge
+
+            // Front of cape (facing player's back: 1, 1, 10, 16)
+            ctx.fillStyle = '#0d111e';
+            ctx.fillRect(1, 1, 10, 16);
+            ctx.fillStyle = '#0a67e5';
+            ctx.fillRect(1, 1, 10, 1);
+            ctx.fillRect(1, 16, 10, 1);
+
+            // Back of cape (visible from behind: 12, 1, 10, 16)
+            ctx.fillStyle = '#0e1322';
+            ctx.fillRect(12, 1, 10, 16);
+
+            // Outer border in brand blue #0a67e5
+            ctx.fillStyle = '#0a67e5';
+            ctx.fillRect(12, 1, 10, 1);  // top
+            ctx.fillRect(12, 16, 10, 1); // bottom
+            ctx.fillRect(12, 1, 1, 16);  // left
+            ctx.fillRect(21, 1, 1, 16);  // right
+
+            // Beacon Base / Pedestal
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(13, 13, 8, 3);
+            ctx.fillStyle = '#2563eb';
+            ctx.fillRect(14, 11, 6, 2);
+
+            // Beacon Crystal / Diamond glow
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillRect(16, 4, 2, 6);
+            ctx.fillRect(15, 5, 4, 4);
+
+            // Bright white center core
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(16, 6, 2, 2);
+
+            defaultServerCapeDataUrl = c.toDataURL('image/png');
+            return defaultServerCapeDataUrl;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
+     * Resolves the effective cape URL:
+     * 1. Active official Mojang cape (if Microsoft auth)
+     * 2. Custom cape path (if offline custom file)
+     * 3. Fallback official MYCHAL SMP server cape
+     */
+    function getEffectiveCape() {
+        const isMicrosoft = currentConfig.authType === 'microsoft';
+        if (isMicrosoft) {
+            if (activeMojangCapeUrl) return activeMojangCapeUrl;
+            const capes = currentConfig.microsoftAccount?.capes || [];
+            const active = capes.find(c => c.state === 'ACTIVE');
+            if (active) {
+                activeMojangCapeUrl = active.url;
+                return active.url;
+            }
+        } else {
+            if (currentConfig.customCapePath && currentConfig.customCapePath !== 'none') {
+                return (currentConfig.customCapePath.startsWith('http') || currentConfig.customCapePath.startsWith('file://'))
+                    ? currentConfig.customCapePath
+                    : `file://${currentConfig.customCapePath}`;
+            }
+        }
+        return getDefaultServerCapeUrl();
+    }
+
+    /**
+     * Initializes the 3D skin viewer on the main hero dashboard card.
+     */
+    function initHeroSkinViewer3D() {
+        const canvas = document.getElementById('heroSkinCanvas3D');
+        if (!canvas || !window.skinview3d) return;
+
+        try {
+            cancelHeroReturn();
+            if (heroSkinViewer) {
+                heroSkinViewer.dispose();
+                heroSkinViewer = null;
+            }
+
+            heroSkinViewer = new window.skinview3d.SkinViewer({
+                canvas: canvas,
+                width: 160,
+                height: 220,
+                model: currentConfig.customSkinVariant === 'slim' ? 'slim' : 'default'
+            });
+
+            heroSkinViewer.camera.position.set(0, 0, 70);
+            heroSkinViewer.zoom = 0.95;
+            heroSkinViewer.fov = 48;
+            heroSkinViewer.autoRotate = false; // Strictly no auto-rotation
+            heroSkinViewer.controls.enabled = false; // Direct smooth drag on playerWrapper
+            heroSkinViewer.animation = new window.skinview3d.IdleAnimation();
+
+            // Set default resting pose
+            heroSkinViewer.playerWrapper.rotation.set(DEFAULT_HERO_ROT_X, DEFAULT_HERO_ROT_Y, 0);
+
+            // Drag to rotate with pointer events & smooth auto-return
+            canvas.style.cursor = 'grab';
+
+            canvas.onpointerdown = (e) => {
+                if (!heroSkinViewer) return;
+                isDraggingHero = true;
+                cancelHeroReturn();
+
+                startPointerX = e.clientX;
+                startPointerY = e.clientY;
+                startHeroRotY = heroSkinViewer.playerWrapper.rotation.y;
+                startHeroRotX = heroSkinViewer.playerWrapper.rotation.x;
+
+                canvas.style.cursor = 'grabbing';
+                try {
+                    canvas.setPointerCapture(e.pointerId);
+                } catch (_) {}
+            };
+
+            canvas.onpointermove = (e) => {
+                if (!isDraggingHero || !heroSkinViewer) return;
+                cancelHeroReturn();
+
+                const dx = e.clientX - startPointerX;
+                const dy = e.clientY - startPointerY;
+
+                // Horizontal rotation: 0.014 rad per pixel
+                heroSkinViewer.playerWrapper.rotation.y = startHeroRotY + dx * 0.014;
+
+                // Subtle vertical tilt clamped between -0.25 and 0.25 rad
+                const rawX = startHeroRotX + dy * 0.008;
+                heroSkinViewer.playerWrapper.rotation.x = Math.max(-0.25, Math.min(0.25, rawX));
+            };
+
+            const onPointerEnd = (e) => {
+                if (!isDraggingHero) return;
+                isDraggingHero = false;
+                canvas.style.cursor = 'grab';
+                try {
+                    if (e.pointerId && canvas.hasPointerCapture(e.pointerId)) {
+                        canvas.releasePointerCapture(e.pointerId);
+                    }
+                } catch (_) {}
+
+                scheduleHeroReturn();
+            };
+
+            canvas.onpointerup = onPointerEnd;
+            canvas.onpointercancel = onPointerEnd;
+        } catch (e) {
+            console.warn('[HERO 3D] Inicializace hero 3D prohlížeče selhala:', e);
+            if (heroSkinImg) heroSkinImg.style.display = 'block';
+        }
+    }
+
+    /**
+     * Updates the 3D model, skin, and cape in the hero dashboard viewer.
+     */
+    function updateHeroSkinViewer3D(skinUrl, capeUrl, isSlim = false) {
+        if (!heroSkinViewer) {
+            initHeroSkinViewer3D();
+        }
+        if (!heroSkinViewer) return;
+
+        try {
+            if (skinUrl) {
+                heroSkinViewer.loadSkin(skinUrl, { model: isSlim ? 'slim' : 'default' });
+            }
+            const capeToLoad = capeUrl !== undefined ? capeUrl : getEffectiveCape();
+            if (capeToLoad) {
+                heroSkinViewer.loadCape(capeToLoad, { backEquipment: 'cape' });
+            } else {
+                heroSkinViewer.loadCape(null);
+            }
+        } catch (e) {
+            console.warn('[HERO 3D] Chyba při aktualizaci 3D modelu na dashboardu:', e);
+        }
+    }
 
     function initSkinViewer3D() {
         const canvas3D = document.getElementById('skinCanvas3D');
@@ -1432,7 +1700,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         const isMicrosoft = currentConfig.authType === 'microsoft';
         const effectiveSkin = currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
-        const effectiveCape = isMicrosoft ? null : (currentConfig.customCapePath ? (currentConfig.customCapePath.startsWith('http') || currentConfig.customCapePath.startsWith('file://') ? currentConfig.customCapePath : `file://${currentConfig.customCapePath}`) : null);
+        const effectiveCape = getEffectiveCape();
         const isSlim = currentConfig.customSkinVariant === 'slim';
         const name = (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.username : currentConfig.username) || 'Steve';
 
@@ -1441,6 +1709,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             : `https://minotar.net/skin/${encodeURIComponent(name)}`;
 
         updateSkinViewer3D(skinSrc, effectiveCape, isSlim);
+        updateHeroSkinViewer3D(skinSrc, effectiveCape, isSlim);
         drawSkinToCanvas(skinSrc, isSlim);
     }
 
@@ -1567,10 +1836,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (activeCapeFound) {
                         equippedBadge.style.display = 'block';
                         equippedName.textContent = activeCapeFound.alias || 'Aktivní plášť';
+                        activeMojangCapeUrl = activeCapeFound.url;
                         updateSkinViewer3D(lastLoadedSkinUrl, activeCapeFound.url, currentConfig.customSkinVariant === 'slim');
+                        updateHeroSkinViewer3D(lastLoadedSkinUrl, activeCapeFound.url, currentConfig.customSkinVariant === 'slim');
                     } else {
                         equippedBadge.style.display = 'none';
-                        updateSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
+                        activeMojangCapeUrl = null;
+                        const fallbackCape = getDefaultServerCapeUrl();
+                        updateSkinViewer3D(lastLoadedSkinUrl, fallbackCape, currentConfig.customSkinVariant === 'slim');
+                        updateHeroSkinViewer3D(lastLoadedSkinUrl, fallbackCape, currentConfig.customSkinVariant === 'slim');
                     }
                 }
 
@@ -1608,6 +1882,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!currentConfig.customSkinPath && currentConfig.authType !== 'microsoft') {
                     const minotarSkin = `https://minotar.net/skin/${encodeURIComponent(val)}`;
                     drawSkinToCanvas(minotarSkin, currentConfig.customSkinVariant === 'slim');
+                    updateSkinViewer3D(minotarSkin, getEffectiveCape(), currentConfig.customSkinVariant === 'slim');
+                    updateHeroSkinViewer3D(minotarSkin, getEffectiveCape(), currentConfig.customSkinVariant === 'slim');
                 }
             }, 300);
         });
@@ -1623,6 +1899,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnVariantSlim.classList.remove('active');
             await window.api.saveOfflineSkin({ variant: 'classic' });
             if (skinViewer) skinViewer.playerObject.skin.modelType = 'default';
+            if (heroSkinViewer) heroSkinViewer.playerObject.skin.modelType = 'default';
             updateCharacterTabSkinPreview();
         });
         btnVariantSlim.addEventListener('click', async () => {
@@ -1631,6 +1908,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnVariantClassic.classList.remove('active');
             await window.api.saveOfflineSkin({ variant: 'slim' });
             if (skinViewer) skinViewer.playerObject.skin.modelType = 'slim';
+            if (heroSkinViewer) heroSkinViewer.playerObject.skin.modelType = 'slim';
             updateCharacterTabSkinPreview();
         });
     }
