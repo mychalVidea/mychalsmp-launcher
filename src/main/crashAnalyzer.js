@@ -165,24 +165,38 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
     }
 
     // ── Diagnostic Rule 3: Unsupported Java Class Version ───────────────────
+    const classVerMatch = combinedText.match(/class file version (\d+)(?:\.\d+)?.*?(?:only recognizes|up to).*?(\d+)(?:\.\d+)?/i) ||
+                          combinedText.match(/class file version (\d+)(?:\.\d+)?/i);
     if (
         /UnsupportedClassVersionError/i.test(combinedText) ||
         /has been compiled by a more recent version of the Java Runtime/i.test(combinedText) ||
         /class file version (65|66|67|68|69)\.0/i.test(combinedText)
     ) {
+        let reqMajor = 25;
+        let currMajor = 21;
+        if (classVerMatch && classVerMatch[1]) {
+            const cVer = parseInt(classVerMatch[1], 10);
+            reqMajor = Math.max(8, cVer - 44);
+            if (classVerMatch[2]) {
+                const curVer = parseInt(classVerMatch[2], 10);
+                currMajor = Math.max(8, curVer - 44);
+            }
+        }
+
         return {
             hasCrash: true,
             exitCode,
             reportPath,
-            title: 'Nekompatibilní nebo zastaralá verze Java',
+            title: `Nekompatibilní nebo zastaralá Java (Vyžadována Java ${reqMajor})`,
             severity: 'critical',
-            description: 'Minecraft nebo zvolený modloader vyžaduje novější verzi Java Runtime (Java 21 nebo novější pro moderní verze 26.x). Spuštěný Java proces je zastaralý.',
-            recommendation: 'Nechej launcher automaticky zdetekovat a nastavit moderní Javu 21/25.',
+            description: `Minecraft 26.x byl zkompilován pro Java ${reqMajor} (verze tříd ${reqMajor + 44}.0), avšak spuštěný proces běží pod starší Java ${currMajor}.`,
+            recommendation: `Launcher automaticky stáhne a nastaví oficiální 64-bitové běhové prostředí Java ${reqMajor} (Adoptium Temurin JRE).`,
             logExcerpt,
             autoFix: {
                 id: 'AUTO_DETECT_JAVA',
-                label: '☕ Automaticky vybrat nejnovější systémovou Javu',
-                description: 'Prohledá systém a nastaví doporučený 64-bitový Java 21+ runtime.'
+                label: `☕ Automaticky nastavit nebo stáhnout Javu ${reqMajor}`,
+                description: `Zkontroluje systém a nastaví nebo stáhne kompatibilní 64-bitovou Javu ${reqMajor}.`,
+                targetJavaVersion: reqMajor
             }
         };
     }
@@ -362,7 +376,7 @@ function downloadFile(url, destPath) {
 /**
  * Executes the automatic fix action
  */
-async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJavaPathFn) {
+async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJavaPathFn, downloadJavaFn) {
     if (!autoFix || !autoFix.id) {
         throw new Error('Není definována žádná akce opravy.');
     }
@@ -434,23 +448,44 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
         }
 
         case 'AUTO_DETECT_JAVA': {
+            const targetVer = (autoFix && autoFix.targetJavaVersion) || 25;
+            // 1. Zkusit najít kompatibilní systémovou Javu na počítači
             if (detectJavaPathFn) {
-                const detected = detectJavaPathFn();
+                const detected = detectJavaPathFn(targetVer);
                 if (detected && fs.existsSync(detected)) {
                     config.javaPath = detected;
                     if (saveConfigFn) saveConfigFn({ javaPath: detected });
                     return {
                         success: true,
-                        message: `Nastavena detekovaná systémová Java: ${detected}`,
+                        message: `Byla nalezena a nastavena systémová Java ${targetVer}+: ${detected}`,
                         updatedConfig: { javaPath: detected }
                     };
                 }
             }
+
+            // 2. Pokud v systému není, automaticky stáhnout oficiální OpenJDK z Adoptium
+            if (downloadJavaFn) {
+                try {
+                    const downloaded = await downloadJavaFn(targetVer);
+                    if (downloaded && fs.existsSync(downloaded)) {
+                        config.javaPath = downloaded;
+                        if (saveConfigFn) saveConfigFn({ javaPath: downloaded });
+                        return {
+                            success: true,
+                            message: `Byla úspěšně stažena a nastavena oficiální Java ${targetVer} (Adoptium JRE). Můžeš spustit hru!`,
+                            updatedConfig: { javaPath: downloaded }
+                        };
+                    }
+                } catch (e) {
+                    console.error('Chyba při stahování Javy v crash fixu:', e);
+                }
+            }
+
             config.javaPath = '';
             if (saveConfigFn) saveConfigFn({ javaPath: '' });
             return {
                 success: true,
-                message: 'Cesta k Javě byla resetována na výchozí automatickou detekci systému.',
+                message: `Cesta k Javě byla resetována. Při příštím spuštění launcher automaticky stáhne Javu ${targetVer}.`,
                 updatedConfig: { javaPath: '' }
             };
         }

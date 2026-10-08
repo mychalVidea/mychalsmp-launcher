@@ -581,12 +581,60 @@ Handler.prototype.getAssets = async function() {
 
 
 /**
- * Tests if a java binary executable runs properly.
+ * Extracts the major version of a Java runtime executable (e.g. 25, 21, 17, 8).
  */
-function testJavaExecutable(binPath) {
+function getJavaMajorVersion(binPath) {
+    if (!binPath) return 0;
+    try {
+        const out = execSync(`"${binPath}" -version 2>&1`, { timeout: 3500, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+        const match = out.match(/(?:version|Runtime Environment)\s+"?(\d+)(?:\.(\d+))?/i);
+        if (match) {
+            const v1 = parseInt(match[1], 10);
+            if (v1 === 1 && match[2]) {
+                return parseInt(match[2], 10);
+            }
+            return v1;
+        }
+    } catch (e) {}
+    return 0;
+}
+
+/**
+ * Determines the minimum required Java major version for a given Minecraft version.
+ * Modern 26.x requires Java 25 (class file version 69.0).
+ */
+function getRequiredJavaVersion(gameVersion) {
+    if (!gameVersion) return 25;
+    const str = String(gameVersion).trim();
+    if (/^26\./.test(str) || /^26[a-z0-9_]*/i.test(str)) {
+        return 25;
+    }
+    if (/^1\.(2[1-9]|20\.[5-9])/.test(str)) {
+        return 21;
+    }
+    if (/^1\.(1[89]|20\.[0-4])/.test(str)) {
+        return 17;
+    }
+    if (/^1\.(1[67])/.test(str)) {
+        return 16;
+    }
+    if (/^1\./.test(str)) {
+        return 8;
+    }
+    return 25;
+}
+
+/**
+ * Tests if a java binary executable runs properly and meets an optional minimum major version.
+ */
+function testJavaExecutable(binPath, minMajor = 0) {
     if (!binPath) return false;
     try {
-        execSync(`"${binPath}" -version`, { timeout: 3500, stdio: 'pipe' });
+        execSync(`"${binPath}" -version`, { timeout: 3500, stdio: ['ignore', 'pipe', 'pipe'] });
+        if (minMajor > 0) {
+            const major = getJavaMajorVersion(binPath);
+            return major >= minMajor;
+        }
         return true;
     } catch (e) {
         return false;
@@ -594,24 +642,24 @@ function testJavaExecutable(binPath) {
 }
 
 /**
- * Downloads and installs OpenJDK 21 Temurin JRE from the official Adoptium API.
- * Solves the missing Java issue (e.g. "javaw -version failed") completely automatically.
+ * Downloads and installs OpenJDK Temurin JRE of specified major version (default: 25) from Adoptium API.
+ * Solves class version mismatch errors (e.g. UnsupportedClassVersionError 69.0) completely automatically.
  */
-async function downloadAndInstallJava21(onLog = console.log, onProgress = null) {
+async function downloadAndInstallJava(targetVersion = 25, onLog = console.log, onProgress = null) {
     const runtimeBase = path.join(BASE_DIR, 'runtime');
-    const javaDir = path.join(runtimeBase, 'java-21');
+    const javaDir = path.join(runtimeBase, `java-${targetVersion}`);
     const isWin = process.platform === 'win32';
     const osType = isWin ? 'windows' : (process.platform === 'darwin' ? 'mac' : 'linux');
     const arch = process.arch === 'arm64' ? 'aarch64' : 'x64';
 
     fs.mkdirSync(runtimeBase, { recursive: true });
 
-    onLog(`[JAVA] V systému nebyla nalezena Java 21+. Automaticky stahuji oficiální OpenJDK 21 Runtime (${osType}-${arch})...`);
+    onLog(`[JAVA] Automaticky stahuji oficiální OpenJDK ${targetVersion} Runtime (${osType}-${arch})...`);
     if (onProgress) {
-        onProgress({ percent: 5, text: 'Stahování běhového prostředí Java 21 z Adoptium...', status: 'Stahování Java 21...' });
+        onProgress({ percent: 5, text: `Stahování běhového prostředí Java ${targetVersion} z Adoptium...`, status: `Stahování Java ${targetVersion}...` });
     }
 
-    const apiUrl = `https://api.adoptium.net/v3/binary/latest/21/ga/${osType}/${arch}/jre/hotspot/normal/eclipse`;
+    const apiUrl = `https://api.adoptium.net/v3/binary/latest/${targetVersion}/ga/${osType}/${arch}/jre/hotspot/normal/eclipse`;
 
     const resp = await fetch(apiUrl, {
         headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' },
@@ -619,11 +667,11 @@ async function downloadAndInstallJava21(onLog = console.log, onProgress = null) 
     });
 
     if (!resp.ok) {
-        throw new Error(`Nepodařilo se stáhnout Javu z Adoptium API: HTTP ${resp.status}`);
+        throw new Error(`Nepodařilo se stáhnout Javu ${targetVersion} z Adoptium API: HTTP ${resp.status}`);
     }
 
     const totalBytes = parseInt(resp.headers.get('content-length') || '0', 10);
-    const archivePath = path.join(runtimeBase, isWin ? 'java21.zip' : 'java21.tar.gz');
+    const archivePath = path.join(runtimeBase, isWin ? `java${targetVersion}.zip` : `java${targetVersion}.tar.gz`);
     const fileStream = fs.createWriteStream(archivePath);
 
     let downloadedBytes = 0;
@@ -638,8 +686,8 @@ async function downloadAndInstallJava21(onLog = console.log, onProgress = null) 
             const percent = Math.min(90, Math.round((downloadedBytes / totalBytes) * 85) + 5);
             onProgress({
                 percent,
-                text: `Stahování Java 21 (${Math.round(downloadedBytes / 1024 / 1024)} MB / ${Math.round(totalBytes / 1024 / 1024)} MB)...`,
-                status: `Stahování Java 21 (${percent}%)...`
+                text: `Stahování Java ${targetVersion} (${Math.round(downloadedBytes / 1024 / 1024)} MB / ${Math.round(totalBytes / 1024 / 1024)} MB)...`,
+                status: `Stahování Java ${targetVersion} (${percent}%)...`
             });
         }
     }
@@ -647,7 +695,7 @@ async function downloadAndInstallJava21(onLog = console.log, onProgress = null) 
     await new Promise((resolve) => fileStream.on('finish', resolve));
 
     if (onProgress) {
-        onProgress({ percent: 92, text: 'Instalace a rozbalování Java 21...', status: 'Rozbalování Java 21...' });
+        onProgress({ percent: 92, text: `Instalace a rozbalování Java ${targetVersion}...`, status: `Rozbalování Java ${targetVersion}...` });
     }
     onLog(`[JAVA] Archiv stažen (${Math.round(downloadedBytes / 1024 / 1024)} MB). Rozbaluji do ${javaDir}...`);
 
@@ -656,7 +704,7 @@ async function downloadAndInstallJava21(onLog = console.log, onProgress = null) 
     }
     fs.mkdirSync(javaDir, { recursive: true });
 
-    const tempExtract = path.join(runtimeBase, 'extract_tmp');
+    const tempExtract = path.join(runtimeBase, `extract_tmp_${targetVersion}`);
     if (fs.existsSync(tempExtract)) {
         try { fs.rmSync(tempExtract, { recursive: true, force: true }); } catch (e) {}
     }
@@ -713,43 +761,59 @@ async function downloadAndInstallJava21(onLog = console.log, onProgress = null) 
         try { fs.chmodSync(finalJavaPath, 0o755); } catch (e) {}
     }
 
-    onLog(`[JAVA] ✓ Java 21 úspěšně připravena: ${finalJavaPath}`);
+    onLog(`[JAVA] ✓ Java ${targetVersion} úspěšně připravena: ${finalJavaPath}`);
     if (onProgress) {
-        onProgress({ percent: 100, text: 'Java 21 připravena!', status: 'Hotovo' });
+        onProgress({ percent: 100, text: `Java ${targetVersion} připravena!`, status: 'Hotovo' });
     }
     return finalJavaPath;
 }
 
 /**
- * Ensures that a working Java 21+ executable is available.
- * If neither system nor configured Java is functional, automatically downloads it.
+ * Backwards compatibility alias for Java 21 installer.
+ */
+async function downloadAndInstallJava21(onLog = console.log, onProgress = null) {
+    return downloadAndInstallJava(21, onLog, onProgress);
+}
+
+/**
+ * Ensures that a working Java executable matching the required major version is available.
+ * If neither system nor configured Java is functional/compatible, automatically downloads it.
  */
 async function ensureJavaExecutable(config, onLog = console.log, onProgress = null) {
+    const targetVersion = config.version || '26.2';
+    const requiredMajor = getRequiredJavaVersion(targetVersion);
+
     // 1. Configured custom path
-    if (config.javaPath && testJavaExecutable(config.javaPath)) {
-        return config.javaPath;
+    if (config.javaPath) {
+        const customMajor = getJavaMajorVersion(config.javaPath);
+        if (customMajor >= requiredMajor && testJavaExecutable(config.javaPath, requiredMajor)) {
+            return config.javaPath;
+        }
+        if (customMajor > 0 && customMajor < requiredMajor) {
+            onLog(`[JAVA] Nastavená Java (${config.javaPath}) má verzi Java ${customMajor}, ale verze ${targetVersion} vyžaduje Java ${requiredMajor}+. Hledám kompatibilní runtime...`);
+        }
     }
 
-    // 2. Launcher local runtime
+    // 2. Launcher local runtime for required version
     const isWin = process.platform === 'win32';
-    const localBin = path.join(BASE_DIR, 'runtime', 'java-21', 'bin', isWin ? 'javaw.exe' : 'java');
-    const localBinAlt = isWin ? path.join(BASE_DIR, 'runtime', 'java-21', 'bin', 'java.exe') : null;
-    if (fs.existsSync(localBin) && testJavaExecutable(localBin)) {
+    const localBin = path.join(BASE_DIR, 'runtime', `java-${requiredMajor}`, 'bin', isWin ? 'javaw.exe' : 'java');
+    const localBinAlt = isWin ? path.join(BASE_DIR, 'runtime', `java-${requiredMajor}`, 'bin', 'java.exe') : null;
+    if (fs.existsSync(localBin) && testJavaExecutable(localBin, requiredMajor)) {
         return localBin;
     }
-    if (localBinAlt && fs.existsSync(localBinAlt) && testJavaExecutable(localBinAlt)) {
+    if (localBinAlt && fs.existsSync(localBinAlt) && testJavaExecutable(localBinAlt, requiredMajor)) {
         return localBinAlt;
     }
 
-    // 3. System detected paths
-    const detected = detectJavaPath();
-    if (detected && testJavaExecutable(detected)) {
+    // 3. System detected paths meeting required major version
+    const detected = detectJavaPath(requiredMajor);
+    if (detected && testJavaExecutable(detected, requiredMajor)) {
         return detected;
     }
 
-    // 4. Fallback: Automatically download OpenJDK 21
-    onLog('[JAVA] V systému nebyla nalezena žádná funkční Java 21+. Stahuji vestavěný OpenJDK 21...');
-    const installed = await downloadAndInstallJava21(onLog, onProgress);
+    // 4. Fallback: Automatically download OpenJDK of required version (e.g. 25)
+    onLog(`[JAVA] V systému nebyla nalezena kompatibilní Java ${requiredMajor}+ pro verzi ${targetVersion}. Stahuji vestavěný OpenJDK ${requiredMajor}...`);
+    const installed = await downloadAndInstallJava(requiredMajor, onLog, onProgress);
     try {
         saveConfig({ javaPath: installed });
     } catch (e) {}
@@ -759,16 +823,23 @@ async function ensureJavaExecutable(config, onLog = console.log, onProgress = nu
 /**
  * Scans installed Java environments prioritizing Java 25 and Java 21.
  */
-function detectJavaPath() {
+function detectJavaPath(minMajor = 25) {
     const isWin = process.platform === 'win32';
+    const candidates = [];
 
-    // Check launcher local runtime first
-    const localRuntime = path.join(BASE_DIR, 'runtime', 'java-21', 'bin', isWin ? 'javaw.exe' : 'java');
-    if (fs.existsSync(localRuntime) && testJavaExecutable(localRuntime)) {
-        return localRuntime;
+    // Check launcher local runtimes (java-25, java-21)
+    const local25 = path.join(BASE_DIR, 'runtime', 'java-25', 'bin', isWin ? 'javaw.exe' : 'java');
+    const local21 = path.join(BASE_DIR, 'runtime', 'java-21', 'bin', isWin ? 'javaw.exe' : 'java');
+    if (fs.existsSync(local25)) candidates.push(local25);
+    if (isWin && fs.existsSync(path.join(BASE_DIR, 'runtime', 'java-25', 'bin', 'java.exe'))) {
+        candidates.push(path.join(BASE_DIR, 'runtime', 'java-25', 'bin', 'java.exe'));
+    }
+    if (fs.existsSync(local21)) candidates.push(local21);
+    if (isWin && fs.existsSync(path.join(BASE_DIR, 'runtime', 'java-21', 'bin', 'java.exe'))) {
+        candidates.push(path.join(BASE_DIR, 'runtime', 'java-21', 'bin', 'java.exe'));
     }
 
-    // 1. Linux candidates (Java 25 first, then Java 21, then system default)
+    // 1. Linux candidates
     if (!isWin) {
         const linuxCandidates = [
             '/usr/lib/jvm/java-25-openjdk-amd64/bin/java',
@@ -779,82 +850,137 @@ function detectJavaPath() {
             '/usr/lib/jvm/openjdk-21/bin/java',
             '/usr/lib/jvm/default-runtime/bin/java'
         ];
-        for (const cand of linuxCandidates) {
-            if (fs.existsSync(cand) && testJavaExecutable(cand)) return cand;
+        candidates.push(...linuxCandidates);
+
+        try {
+            const out = execSync('which java', { encoding: 'utf-8', timeout: 1500, stdio: ['ignore', 'pipe', 'pipe'] }).trim().split('\n')[0];
+            if (out) candidates.push(out);
+        } catch (e) {}
+
+        candidates.push('/usr/bin/java');
+    } else {
+        // 2. Windows candidates
+        const winBaseDirs = [
+            'C:\\Program Files\\Eclipse Adoptium',
+            'C:\\Program Files\\Microsoft',
+            'C:\\Program Files\\Java',
+            'C:\\Program Files (x86)\\Java',
+            'C:\\Program Files\\BellSoft',
+            'C:\\Program Files\\Amazon Corretto',
+            'C:\\Program Files\\Zulu'
+        ];
+
+        for (const base of winBaseDirs) {
+            if (fs.existsSync(base)) {
+                try {
+                    const subdirs = fs.readdirSync(base);
+                    for (const sub of subdirs) {
+                        const javaw = path.join(base, sub, 'bin', 'javaw.exe');
+                        if (fs.existsSync(javaw)) candidates.push(javaw);
+                        const javaExe = path.join(base, sub, 'bin', 'java.exe');
+                        if (fs.existsSync(javaExe)) candidates.push(javaExe);
+                    }
+                } catch (e) {}
+            }
         }
 
         try {
-            const out = execSync('which java', { encoding: 'utf-8', timeout: 1500 }).trim().split('\n')[0];
-            if (out && fs.existsSync(out) && testJavaExecutable(out)) return out;
+            const out = execSync('where javaw', { encoding: 'utf-8', timeout: 1500, stdio: ['ignore', 'pipe', 'pipe'] }).trim().split('\n')[0];
+            if (out) candidates.push(out);
         } catch (e) {}
 
-        if (fs.existsSync('/usr/bin/java') && testJavaExecutable('/usr/bin/java')) {
-            return '/usr/bin/java';
-        }
-        return null;
+        try {
+            const out = execSync('where java', { encoding: 'utf-8', timeout: 1500, stdio: ['ignore', 'pipe', 'pipe'] }).trim().split('\n')[0];
+            if (out) candidates.push(out);
+        } catch (e) {}
     }
 
-    // 2. Windows candidates (Java 25 first, then Java 21)
-    const winBaseDirs = [
-        'C:\\Program Files\\Eclipse Adoptium',
-        'C:\\Program Files\\Microsoft',
-        'C:\\Program Files\\Java',
-        'C:\\Program Files (x86)\\Java'
-    ];
-
-    for (const base of winBaseDirs) {
-        if (fs.existsSync(base)) {
-            try {
-                const subdirs = fs.readdirSync(base);
-                const sorted = subdirs.sort((a, b) => b.localeCompare(a));
-                for (const sub of sorted) {
-                    const javaw = path.join(base, sub, 'bin', 'javaw.exe');
-                    if (fs.existsSync(javaw) && testJavaExecutable(javaw)) return javaw;
-                    const javaExe = path.join(base, sub, 'bin', 'java.exe');
-                    if (fs.existsSync(javaExe) && testJavaExecutable(javaExe)) return javaExe;
-                }
-            } catch (e) {}
+    // Evaluate candidate versions
+    const evaluated = [];
+    const seen = new Set();
+    for (const cand of candidates) {
+        if (!cand || seen.has(cand)) continue;
+        seen.add(cand);
+        if (fs.existsSync(cand)) {
+            const major = getJavaMajorVersion(cand);
+            if (major > 0) {
+                evaluated.push({ path: cand, major });
+            }
         }
     }
 
-    try {
-        const out = execSync('where javaw', { encoding: 'utf-8', timeout: 1500 }).trim().split('\n')[0];
-        if (out && fs.existsSync(out) && testJavaExecutable(out)) return out;
-    } catch (e) {}
+    // Sort by major version descending
+    evaluated.sort((a, b) => b.major - a.major);
 
-    try {
-        const out = execSync('where java', { encoding: 'utf-8', timeout: 1500 }).trim().split('\n')[0];
-        if (out && fs.existsSync(out) && testJavaExecutable(out)) return out;
-    } catch (e) {}
+    const match = evaluated.find(e => e.major >= minMajor);
+    if (match) return match.path;
+
+    if (minMajor === 0 && evaluated.length > 0) return evaluated[0].path;
 
     return null;
 }
 
 /**
- * Returns all detected Java installations with version info.
+ * Returns all detected Java installations with version info across Linux and Windows.
  */
 function getAvailableJavas() {
     const list = [];
+    const seen = new Set();
+    const isWin = process.platform === 'win32';
+
     const checkPath = (binPath, label) => {
+        if (!binPath || seen.has(binPath)) return;
+        seen.add(binPath);
         if (fs.existsSync(binPath)) {
+            const major = getJavaMajorVersion(binPath);
             try {
-                const verOut = execSync(`"${binPath}" -version 2>&1`, { encoding: 'utf-8', timeout: 2000 });
-                const firstLine = verOut.split('\n')[0] || '';
-                list.push({ path: binPath, label: `${label} (${firstLine.replace(/"/g, '')})` });
+                const verOut = execSync(`"${binPath}" -version 2>&1`, { encoding: 'utf-8', timeout: 2000, stdio: ['ignore', 'pipe', 'pipe'] });
+                const firstLine = (verOut.split(/\r?\n/)[0] || '').replace(/"/g, '').trim();
+                list.push({ path: binPath, major, label: `${label} (${firstLine || `Java ${major}`})` });
             } catch (e) {
-                list.push({ path: binPath, label });
+                list.push({ path: binPath, major, label });
             }
         }
     };
 
-    if (process.platform !== 'win32') {
+    // Check launcher local runtimes
+    const local25 = path.join(BASE_DIR, 'runtime', 'java-25', 'bin', isWin ? 'javaw.exe' : 'java');
+    const local21 = path.join(BASE_DIR, 'runtime', 'java-21', 'bin', isWin ? 'javaw.exe' : 'java');
+    checkPath(local25, 'Vestavěná Java 25 (Adoptium)');
+    checkPath(local21, 'Vestavěná Java 21 (Adoptium)');
+
+    if (!isWin) {
         const candidates = [
             ['/usr/lib/jvm/java-25-openjdk-amd64/bin/java', 'Java 25 (LTS)'],
             ['/usr/lib/jvm/java-21-openjdk-amd64/bin/java', 'Java 21 (LTS)'],
             ['/usr/bin/java', 'Systémová Java']
         ];
         candidates.forEach(([p, l]) => checkPath(p, l));
+    } else {
+        const winBaseDirs = [
+            'C:\\Program Files\\Eclipse Adoptium',
+            'C:\\Program Files\\Microsoft',
+            'C:\\Program Files\\Java',
+            'C:\\Program Files (x86)\\Java'
+        ];
+        for (const base of winBaseDirs) {
+            if (fs.existsSync(base)) {
+                try {
+                    const subdirs = fs.readdirSync(base);
+                    for (const sub of subdirs) {
+                        const javaw = path.join(base, sub, 'bin', 'javaw.exe');
+                        checkPath(javaw, `Instalovaná ${sub}`);
+                    }
+                } catch (e) {}
+            }
+        }
+        try {
+            const out = execSync('where javaw', { encoding: 'utf-8', timeout: 1500, stdio: ['ignore', 'pipe', 'pipe'] }).trim().split('\n')[0];
+            if (out) checkPath(out, 'Systémová Java (PATH)');
+        } catch (e) {}
     }
+
+    list.sort((a, b) => (b.major || 0) - (a.major || 0));
     return list;
 }
 
@@ -1880,5 +2006,8 @@ module.exports = {
     downloadAudioDlc,
     cancelAudioDlcDownload,
     setupOfflineCustomSkinAndCape,
-    ensureJavaExecutable
+    ensureJavaExecutable,
+    downloadAndInstallJava,
+    getJavaMajorVersion,
+    getRequiredJavaVersion
 };

@@ -11,6 +11,7 @@ const {
     cancelLaunch,
     detectJavaPath,
     getAvailableJavas,
+    downloadAndInstallJava,
     getInstalledVersions,
     checkAudioDlcStatus,
     downloadAudioDlc,
@@ -1023,7 +1024,7 @@ ipcMain.handle('apply-crash-fix', async (event, autoFix, profileId) => {
         const config = loadConfig();
         const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
         const gameDir = (profile && profile.gameDir) ? profile.gameDir : config.baseDir;
-        return await executeCrashFix(autoFix, gameDir, config, saveConfig, detectJavaPath);
+        return await executeCrashFix(autoFix, gameDir, config, saveConfig, detectJavaPath, downloadAndInstallJava);
     } catch (err) {
         console.error('Chyba při aplikaci opravy pádu:', err);
         return { success: false, error: err.message };
