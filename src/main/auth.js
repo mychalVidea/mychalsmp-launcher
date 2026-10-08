@@ -129,28 +129,57 @@ async function loginMicrosoft(parentWindow) {
                 : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
             authWin.webContents.setUserAgent(userAgent);
 
-            // Extra safeguard: suppress WebAuthn / Passkeys on every page transition in the main world
+            // Extra safeguard: safely stub WebAuthn without breaking PublicKeyCredential
             authWin.webContents.on('dom-ready', () => {
                 authWin.webContents.executeJavaScript(`
                     try {
-                        delete window.PublicKeyCredential;
-                        Object.defineProperty(window, 'PublicKeyCredential', {
-                            get: () => undefined,
-                            configurable: false
-                        });
+                        if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+                            window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = () => Promise.resolve(false);
+                            if (typeof window.PublicKeyCredential.isConditionalMediationAvailable === 'function') {
+                                window.PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false);
+                            }
+                        }
                     } catch (e) {}
                 `).catch(() => {});
+            });
+
+            authWin.webContents.on('console-message', (e, level, message, line, sourceId) => {
+                console.log(`[AUTH-WIN] ${message} (${sourceId}:${line})`);
             });
 
             const handlePotentialRedirect = async (url) => {
                 if (handled || !url) return;
                 if (url.startsWith(redirectUri) || url.includes('oauth20_desktop.srf') || url.includes('/nativeclient')) {
-                    handled = true;
                     try {
-                        const parsed = new URL(url);
-                        const code = parsed.searchParams.get("code");
-                        const error = parsed.searchParams.get("error");
-                        const errorDescription = parsed.searchParams.get("error_description");
+                        let code = null;
+                        let error = null;
+                        let errorDescription = null;
+
+                        try {
+                            const parsed = new URL(url);
+                            code = parsed.searchParams.get("code");
+                            error = parsed.searchParams.get("error");
+                            errorDescription = parsed.searchParams.get("error_description");
+
+                            if (!code && parsed.hash) {
+                                const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ''));
+                                code = hashParams.get("code");
+                                if (!error) error = hashParams.get("error");
+                                if (!errorDescription) errorDescription = hashParams.get("error_description");
+                            }
+                        } catch (urlErr) {
+                            const codeMatch = url.match(/[?&#]code=([^&#]+)/);
+                            if (codeMatch) code = decodeURIComponent(codeMatch[1]);
+                            const errMatch = url.match(/[?&#]error=([^&#]+)/);
+                            if (errMatch) error = decodeURIComponent(errMatch[1]);
+                        }
+
+                        if (!code && !error) {
+                            // Not a terminal OAuth response URL yet, wait for actual redirect with code
+                            return;
+                        }
+
+                        handled = true;
 
                         if (error) {
                             safeCloseAuthWin();
@@ -218,12 +247,17 @@ async function loginMicrosoft(parentWindow) {
             };
 
             // 1. Intercept at network level immediately (before page body loads)
+            const authWebContentsId = authWin.webContents.id;
             authWin.webContents.session.webRequest.onBeforeRequest({
                 urls: [
                     'https://login.live.com/oauth20_desktop.srf*',
                     'https://login.microsoftonline.com/common/oauth2/nativeclient*'
                 ]
             }, (details, callback) => {
+                if (details.webContentsId && details.webContentsId !== authWebContentsId) {
+                    callback({});
+                    return;
+                }
                 if (details.url && (details.url.includes('code=') || details.url.includes('error='))) {
                     handlePotentialRedirect(details.url);
                     callback({ cancel: true });

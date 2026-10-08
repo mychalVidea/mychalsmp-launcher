@@ -1,31 +1,34 @@
 // Preload script for Microsoft Login window
-// Disables WebAuthn / Passkeys in both main world and isolated world
-// so Microsoft does not prompt for Windows Hello / PIN on Linux
+// Safely stubs platform authenticator (Windows Hello) so Microsoft does not prompt
+// for PIN/Hello on Linux, while preserving PublicKeyCredential so Microsoft's scripts never crash.
 
 const { webFrame } = require('electron');
 
-function disableWebAuthn() {
+function safeStubWebAuthn() {
     try {
-        delete window.PublicKeyCredential;
-        Object.defineProperty(window, 'PublicKeyCredential', {
-            get: () => undefined,
-            configurable: false
-        });
+        if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+            window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = () => Promise.resolve(false);
+            if (typeof window.PublicKeyCredential.isConditionalMediationAvailable === 'function') {
+                window.PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false);
+            }
+        }
     } catch (e) {}
 }
 
-// Disable in isolated world
-disableWebAuthn();
+// Stub in isolated world
+safeStubWebAuthn();
 
-// Disable in main world where Microsoft's scripts execute
+// Stub in main world where Microsoft's scripts execute
 try {
     webFrame.executeJavaScript(`
         try {
-            delete window.PublicKeyCredential;
-            Object.defineProperty(window, 'PublicKeyCredential', {
-                get: () => undefined,
-                configurable: false
-            });
+            if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+                window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = () => Promise.resolve(false);
+                if (typeof window.PublicKeyCredential.isConditionalMediationAvailable === 'function') {
+                    window.PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false);
+                }
+            }
         } catch (e) {}
     `);
 } catch (e) {}
+

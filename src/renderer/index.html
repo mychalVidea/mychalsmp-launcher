@@ -355,62 +355,157 @@
 
                 <div class="version-installers-grid">
                     <!-- Version 26.2: Recommended -->
-                    <div class="version-card v-card-recommended">
+                    <div class="version-card v-card-recommended" id="vCard262" data-version="26.2">
                         <div class="v-card-top">
                             <div class="v-tag v-tag-blue">DOPORUČENÁ VERZE</div>
-                            <span class="v-status-badge" id="vStatus262">Kontrola...</span>
+                            <span class="v-status-badge" id="vStatus262">
+                                <span class="v-status-dot"></span>
+                                <span class="v-status-label">Kontrola...</span>
+                            </span>
                         </div>
-                        <h3 class="v-card-title">Minecraft 26.2</h3>
-                        <p class="v-card-desc">Doporučená síťová verze pro server mychalsmp.xyz. Začíná čistě, mody nebo
-                            modloader (Fabric, Forge, NeoForge) si můžeš zvolit sám.</p>
+                        <div class="v-card-main">
+                            <h3 class="v-card-title">Minecraft 26.2</h3>
+                            <p class="v-card-desc">Oficiální doporučená verze pro server <strong>mychalsmp.xyz</strong>
+                                s plnou optimalizací pro moderní Javu 25/21 a nízkou latenci.</p>
+                        </div>
+
+                        <!-- Mod Loader Selector -->
+                        <div class="v-loader-picker">
+                            <span class="v-loader-label">Modloader:</span>
+                            <div class="v-loader-options" data-version="26.2">
+                                <button type="button" class="v-loader-btn active" data-loader="vanilla">Vanilla</button>
+                                <button type="button" class="v-loader-btn" data-loader="fabric">Fabric</button>
+                            </div>
+                        </div>
+
                         <div class="v-card-meta">
-                            <span>Verze: <strong>26.2</strong></span>
-                            <span>Java: <strong>Java 25 / 21</strong></span>
+                            <span>Verze jádra: <strong>26.2</strong></span>
+                            <span>Java runtime: <strong>Java 25 / 21</strong></span>
                         </div>
+
+                        <!-- Live in-card progress bar -->
+                        <div class="v-card-progress" id="vProgressBox262" style="display: none;">
+                            <div class="v-progress-info">
+                                <span class="v-progress-text" id="vProgressText262">Stahování...</span>
+                                <span class="v-progress-percent" id="vProgressPercent262">0%</span>
+                            </div>
+                            <div class="v-progress-track">
+                                <div class="v-progress-fill" id="vProgressBar262" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
                         <div class="v-card-actions">
-                            <button class="mc-btn mc-btn-green btn-install-v" data-version="26.2" data-loader="vanilla">
-                                <span>▶ Hrát / Nainstalovat 26.2</span>
+                            <button type="button" class="mc-btn mc-btn-green btn-install-v" id="btnAction262"
+                                data-version="26.2">
+                                <span>▶ Hrát Minecraft 26.2</span>
+                            </button>
+                            <button type="button" class="mc-btn mc-btn-danger btn-stop-v" id="btnStop262"
+                                data-version="26.2" style="display: none;">
+                                <span>■ Zastavit proces</span>
                             </button>
                         </div>
                     </div>
 
                     <!-- Version 26.3: Latest Release -->
-                    <div class="version-card">
+                    <div class="version-card" id="vCard263" data-version="26.3">
                         <div class="v-card-top">
                             <div class="v-tag v-tag-green">NEJNOVĚJŠÍ VYDÁNÍ</div>
-                            <span class="v-status-badge" id="vStatus263">Kontrola...</span>
+                            <span class="v-status-badge" id="vStatus263">
+                                <span class="v-status-dot"></span>
+                                <span class="v-status-label">Kontrola...</span>
+                            </span>
                         </div>
-                        <h3 class="v-card-title">Minecraft 26.3</h3>
-                        <p class="v-card-desc">Nejnovější oficiální vydání hry. Začíná čistě, mody nebo modloader
-                            (Fabric, Forge, NeoForge) si můžeš zvolit sám.</p>
+                        <div class="v-card-main">
+                            <h3 class="v-card-title">Minecraft 26.3</h3>
+                            <p class="v-card-desc">Nejnovější oficiální vydání Minecraftu. Připraveno pro spuštění čistě
+                                Vanilla nebo s rychlým zavaděčem Fabric.</p>
+                        </div>
+
+                        <!-- Mod Loader Selector -->
+                        <div class="v-loader-picker">
+                            <span class="v-loader-label">Modloader:</span>
+                            <div class="v-loader-options" data-version="26.3">
+                                <button type="button" class="v-loader-btn active" data-loader="vanilla">Vanilla</button>
+                                <button type="button" class="v-loader-btn" data-loader="fabric">Fabric</button>
+                            </div>
+                        </div>
+
                         <div class="v-card-meta">
-                            <span>Verze: <strong>26.3</strong></span>
-                            <span>Java: <strong>Java 25 (Doporučeno)</strong></span>
+                            <span>Verze jádra: <strong>26.3</strong></span>
+                            <span>Java runtime: <strong>Java 25 (Doporučeno)</strong></span>
                         </div>
+
+                        <!-- Live in-card progress bar -->
+                        <div class="v-card-progress" id="vProgressBox263" style="display: none;">
+                            <div class="v-progress-info">
+                                <span class="v-progress-text" id="vProgressText263">Stahování...</span>
+                                <span class="v-progress-percent" id="vProgressPercent263">0%</span>
+                            </div>
+                            <div class="v-progress-track">
+                                <div class="v-progress-fill" id="vProgressBar263" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
                         <div class="v-card-actions">
-                            <button class="mc-btn mc-btn-green btn-install-v" data-version="26.3" data-loader="vanilla">
-                                <span>▶ Hrát / Nainstalovat 26.3</span>
+                            <button type="button" class="mc-btn mc-btn-green btn-install-v" id="btnAction263"
+                                data-version="26.3">
+                                <span>▶ Hrát Minecraft 26.3</span>
+                            </button>
+                            <button type="button" class="mc-btn mc-btn-danger btn-stop-v" id="btnStop263"
+                                data-version="26.3" style="display: none;">
+                                <span>■ Zastavit proces</span>
                             </button>
                         </div>
                     </div>
 
                     <!-- Version 26.1.2: Legacy -->
-                    <div class="version-card">
+                    <div class="version-card" id="vCard2612" data-version="26.1.2">
                         <div class="v-card-top">
                             <div class="v-tag">LEGACY VERZE</div>
-                            <span class="v-status-badge" id="vStatus2612">Kontrola...</span>
+                            <span class="v-status-badge" id="vStatus2612">
+                                <span class="v-status-dot"></span>
+                                <span class="v-status-label">Kontrola...</span>
+                            </span>
                         </div>
-                        <h3 class="v-card-title">Minecraft 26.1.2</h3>
-                        <p class="v-card-desc">Starší vydání hry pro předchozí světy. Čistá instalace bez zbytečností.
-                        </p>
+                        <div class="v-card-main">
+                            <h3 class="v-card-title">Minecraft 26.1.2</h3>
+                            <p class="v-card-desc">Starší stabilní vydání pro kompatibilitu se staršími světy a archivy.
+                                Plná podpora offline i online hraní.</p>
+                        </div>
+
+                        <!-- Mod Loader Selector -->
+                        <div class="v-loader-picker">
+                            <span class="v-loader-label">Modloader:</span>
+                            <div class="v-loader-options" data-version="26.1.2">
+                                <button type="button" class="v-loader-btn active" data-loader="vanilla">Vanilla</button>
+                                <button type="button" class="v-loader-btn" data-loader="fabric">Fabric</button>
+                            </div>
+                        </div>
+
                         <div class="v-card-meta">
-                            <span>Verze: <strong>26.1.2</strong></span>
-                            <span>Java: <strong>Java 21+</strong></span>
+                            <span>Verze jádra: <strong>26.1.2</strong></span>
+                            <span>Java runtime: <strong>Java 21+</strong></span>
                         </div>
+
+                        <!-- Live in-card progress bar -->
+                        <div class="v-card-progress" id="vProgressBox2612" style="display: none;">
+                            <div class="v-progress-info">
+                                <span class="v-progress-text" id="vProgressText2612">Stahování...</span>
+                                <span class="v-progress-percent" id="vProgressPercent2612">0%</span>
+                            </div>
+                            <div class="v-progress-track">
+                                <div class="v-progress-fill" id="vProgressBar2612" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
                         <div class="v-card-actions">
-                            <button class="mc-btn mc-btn-secondary btn-install-v" data-version="26.1.2"
-                                data-loader="vanilla">
-                                <span>▶ Hrát / Nainstalovat 26.1.2</span>
+                            <button type="button" class="mc-btn mc-btn-secondary btn-install-v" id="btnAction2612"
+                                data-version="26.1.2">
+                                <span>▶ Hrát Minecraft 26.1.2</span>
+                            </button>
+                            <button type="button" class="mc-btn mc-btn-danger btn-stop-v" id="btnStop2612"
+                                data-version="26.1.2" style="display: none;">
+                                <span>■ Zastavit proces</span>
                             </button>
                         </div>
                     </div>
@@ -419,13 +514,19 @@
                     <div class="version-card v-card-future">
                         <div class="v-card-top">
                             <div class="v-tag v-tag-purple">PŘIPRAVUJE SE (PROSINEC 2026)</div>
-                            <span class="v-status-badge">Snapshoty</span>
+                            <span class="v-status-badge">
+                                <span class="v-status-dot dot-purple"></span>
+                                <span class="v-status-label">Snapshoty</span>
+                            </span>
                         </div>
-                        <h3 class="v-card-title">Minecraft 26.4 (Zimní Update)</h3>
-                        <p class="v-card-desc">Předběžná podpora pro nadcházející zimní update. Síť MYCHAL SMP bude
-                            aktualizována po vydání plné verze.</p>
+                        <div class="v-card-main">
+                            <h3 class="v-card-title">Minecraft 26.4 (Zimní Update)</h3>
+                            <p class="v-card-desc">Předběžná podpora pro nadcházející zimní update. Síť MYCHAL SMP bude
+                                aktualizována po vydání plné verze.</p>
+                        </div>
                         <div class="v-card-meta">
                             <span>Plánované vydání: <strong>Prosinec 2026</strong></span>
+                            <span>Stav: <strong>Vývojová verze</strong></span>
                         </div>
                         <div class="v-card-actions">
                             <button class="mc-btn mc-btn-secondary" disabled>
@@ -847,55 +948,7 @@
                         <button class="mc-btn mc-btn-green" id="btnSaveSettings">Uložit nastavení</button>
                     </div>
 
-                    <!-- DLC Balíček: Minecraft Hudba & Zvuky (Default zapnuto, možnost vypnout / doinstalovat později) -->
-                    <div class="dlc-pack-card" id="dlcAudioCard">
-                        <div class="dlc-card-header">
-                            <div class="dlc-header-left">
-                                <span class="dlc-icon">🎵</span>
-                                <div class="dlc-header-titles">
-                                    <div class="dlc-title-row">
-                                        <strong class="dlc-title">Minecraft Hudba & Zvuky (DLC)</strong>
-                                        <span class="dlc-badge" id="dlcAudioBadge">Výchozí: Zapnuto</span>
-                                    </div>
-                                    <p class="dlc-desc">
-                                        Soundtrack hry, gramofonové desky, zvuky bloků, mobů a prostředí (~280 MB).
-                                        Při vypnutí se hra stáhne bleskově (vhodné na školní/pomalou síť) a kompletní audio balíček lze kdykoliv doinstalovat později.
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="dlc-switch-container">
-                                <label class="dlc-switch" title="Přepnout automatické stahování hudby a zvuků">
-                                    <input type="checkbox" id="checkAudioDlc" checked>
-                                    <span class="dlc-toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
 
-                        <div class="dlc-card-footer">
-                            <div class="dlc-status-info" id="dlcAudioStatusText">
-                                Stav: Zjišťování audio balíčku...
-                            </div>
-                            <div class="dlc-actions-row">
-                                <button type="button" class="mc-btn mc-btn-secondary" id="btnCheckAudioDlc">
-                                    <span>🔍 Zkontrolovat stav</span>
-                                </button>
-                                <button type="button" class="mc-btn mc-btn-green" id="btnDownloadAudioDlc">
-                                    <span>⬇️ Stáhnout audio balíček nyní</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Progress Bar pro stahování Audio DLC -->
-                        <div class="dlc-progress-box" id="dlcProgressBox" style="display: none;">
-                            <div class="dlc-progress-meta">
-                                <span id="dlcProgressStatus">Stahování zvuků a skladeb...</span>
-                                <span id="dlcProgressPercent">0%</span>
-                            </div>
-                            <div class="dlc-progress-track">
-                                <div class="dlc-progress-bar" id="dlcProgressBar"></div>
-                            </div>
-                        </div>
-                    </div>
 
                     <!-- Automatická detekce a čištění nepotřebné Java cache -->
                     <div class="cache-cleaner-card"
@@ -1412,15 +1465,20 @@
                             <label>Živý náhled serveru & Ping</label>
                             <div class="server-live-preview-card" id="newServerPreviewCard">
                                 <div class="server-preview-icon-wrapper">
-                                    <img src="assets/server-icon.png" id="newServerPreviewIcon" class="server-preview-icon" alt="Server Icon">
-                                    <span id="newServerOfflineCross" class="server-preview-cross-badge" style="display: none;">❌</span>
+                                    <img src="assets/server-icon.png" id="newServerPreviewIcon"
+                                        class="server-preview-icon" alt="Server Icon">
+                                    <span id="newServerOfflineCross" class="server-preview-cross-badge"
+                                        style="display: none;">❌</span>
                                 </div>
                                 <div class="server-preview-details">
                                     <div class="server-preview-status-line">
                                         <span id="newServerStatusDot" class="status-dot"></span>
-                                        <strong id="newServerStatusBadge" style="font-size: 13px; color: #94a3b8;">Zadej IP adresu serveru...</strong>
+                                        <strong id="newServerStatusBadge" style="font-size: 13px; color: #94a3b8;">Zadej
+                                            IP adresu serveru...</strong>
                                     </div>
-                                    <span id="newServerPingDetails" style="font-size: 12px; color: #64748b; margin-top: 3px;">Automatická detekce dostupnosti, latence a ikony</span>
+                                    <span id="newServerPingDetails"
+                                        style="font-size: 12px; color: #64748b; margin-top: 3px;">Automatická detekce
+                                        dostupnosti, latence a ikony</span>
                                 </div>
                             </div>
                         </div>
@@ -1466,9 +1524,13 @@
 
                         <!-- PROGRESS BAR CONTAINER (zobrazí se při stahování) -->
                         <div id="updateProgressContainer" style="display: none; margin-top: 14px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <span id="updateProgressText" style="font-size: 13px; font-weight: 600; color: #fff;">Stahuji aktualizaci... 0 %</span>
-                                <span id="updateProgressSize" style="font-size: 12px; color: #38bdf8; font-family: monospace;">0 MB / 0 MB</span>
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span id="updateProgressText"
+                                    style="font-size: 13px; font-weight: 600; color: #fff;">Stahuji aktualizaci... 0
+                                    %</span>
+                                <span id="updateProgressSize"
+                                    style="font-size: 12px; color: #38bdf8; font-family: monospace;">0 MB / 0 MB</span>
                             </div>
                             <div class="update-progress-track">
                                 <div id="updateProgressBar" class="update-progress-fill" style="width: 0%;"></div>
@@ -1476,10 +1538,15 @@
                         </div>
 
                         <!-- RESTART COUNTDOWN CONTAINER (zobrazí se po instalaci) -->
-                        <div id="updateCountdownContainer" style="display: none; margin-top: 14px; text-align: center; padding: 14px; background: rgba(33, 222, 0, 0.08); border: 1px solid rgba(33, 222, 0, 0.25); border-radius: 10px;">
+                        <div id="updateCountdownContainer"
+                            style="display: none; margin-top: 14px; text-align: center; padding: 14px; background: rgba(33, 222, 0, 0.08); border: 1px solid rgba(33, 222, 0, 0.25); border-radius: 10px;">
                             <div style="font-size: 24px; margin-bottom: 4px;">✓</div>
-                            <strong style="color: #21DE00; font-size: 14px; display: block; margin-bottom: 4px;">Aktualizace byla úspěšně nainstalována!</strong>
-                            <span style="font-size: 13px; color: #cbd5e1;">Restartuji launcher za <strong id="updateCountdownSec" style="color: #38bdf8; font-size: 16px;">3</strong> s...</span>
+                            <strong
+                                style="color: #21DE00; font-size: 14px; display: block; margin-bottom: 4px;">Aktualizace
+                                byla úspěšně nainstalována!</strong>
+                            <span style="font-size: 13px; color: #cbd5e1;">Restartuji launcher za <strong
+                                    id="updateCountdownSec" style="color: #38bdf8; font-size: 16px;">3</strong>
+                                s...</span>
                         </div>
                     </div>
                     <div class="modal-foot" id="updateModalFoot">

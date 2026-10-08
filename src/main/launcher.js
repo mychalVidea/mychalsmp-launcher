@@ -227,7 +227,15 @@ Handler.prototype.getJar = async function() {
 
     // 3. Pokud není na disku nebo neodpovídá novému patchi, stáhnout z oficiálního Mojang serveru
     if (!copied) {
-        await this.downloadAsync(this.version.downloads.client.url, this.options.directory, jarName, true, 'version-jar');
+        if (this.version && this.version.downloads && this.version.downloads.client && this.version.downloads.client.url) {
+            await this.downloadAsync(this.version.downloads.client.url, this.options.directory, jarName, true, 'version-jar');
+        } else {
+            const baseJar = path.join(this.options.root, 'versions', this.options.version.number, `${this.options.version.number}.jar`);
+            if (fs.existsSync(baseJar)) {
+                fs.mkdirSync(this.options.directory, { recursive: true });
+                try { fs.copyFileSync(baseJar, targetJarPath); } catch (e) {}
+            }
+        }
     }
 
     try { fs.writeFileSync(targetJsonPath, JSON.stringify(this.version, null, 4)); } catch (e) {}
@@ -295,23 +303,131 @@ function linkOrShareExistingMinecraftData(targetRootDir, onLog) {
         }
     }
 
-    // 2. Propojení / sdílení složky libraries
+    // 2. Složka libraries MUSÍ být reálná složka, nikdy ne symlink na cizí launcher!
     const targetLibs = path.join(targetRootDir, 'libraries');
-    if (!fs.existsSync(targetLibs)) {
-        for (const cand of candidates) {
-            const candLibs = path.join(cand, 'libraries');
-            if (fs.existsSync(candLibs)) {
+    try {
+        const lstat = fs.lstatSync(targetLibs);
+        if (lstat.isSymbolicLink()) {
+            fs.unlinkSync(targetLibs);
+        }
+    } catch (e) {}
+    try {
+        fs.mkdirSync(targetLibs, { recursive: true });
+    } catch (e) {}
+}
+
+/**
+ * Intercept Handler.prototype.downloadToDirectory:
+ * Bleskové převzetí knihoven z existujících instalací na disku a garantované stažení
+ * chybějících knihoven z Mojang Maven (včetně lwjgl-vulkan a novějších LWJGL 3.4.x).
+ * Zabraňuje NoClassDefFoundError / ClassNotFoundException.
+ */
+Handler.prototype.downloadToDirectory = async function(directory, libraries, eventName) {
+    const libs = [];
+    if (!Array.isArray(libraries)) return libs;
+
+    const candidates = getExistingMinecraftBaseDirs();
+    let counter = 0;
+
+    await Promise.all(libraries.map(async (library) => {
+        if (!library) return;
+        if (this.parseRule(library)) return;
+        const lib = library.name.split(':');
+
+        let jarPath;
+        let name;
+        let relPath;
+        if (library.downloads && library.downloads.artifact && library.downloads.artifact.path) {
+            relPath = library.downloads.artifact.path;
+            name = path.basename(relPath);
+            jarPath = path.join(directory, path.dirname(relPath));
+        } else {
+            relPath = `${lib[0].replace(/\./g, '/')}/${lib[1]}/${lib[2]}/${lib[1]}-${lib[2]}${lib[3] ? '-' + lib[3] : ''}.jar`;
+            name = path.basename(relPath);
+            jarPath = path.join(directory, path.dirname(relPath));
+        }
+
+        const destFile = path.join(jarPath, name);
+
+        // 1. Zkontrolovat, zda soubor existuje a má platnou velikost
+        let exists = false;
+        try {
+            if (fs.existsSync(destFile) && fs.statSync(destFile).size > 0) {
+                if (library.downloads && library.downloads.artifact && library.downloads.artifact.sha1) {
+                    exists = this.checkSum(library.downloads.artifact.sha1, destFile);
+                } else {
+                    exists = true;
+                }
+            }
+        } catch (e) {
+            exists = false;
+        }
+
+        // 2. Pokud neexistuje, zkusit bleskově převzít z existujících launcherů na disku
+        if (!exists) {
+            for (const cand of candidates) {
+                const candLib = path.join(cand, 'libraries', relPath);
+                if (fs.existsSync(candLib)) {
+                    try {
+                        if (!library.downloads?.artifact?.sha1 || this.checkSum(library.downloads.artifact.sha1, candLib)) {
+                            fs.mkdirSync(jarPath, { recursive: true });
+                            fs.copyFileSync(candLib, destFile);
+                            exists = true;
+                            break;
+                        }
+                    } catch (e) {}
+                }
+            }
+        }
+
+        // 3. Pokud stále neexistuje, stáhnout přes náš downloadAsync
+        if (!exists) {
+            let downloadUrl = null;
+            if (library.downloads && library.downloads.artifact && library.downloads.artifact.url) {
+                downloadUrl = library.downloads.artifact.url;
+            } else if (library.url) {
+                downloadUrl = `${library.url}${relPath}`;
+            } else {
+                downloadUrl = `https://libraries.minecraft.net/${relPath}`;
+            }
+
+            try {
+                fs.mkdirSync(jarPath, { recursive: true });
+                await this.downloadAsync(downloadUrl, jarPath, name, true, eventName);
+                if (fs.existsSync(destFile) && fs.statSync(destFile).size > 0) {
+                    exists = true;
+                }
+            } catch (err) {
+                this.client.emit('debug', `[MCLC]: Knihovnu ${name} nelze stáhnout z ${downloadUrl}, zkouším Mojang Maven...`);
+            }
+
+            // Fallback na Mojang Maven pokud původní selhalo
+            if (!exists && !downloadUrl.includes('libraries.minecraft.net')) {
                 try {
-                    fs.mkdirSync(path.dirname(targetLibs), { recursive: true });
-                    const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
-                    fs.symlinkSync(candLibs, targetLibs, symlinkType);
-                    log(`[OPTIMALIZACE] ⚡ Bleskově propojeny existující Minecraft knihovny z "${candLibs}"!`);
-                    break;
+                    await this.downloadAsync(`https://libraries.minecraft.net/${relPath}`, jarPath, name, true, eventName);
+                    if (fs.existsSync(destFile) && fs.statSync(destFile).size > 0) {
+                        exists = true;
+                    }
                 } catch (e) {}
             }
         }
-    }
-}
+
+        counter++;
+        this.client.emit('progress', {
+            type: eventName,
+            task: counter,
+            total: libraries.length
+        });
+
+        if (exists || fs.existsSync(destFile)) {
+            libs.push(destFile);
+        } else {
+            this.client.emit('debug', `[MCLC]: ⚠ Knihovna ${library.name} nebyla nalezena (${destFile})`);
+        }
+    }));
+
+    return libs;
+};
 
 /**
  * Intercept Handler.prototype.getAssets:
@@ -324,18 +440,33 @@ Handler.prototype.getAssets = async function() {
     }
 
     const assetDirectory = path.resolve(this.options.overrides.assetRoot || path.join(this.options.root, 'assets'));
+    const indexName = (this.version && this.version.assetIndex && this.version.assetIndex.id)
+        ? this.version.assetIndex.id
+        : (this.options.version.number || '26.2');
     const assetId = this.options.version.custom || this.options.version.number;
-    const indexFilePath = path.join(assetDirectory, 'indexes', `${assetId}.json`);
+    const indexFilePath = path.join(assetDirectory, 'indexes', `${indexName}.json`);
+    const customIndexFilePath = path.join(assetDirectory, 'indexes', `${assetId}.json`);
 
-    if (!fs.existsSync(indexFilePath)) {
-        await this.downloadAsync(this.version.assetIndex.url, path.join(assetDirectory, 'indexes'), `${assetId}.json`, true, 'asset-json');
+    const targetUrl = (this.version && this.version.assetIndex && this.version.assetIndex.url)
+        ? this.version.assetIndex.url
+        : null;
+
+    if (!fs.existsSync(indexFilePath) && targetUrl) {
+        await this.downloadAsync(targetUrl, path.join(assetDirectory, 'indexes'), `${indexName}.json`, true, 'asset-json');
     }
 
-    if (!fs.existsSync(indexFilePath)) {
-        throw new Error(`Nepodařilo se stáhnout index assetů: ${assetId}.json`);
+    if (fs.existsSync(indexFilePath) && !fs.existsSync(customIndexFilePath)) {
+        try { fs.copyFileSync(indexFilePath, customIndexFilePath); } catch (e) {}
+    } else if (fs.existsSync(customIndexFilePath) && !fs.existsSync(indexFilePath)) {
+        try { fs.copyFileSync(customIndexFilePath, indexFilePath); } catch (e) {}
     }
 
-    const index = JSON.parse(fs.readFileSync(indexFilePath, { encoding: 'utf8' }));
+    const finalPath = fs.existsSync(indexFilePath) ? indexFilePath : customIndexFilePath;
+    if (!fs.existsSync(finalPath)) {
+        throw new Error(`Nepodařilo se stáhnout index assetů: ${indexName}.json`);
+    }
+
+    const index = JSON.parse(fs.readFileSync(finalPath, { encoding: 'utf8' }));
 
     // Povolené jazyky: čeština, slovenština, americká angličtina, britská angličtina
     const ALLOWED_LANGUAGES = new Set(['cs_cz', 'sk_sk', 'en_us', 'en_gb']);
@@ -568,25 +699,29 @@ function getInstalledVersions(baseDir) {
 
 /**
  * 🎭 Nastavení vlastního offline skinu a pláště pro warez / offline hráče.
- * Automaticky vytvoří/aktualizuje vestavěný resource pack v ~/.mychalsmp/resourcepacks/mychalsmp-character
- * a aktivuje jej v options.txt, takže Minecraft okamžitě vykreslí nastavený skin i plášť (elytru).
+ * Automaticky vytvoří/aktualizuje vestavěný resource pack v resourcepacks/mychalsmp-character
+ * a mychalsmp-character.zip s formátem 88-97 pro Minecraft 26.x a aktivuje jej v options.txt.
+ * Defaultně nepřidává ŽÁDNÝ plášť, ledaže si hráč explicitně nastavil vlastní cape!
  */
-function setupOfflineCustomSkinAndCape(baseDir, config, onLog = console.log) {
+function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
     if (config.authType === 'microsoft') {
         return; // Pro oficiální účty se skin spravuje přes Mojang API
     }
 
     const skinCandidates = [
         config.customSkinPath,
-        path.join(baseDir, 'custom_skin.png'),
-        path.join(baseDir, 'skins', 'skin.png')
+        path.join(gameDir, 'custom_skin.png'),
+        path.join(gameDir, 'skins', 'skin.png'),
+        path.join(BASE_DIR, 'custom_skin.png')
     ].filter(Boolean);
 
-    const capeCandidates = [
+    // Plášť aplikujeme POUZE pokud je explicitně nastaven a není 'none' / prázdný
+    const hasExplicitCape = config.customCapePath && config.customCapePath !== 'none';
+    const capeCandidates = hasExplicitCape ? [
         config.customCapePath,
-        path.join(baseDir, 'custom_cape.png'),
-        path.join(baseDir, 'capes', 'cape.png')
-    ].filter(Boolean);
+        path.join(gameDir, 'custom_cape.png'),
+        path.join(BASE_DIR, 'custom_cape.png')
+    ].filter(Boolean) : [];
 
     const activeSkin = skinCandidates.find(p => fs.existsSync(p));
     const activeCape = capeCandidates.find(p => fs.existsSync(p));
@@ -596,22 +731,28 @@ function setupOfflineCustomSkinAndCape(baseDir, config, onLog = console.log) {
     }
 
     try {
-        const packDir = path.join(baseDir, 'resourcepacks', 'mychalsmp-character');
+        const rpDir = path.join(gameDir, 'resourcepacks');
+        fs.mkdirSync(rpDir, { recursive: true });
+
+        const packDir = path.join(rpDir, 'mychalsmp-character');
         const wideDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player', 'wide');
         const slimDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player', 'slim');
-        const entityDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity');
-        const capeDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'cape');
         const playerRoot = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player');
+        const entityDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity');
+        const wingsDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'equipment', 'wings');
+        const capeDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'cape');
 
         fs.mkdirSync(wideDir, { recursive: true });
         fs.mkdirSync(slimDir, { recursive: true });
-        fs.mkdirSync(capeDir, { recursive: true });
         fs.mkdirSync(playerRoot, { recursive: true });
+        fs.mkdirSync(entityDir, { recursive: true });
+        fs.mkdirSync(wingsDir, { recursive: true });
+        fs.mkdirSync(capeDir, { recursive: true });
 
-        // 1. pack.mcmeta (podpora všech verzí Minecraftu)
+        // 1. pack.mcmeta (Plná kompatibilita s Minecraft 26.x - formát 88 až 97)
         const mcmeta = {
             pack: {
-                pack_format: 46,
+                pack_format: 88,
                 supported_formats: { min_inclusive: 1, max_inclusive: 999 },
                 description: "MYCHAL SMP Vlastní Offline Postava"
             }
@@ -627,12 +768,13 @@ function setupOfflineCustomSkinAndCape(baseDir, config, onLog = console.log) {
             }
             fs.copyFileSync(activeSkin, path.join(playerRoot, 'steve.png'));
             fs.copyFileSync(activeSkin, path.join(playerRoot, 'alex.png'));
-            onLog(`[POSTAVA] 🎨 Vlastní offline skin aplikován (${path.basename(activeSkin)}) pro všechny modely.`);
+            onLog(`[POSTAVA] 🎨 Vlastní offline skin aplikován (${path.basename(activeSkin)}) pro modely postav.`);
         }
 
-        // 3. Aplikace vlastního pláště
+        // 3. Aplikace vlastního pláště (pouze pokud si hráč explicitně nastavil cape)
         if (activeCape) {
             fs.copyFileSync(activeCape, path.join(entityDir, 'elytra.png'));
+            fs.copyFileSync(activeCape, path.join(wingsDir, 'elytra.png'));
             const capeTypes = ['mojang', 'migrator', 'vanilla', 'cherry', 'follower', 'cape'];
             for (const c of capeTypes) {
                 fs.copyFileSync(activeCape, path.join(capeDir, `${c}.png`));
@@ -641,9 +783,20 @@ function setupOfflineCustomSkinAndCape(baseDir, config, onLog = console.log) {
             onLog(`[POSTAVA] 🧥 Vlastní offline plášť aplikován (${path.basename(activeCape)}) pro plášť i elytru.`);
         }
 
-        // 4. Automatická aktivace v options.txt
-        const optionsFile = path.join(baseDir, 'options.txt');
-        const packIdentifier = 'file/mychalsmp-character';
+        // 4. Zabalení do zip archivu mychalsmp-character.zip pro 100% kompatibilitu s moderním Minecraftem
+        try {
+            const AdmZip = require('adm-zip');
+            const zip = new AdmZip();
+            zip.addLocalFolder(packDir);
+            const zipPath = path.join(rpDir, 'mychalsmp-character.zip');
+            zip.writeZip(zipPath);
+        } catch (zErr) {
+            // fallback k adresářovému resource packu
+        }
+
+        // 5. Automatická aktivace v options.txt
+        const optionsFile = path.join(gameDir, 'options.txt');
+        const packIdentifiers = ['file/mychalsmp-character.zip', 'file/mychalsmp-character'];
         if (fs.existsSync(optionsFile)) {
             let content = fs.readFileSync(optionsFile, 'utf8');
             if (content.includes('resourcePacks:')) {
@@ -654,13 +807,13 @@ function setupOfflineCustomSkinAndCape(baseDir, config, onLog = console.log) {
                     } catch (e) {
                         packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
                     }
-                    if (!packs.includes(packIdentifier)) {
-                        packs.push(packIdentifier);
+                    for (const pId of packIdentifiers) {
+                        if (!packs.includes(pId)) packs.push(pId);
                     }
                     return `resourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
                 });
             } else {
-                content += `\nresourcePacks:[${JSON.stringify('vanilla')},${JSON.stringify(packIdentifier)}]\n`;
+                content += `\nresourcePacks:[${JSON.stringify('vanilla')},${JSON.stringify('file/mychalsmp-character.zip')},${JSON.stringify('file/mychalsmp-character')}]\n`;
             }
 
             if (content.includes('incompatibleResourcePacks:')) {
@@ -671,18 +824,158 @@ function setupOfflineCustomSkinAndCape(baseDir, config, onLog = console.log) {
                     } catch (e) {
                         packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
                     }
-                    packs = packs.filter(p => p !== packIdentifier);
+                    packs = packs.filter(p => !packIdentifiers.includes(p));
                     return `incompatibleResourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
                 });
             }
             fs.writeFileSync(optionsFile, content, 'utf8');
             onLog(`[POSTAVA] ✓ Resource pack postavy aktivován v options.txt.`);
         } else {
-            fs.writeFileSync(optionsFile, `resourcePacks:["vanilla","${packIdentifier}"]\nincompatibleResourcePacks:[]\n`, 'utf8');
+            fs.writeFileSync(optionsFile, `resourcePacks:["vanilla","file/mychalsmp-character.zip","file/mychalsmp-character"]\nincompatibleResourcePacks:[]\n`, 'utf8');
             onLog(`[POSTAVA] ✓ Vytvořen options.txt s aktivovaným resource packem postavy.`);
         }
     } catch (err) {
         onLog(`[POSTAVA] ⚠ Chyba při přípravě offline skinu/pláště: ${err.message}`);
+    }
+}
+
+/**
+ * Pomocná funkce pro získání kompletního Vanilla JSON manifestu pro cílovou verzi.
+ */
+async function getOrFetchVanillaVersionJson(centralRootDir, targetVersion) {
+    const versionsDir = path.join(centralRootDir, 'versions');
+    const localJson = path.join(versionsDir, targetVersion, `${targetVersion}.json`);
+    if (fs.existsSync(localJson)) {
+        try {
+            return JSON.parse(fs.readFileSync(localJson, 'utf8'));
+        } catch (e) {}
+    }
+
+    const candidates = getExistingMinecraftBaseDirs();
+    for (const cand of candidates) {
+        const candJson = path.join(cand, 'versions', targetVersion, `${targetVersion}.json`);
+        if (fs.existsSync(candJson)) {
+            try {
+                const parsed = JSON.parse(fs.readFileSync(candJson, 'utf8'));
+                fs.mkdirSync(path.join(versionsDir, targetVersion), { recursive: true });
+                fs.copyFileSync(candJson, localJson);
+                return parsed;
+            } catch (e) {}
+        }
+    }
+
+    try {
+        const manRes = await fetch('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', { signal: AbortSignal.timeout(8000) });
+        if (manRes.ok) {
+            const manifest = await manRes.json();
+            const entry = manifest.versions.find(v => v.id === targetVersion);
+            if (entry && entry.url) {
+                const vRes = await fetch(entry.url, { signal: AbortSignal.timeout(10000) });
+                if (vRes.ok) {
+                    const vJson = await vRes.json();
+                    fs.mkdirSync(path.join(versionsDir, targetVersion), { recursive: true });
+                    fs.writeFileSync(localJson, JSON.stringify(vJson, null, 2), 'utf8');
+                    return vJson;
+                }
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+
+/**
+ * ⚡ Zajištění existence Fabric loader profilu pro zadanou verzi Minecraftu.
+ * Sloučí oficiální Fabric meta JSON s Vanilla JSON manifestem (včetně client downloadu a všech knihoven).
+ */
+async function ensureFabricProfile(centralRootDir, targetVersion, onLog = console.log) {
+    const versionsDir = path.join(centralRootDir, 'versions');
+    fs.mkdirSync(versionsDir, { recursive: true });
+
+    try {
+        const existing = fs.readdirSync(versionsDir).find(d =>
+            d.toLowerCase().startsWith('fabric-loader-') && d.includes(targetVersion) &&
+            fs.existsSync(path.join(versionsDir, d, `${d}.json`))
+        );
+        if (existing) {
+            const exJsonPath = path.join(versionsDir, existing, `${existing}.json`);
+            try {
+                const exJson = JSON.parse(fs.readFileSync(exJsonPath, 'utf8'));
+                if (exJson.downloads && exJson.assetIndex && exJson.libraries && exJson.libraries.length > 15) {
+                    onLog(`[FABRIC] Nalezen kompletní Fabric profil: ${existing}`);
+                    return existing;
+                }
+            } catch (e) {}
+        }
+    } catch (e) {}
+
+    onLog(`[FABRIC] Zjišťuji nejnovější Fabric loader pro Minecraft ${targetVersion}...`);
+    try {
+        const metaRes = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${targetVersion}`, {
+            headers: { 'User-Agent': 'MYCHALSMP-Launcher' },
+            signal: AbortSignal.timeout(10000)
+        });
+        if (!metaRes.ok) throw new Error(`Fabric meta HTTP ${metaRes.status}`);
+        const loaders = await metaRes.json();
+        if (!Array.isArray(loaders) || loaders.length === 0) {
+            throw new Error(`Žádný Fabric loader nenalezen pro verzi ${targetVersion}`);
+        }
+        const loaderVersion = loaders[0].loader.version;
+        onLog(`[FABRIC] Stahuji profil pro Fabric loader ${loaderVersion}...`);
+
+        const profileRes = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${targetVersion}/${loaderVersion}/profile/json`, {
+            headers: { 'User-Agent': 'MYCHALSMP-Launcher' },
+            signal: AbortSignal.timeout(12000)
+        });
+        if (!profileRes.ok) throw new Error(`Fabric profile JSON HTTP ${profileRes.status}`);
+        const profileJson = await profileRes.json();
+
+        const fabricId = profileJson.id || `fabric-loader-${loaderVersion}-${targetVersion}`;
+        const targetDir = path.join(versionsDir, fabricId);
+        fs.mkdirSync(targetDir, { recursive: true });
+
+        // Sloučit s Vanilla manifestem (doplnit downloads.client, assetIndex a vanilkové knihovny)
+        const vanillaJson = await getOrFetchVanillaVersionJson(centralRootDir, targetVersion);
+        const mergedProfile = {
+            id: fabricId,
+            inheritsFrom: targetVersion,
+            releaseTime: profileJson.releaseTime || new Date().toISOString(),
+            time: profileJson.time || new Date().toISOString(),
+            type: 'release',
+            mainClass: profileJson.mainClass || 'net.fabricmc.loader.impl.launch.knot.KnotClient',
+            arguments: {
+                game: [
+                    ...(vanillaJson?.arguments?.game || []),
+                    ...(profileJson.arguments?.game || [])
+                ],
+                jvm: [
+                    ...(profileJson.arguments?.jvm || []),
+                    ...(vanillaJson?.arguments?.jvm || [])
+                ]
+            },
+            libraries: [
+                ...(profileJson.libraries || []),
+                ...(vanillaJson?.libraries || [])
+            ],
+            assetIndex: vanillaJson?.assetIndex,
+            assets: vanillaJson?.assets,
+            downloads: vanillaJson?.downloads
+        };
+
+        fs.writeFileSync(path.join(targetDir, `${fabricId}.json`), JSON.stringify(mergedProfile, null, 2), 'utf8');
+        fs.writeFileSync(path.join(targetDir, `${targetVersion}.json`), JSON.stringify(mergedProfile, null, 2), 'utf8');
+
+        // Zkopírovat vanilla client.jar do složky fabric profilu
+        const vanillaJar = path.join(versionsDir, targetVersion, `${targetVersion}.jar`);
+        const fabricJar = path.join(targetDir, `${fabricId}.jar`);
+        if (fs.existsSync(vanillaJar) && !fs.existsSync(fabricJar)) {
+            try { fs.copyFileSync(vanillaJar, fabricJar); } catch (e) {}
+        }
+
+        onLog(`[FABRIC] ✓ Fabric profil ${fabricId} úspěšně připraven a sloučen s jádrem!`);
+        return fabricId;
+    } catch (err) {
+        onLog(`[FABRIC] ⚠ Nepodařilo se připravit Fabric profil: ${err.message}. Spouštím Vanilla.`);
+        return null;
     }
 }
 
@@ -702,11 +995,15 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     launcher._sessionDownloadedFiles = new Set();
 
     activeLauncherClient = launcher;
-    const rootDir = config.baseDir;
+
+    // Centrální BASE_DIR slouží pro sdílení verzí, knihoven a assetů mezi všemi profily!
+    // Game instance dir slouží pro options.txt, mods, config, saves konkrétního profilu.
+    const gameInstanceDir = config.baseDir || BASE_DIR;
     const targetVersion = config.version || '26.2';
 
     currentLaunchInfo = {
-        rootDir,
+        rootDir: BASE_DIR,
+        gameInstanceDir,
         targetVersion,
         client: launcher
     };
@@ -714,33 +1011,19 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     const javaExecutable = config.javaPath && fs.existsSync(config.javaPath)
         ? config.javaPath
         : detectJavaPath();
-    if (!fs.existsSync(rootDir)) {
-        fs.mkdirSync(rootDir, { recursive: true });
+
+    if (!fs.existsSync(BASE_DIR)) {
+        fs.mkdirSync(BASE_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(gameInstanceDir)) {
+        fs.mkdirSync(gameInstanceDir, { recursive: true });
     }
 
     // ⚡ Bleskové převzetí existujících assetů a knihoven ze systému (.minecraft)
-    linkOrShareExistingMinecraftData(rootDir, onLog);
+    linkOrShareExistingMinecraftData(BASE_DIR, onLog);
 
     // 🎭 Aplikace vlastního offline skinu a pláště pro warez / offline režim
-    setupOfflineCustomSkinAndCape(rootDir, config, onLog);
-
-    // If running in an instance subfolder, share central assets and libraries
-    try {
-        const parentDir = path.dirname(rootDir);
-        if (path.basename(parentDir) === 'instances') {
-            const centralBase = path.dirname(parentDir);
-            const centralAssets = path.join(centralBase, 'assets');
-            const centralLibs = path.join(centralBase, 'libraries');
-            const instAssets = path.join(rootDir, 'assets');
-            const instLibs = path.join(rootDir, 'libraries');
-            if (fs.existsSync(centralAssets) && !fs.existsSync(instAssets)) {
-                try { fs.symlinkSync(centralAssets, instAssets, 'junction'); } catch(e){}
-            }
-            if (fs.existsSync(centralLibs) && !fs.existsSync(instLibs)) {
-                try { fs.symlinkSync(centralLibs, instLibs, 'junction'); } catch(e){}
-            }
-        }
-    } catch (e) {}
+    setupOfflineCustomSkinAndCape(gameInstanceDir, config, onLog);
 
     // JVM Arguments (supports modern Java 21/25 Generational ZGC and G1GC)
     let jvmArgs = [];
@@ -758,6 +1041,34 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     }
     if (!jvmArgs.some(a => a.startsWith('-Dfile.encoding='))) {
         jvmArgs.push('-Dfile.encoding=UTF-8');
+    }
+
+    // Moderní Mojang JVM Native Access Arguments pro Java 21 a Java 25
+    const nativesExtractDir = path.join(BASE_DIR, 'natives_extract', targetVersion);
+    try {
+        fs.mkdirSync(path.join(nativesExtractDir, 'lwjgl'), { recursive: true });
+        fs.mkdirSync(path.join(nativesExtractDir, 'jna'), { recursive: true });
+        fs.mkdirSync(path.join(nativesExtractDir, 'netty'), { recursive: true });
+        fs.mkdirSync(path.join(nativesExtractDir, 'java'), { recursive: true });
+    } catch (e) {}
+
+    if (!jvmArgs.includes('--enable-native-access=ALL-UNNAMED')) {
+        jvmArgs.push('--enable-native-access=ALL-UNNAMED');
+    }
+    if (!jvmArgs.includes('--add-exports') && !jvmArgs.some(a => a.includes('jdk.internal.misc'))) {
+        jvmArgs.push('--add-exports', 'java.base/jdk.internal.misc=ALL-UNNAMED');
+    }
+    if (!jvmArgs.some(a => a.startsWith('-Dorg.lwjgl.system.SharedLibraryExtractPath='))) {
+        jvmArgs.push(`-Dorg.lwjgl.system.SharedLibraryExtractPath=${path.join(nativesExtractDir, 'lwjgl')}`);
+    }
+    if (!jvmArgs.some(a => a.startsWith('-Djna.tmpdir='))) {
+        jvmArgs.push(`-Djna.tmpdir=${path.join(nativesExtractDir, 'jna')}`);
+    }
+    if (!jvmArgs.some(a => a.startsWith('-Dio.netty.native.workdir='))) {
+        jvmArgs.push(`-Dio.netty.native.workdir=${path.join(nativesExtractDir, 'netty')}`);
+    }
+    if (!jvmArgs.some(a => a.startsWith('-Djava.library.path='))) {
+        jvmArgs.push(`-Djava.library.path=${path.join(nativesExtractDir, 'java')}`);
     }
 
     // Direct Quick Play multiplayer connection (with automatic fallback to backup IP 130.61.89.37)
@@ -781,14 +1092,19 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
         };
     }
 
-    // Loader resolution (Vanilla by default, or Fabric / Forge / NeoForge if present)
+    // Loader resolution (Vanilla nebo automaticky Fabric)
     const versionOpts = {
         number: targetVersion,
         type: 'release'
     };
 
-    if (config.loader && config.loader !== 'vanilla') {
-        const versionsDir = path.join(rootDir, 'versions');
+    if (config.loader && config.loader.toLowerCase() === 'fabric') {
+        const fabricCustomId = await ensureFabricProfile(BASE_DIR, targetVersion, onLog);
+        if (fabricCustomId) {
+            versionOpts.custom = fabricCustomId;
+        }
+    } else if (config.loader && config.loader !== 'vanilla') {
+        const versionsDir = path.join(BASE_DIR, 'versions');
         if (fs.existsSync(versionsDir)) {
             try {
                 const subdirs = fs.readdirSync(versionsDir);
@@ -805,7 +1121,7 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
 
     const opts = {
         authorization: authData,
-        root: rootDir,
+        root: BASE_DIR, // Centrální adresář pro sdílení verzí, knihoven a assetů bez znovustahování
         version: versionOpts,
         memory: {
             max: `${config.ramMax || 4}G`,
@@ -819,8 +1135,9 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             fullscreen: config.resolution ? config.resolution.fullscreen : false
         },
         quickPlay: quickPlay,
-        downloadAudioDlc: config.enableAudioDlc !== false,
+        downloadAudioDlc: true,
         overrides: {
+            gameDirectory: gameInstanceDir, // Sem Minecraft generuje a odkud čte mods, config, options.txt, saves
             assetRoot: path.join(BASE_DIR, 'assets'),
             libraryRoot: path.join(BASE_DIR, 'libraries'),
             detached: false,
@@ -828,6 +1145,18 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             timeout: 10000
         }
     };
+
+    if (versionOpts.custom) {
+        const customDir = path.join(BASE_DIR, 'versions', versionOpts.custom);
+        const customJson = path.join(customDir, `${versionOpts.custom}.json`);
+        const customJar = path.join(customDir, `${versionOpts.custom}.jar`);
+        if (fs.existsSync(customJson)) {
+            opts.overrides.versionJson = customJson;
+        }
+        if (fs.existsSync(customJar)) {
+            opts.overrides.minecraftJar = customJar;
+        }
+    }
 
     // Prepare Environment Variables for Game Launch (Wayland, Linux Performance & Prism features)
     const savedEnv = {};
@@ -916,9 +1245,9 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             if (foundGlfw) {
                 jvmArgs.push(`-Dorg.lwjgl.glfw.libname=${foundGlfw}`);
                 onLog(`[WAYLAND] Aktivována systémová GLFW knihovna: ${foundGlfw}`);
-            } else {
-                jvmArgs.push('-Dorg.lwjgl.glfw.libname=wayland');
             }
+            // ZDE NIKDY nepřidávat -Dorg.lwjgl.glfw.libname=wayland, protože LWJGL hledá libwayland.so,
+            // které neexistuje a způsobí pád. LWJGL 3.4.1+ nativně obslouží Wayland díky GLFW_PLATFORM=wayland.
             jvmArgs.push('-Djdk.gtk.version=3');
             jvmArgs.push('-Dawt.useSystemAAFontSettings=on');
             onLog('[WAYLAND] Vynuceno nativní Wayland okno (GLFW_PLATFORM=wayland, minimální input lag myši)');
@@ -950,7 +1279,7 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
         let text;
         if (e.type === 'assets') {
             text = percent >= 100 ? 'Herní data připravena' : `Načítání hry... ${percent}%`;
-        } else if (e.type === 'classes') {
+        } else if (e.type === 'classes' || e.type === 'classes-custom' || e.type === 'classes-maven-custom') {
             text = percent >= 100 ? 'Knihovny připraveny' : `Příprava herních knihoven... ${percent}%`;
         } else {
             text = `Načítání hry... ${percent}%`;
@@ -1056,15 +1385,6 @@ function cancelLaunch() {
             }
             activeLauncherClient._sessionDownloadedFiles.clear();
         }
-    }
-
-    if (currentLaunchInfo && currentLaunchInfo.rootDir && currentLaunchInfo.targetVersion) {
-        const vDir = path.join(currentLaunchInfo.rootDir, 'versions', currentLaunchInfo.targetVersion);
-        try {
-            if (fs.existsSync(vDir)) {
-                fs.rmSync(vDir, { recursive: true, force: true });
-            }
-        } catch (e) {}
     }
 
     if (activeMinecraftProcess) {

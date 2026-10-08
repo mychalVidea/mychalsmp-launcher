@@ -69,17 +69,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const consoleOutput = document.getElementById('consoleOutput');
     const btnClearLog = document.getElementById('btnClearLog');
 
-    // DLC Audio Elements
-    const checkAudioDlc = document.getElementById('checkAudioDlc');
-    const dlcAudioBadge = document.getElementById('dlcAudioBadge');
-    const dlcAudioStatusText = document.getElementById('dlcAudioStatusText');
-    const btnCheckAudioDlc = document.getElementById('btnCheckAudioDlc');
-    const btnDownloadAudioDlc = document.getElementById('btnDownloadAudioDlc');
-    const dlcProgressBox = document.getElementById('dlcProgressBox');
-    const dlcProgressStatus = document.getElementById('dlcProgressStatus');
-    const dlcProgressPercent = document.getElementById('dlcProgressPercent');
-    const dlcProgressBar = document.getElementById('dlcProgressBar');
-
     // State
     let currentConfig = {};
     let installedVersions = [];
@@ -284,13 +273,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             detectAvailableJavas();
             checkWardenProbe();
             checkLauncherUpdates(true);
-
-            // Audio DLC
-            if (checkAudioDlc) {
-                checkAudioDlc.checked = currentConfig.enableAudioDlc !== false;
-                updateAudioDlcBadge(checkAudioDlc.checked);
-            }
-            refreshAudioDlcStatusUi();
         } catch (e) {
             console.error('Chyba při načítání konfigurace:', e);
         }
@@ -314,7 +296,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (panelMs) panelMs.style.display = 'flex';
             if (panelOff) panelOff.style.display = 'none';
             if (badgePill) {
-                badgePill.textContent = '🟢 Microsoft Účet (Mojang)';
+                badgePill.textContent = '🟢 Microsoft Účet';
                 badgePill.className = 'skin-badge-pill pill-microsoft';
             }
             loadMojangCapes();
@@ -366,23 +348,91 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateHeroSkinViewer3D(skinSrc, effectiveCape, isSlim);
     }
 
-    // ── Version Statuses ────────────────────────────────────────────────────
+    // ── Version Statuses & Interactivity ──────────────────────────────────
     async function refreshVersionStatuses() {
         try {
             installedVersions = await window.api.getInstalledVersions();
-            const is262 = installedVersions.includes('26.2');
-            const is263 = installedVersions.includes('26.3');
-            const is2612 = installedVersions.includes('26.1.2');
+            const activeProfile = (currentConfig.profiles || []).find(p => p.id === currentConfig.activeProfileId);
+            const activeVersion = activeProfile ? activeProfile.version : (currentConfig.version || '26.2');
 
-            const s262 = document.getElementById('vStatus262');
-            if (s262) s262.textContent = is262 ? '✓ Nainstalováno lokálně' : 'Připraveno ke stažení';
+            const versions = ['26.2', '26.3', '26.1.2'];
+            for (const ver of versions) {
+                const idSuffix = ver.replace(/\./g, '');
+                const card = document.getElementById(`vCard${idSuffix}`);
+                const statusBadge = document.getElementById(`vStatus${idSuffix}`);
+                const btnAction = document.getElementById(`btnAction${idSuffix}`);
+                const btnStop = document.getElementById(`btnStop${idSuffix}`);
+                const progressBox = document.getElementById(`vProgressBox${idSuffix}`);
+                const isInstalled = installedVersions.includes(ver);
+                const isThisRunning = isRunning && activeVersion === ver;
+                const isThisLaunching = isLaunching && activeVersion === ver;
 
-            const s263 = document.getElementById('vStatus263');
-            if (s263) s263.textContent = is263 ? '✓ Nainstalováno lokálně' : 'Připraveno ke stažení';
+                if (card) {
+                    if (isThisRunning) {
+                        card.classList.add('is-running');
+                    } else {
+                        card.classList.remove('is-running');
+                    }
+                }
 
-            const s2612 = document.getElementById('vStatus2612');
-            if (s2612) s2612.textContent = is2612 ? '✓ Nainstalováno lokálně' : 'Připraveno ke stažení';
-        } catch (e) {}
+                if (statusBadge) {
+                    const label = statusBadge.querySelector('.v-status-label') || statusBadge;
+                    if (isThisRunning) {
+                        statusBadge.className = 'v-status-badge running';
+                        label.textContent = '⚡ Spuštěno';
+                    } else if (isThisLaunching) {
+                        statusBadge.className = 'v-status-badge downloading';
+                        label.textContent = '⏳ Příprava / Stahování...';
+                    } else if (isInstalled) {
+                        statusBadge.className = 'v-status-badge installed';
+                        label.textContent = '✓ Nainstalováno';
+                    } else {
+                        statusBadge.className = 'v-status-badge';
+                        label.textContent = '⚪ Připraveno ke stažení';
+                    }
+                }
+
+                if (btnAction && btnStop) {
+                    if (isThisRunning) {
+                        btnAction.style.display = 'none';
+                        btnStop.style.display = 'flex';
+                    } else {
+                        btnStop.style.display = 'none';
+                        btnAction.style.display = 'flex';
+                        if (isThisLaunching) {
+                            btnAction.disabled = true;
+                            btnAction.innerHTML = `<span>⏳ Načítání hry...</span>`;
+                        } else if (isInstalled) {
+                            btnAction.disabled = false;
+                            btnAction.innerHTML = `<span>▶ Hrát Minecraft ${ver}</span>`;
+                        } else {
+                            btnAction.disabled = false;
+                            btnAction.innerHTML = `<span>⬇ Stáhnout & Hrát ${ver}</span>`;
+                        }
+                    }
+                }
+
+                // Synchronizace výběru modloaderu (Vanilla / Fabric)
+                const matchedProfile = (currentConfig.profiles || []).find(p => p.version === ver);
+                const currentLoader = matchedProfile ? (matchedProfile.loader || 'vanilla') : 'vanilla';
+                const loaderOptions = document.querySelector(`.v-loader-options[data-version="${ver}"]`);
+                if (loaderOptions) {
+                    loaderOptions.querySelectorAll('.v-loader-btn').forEach(lBtn => {
+                        if (lBtn.dataset.loader === currentLoader) {
+                            lBtn.classList.add('active');
+                        } else {
+                            lBtn.classList.remove('active');
+                        }
+                    });
+                }
+
+                if (progressBox && !isThisLaunching) {
+                    progressBox.style.display = 'none';
+                }
+            }
+        } catch (e) {
+            console.warn('refreshVersionStatuses error:', e);
+        }
     }
 
     // ── Server Tracker & Pinning Rendering ──────────────────────────────────
@@ -581,7 +631,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (hasChanges) {
             renderServerTracker();
             renderServersFullTab();
-            try { await window.api.saveConfig({ servers: currentConfig.servers }); } catch (e) {}
+            try { await window.api.saveConfig({ servers: currentConfig.servers }); } catch (e) { }
         }
     }
 
@@ -1172,22 +1222,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         list.innerHTML = profiles.map(p => {
             const isActive = p.id === activeId;
             const iconSymbol = p.icon === 'sword' ? '⚔️' :
-                               p.icon === 'latest' ? '✨' :
-                               p.icon === 'chest' ? '📦' :
-                               p.icon === 'upgrade' ? '⚡' :
-                               p.icon === 'import' ? '📥' :
-                               p.icon === 'shield' ? '🛡️' :
-                               p.icon === 'rocket' ? '🚀' : '🎮';
+                p.icon === 'latest' ? '✨' :
+                    p.icon === 'chest' ? '📦' :
+                        p.icon === 'upgrade' ? '⚡' :
+                            p.icon === 'import' ? '📥' :
+                                p.icon === 'shield' ? '🛡️' :
+                                    p.icon === 'rocket' ? '🚀' : '🎮';
 
             const badgeClass = (p.id === 'minecraft-26.2' || p.id === 'mychalsmp-26.2') ? 'p-recommended' :
-                               p.version === '26.3' ? 'p-latest' :
-                               p.icon === 'upgrade' ? 'p-upgrade' :
-                               p.icon === 'import' ? 'p-imported' : 'p-vanilla';
+                p.version === '26.3' ? 'p-latest' :
+                    p.icon === 'upgrade' ? 'p-upgrade' :
+                        p.icon === 'import' ? 'p-imported' : 'p-vanilla';
 
             const badgeText = (p.id === 'minecraft-26.2' || p.id === 'mychalsmp-26.2') ? 'Doporučeno 26.2' :
-                              p.version === '26.3' ? 'Nejnovější 26.3' :
-                              p.icon === 'upgrade' ? `Upgrade (${p.version})` :
-                              p.icon === 'import' ? `Import (${p.version})` : `Verze ${p.version}`;
+                p.version === '26.3' ? 'Nejnovější 26.3' :
+                    p.icon === 'upgrade' ? `Upgrade (${p.version})` :
+                        p.icon === 'import' ? `Import (${p.version})` : `Verze ${p.version}`;
 
             const playtimeStr = (p.playtimeSeconds && p.playtimeSeconds >= 60)
                 ? `Odehráno: ${formatPlaytime(p.playtimeSeconds)}`
@@ -1219,15 +1269,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="profile-actions">
                         ${upgradeBtnHtml}
                         <button class="mc-btn ${(() => {
-                            if (isRunning && isActive) return 'mc-btn-red';
-                            const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
-                            return isInst ? 'mc-btn-green' : 'mc-btn-primary';
-                        })()} btn-launch-profile" data-profile-id="${escapeHtml(p.id)}">
+                    if (isRunning && isActive) return 'mc-btn-red';
+                    const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
+                    return isInst ? 'mc-btn-green' : 'mc-btn-primary';
+                })()} btn-launch-profile" data-profile-id="${escapeHtml(p.id)}">
                             <span>${(() => {
-                                if (isRunning && isActive) return '■ Stop';
-                                const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
-                                return isInst ? '▶ Hrát' : '⬇ Stáhnout';
-                            })()}</span>
+                    if (isRunning && isActive) return '■ Stop';
+                    const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
+                    return isInst ? '▶ Hrát' : '⬇ Stáhnout';
+                })()}</span>
                         </button>
                         <button class="mc-btn mc-btn-secondary btn-profile-settings" data-profile-id="${escapeHtml(p.id)}" title="Nastavení profilu">⚙</button>
                     </div>
@@ -1275,7 +1325,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function selectActiveProfile(profileId) {
         currentConfig.activeProfileId = profileId;
-        window.api.saveConfig({ activeProfileId: profileId });
+        const p = (currentConfig.profiles || []).find(x => x.id === profileId);
+        if (p) {
+            currentConfig.version = p.version;
+            currentConfig.loader = p.loader || 'vanilla';
+            window.api.saveConfig({
+                activeProfileId: profileId,
+                version: p.version,
+                loader: p.loader || 'vanilla'
+            });
+            appendLog(`[PROFIL] Aktivován profil: ${p.name} (${p.version}, zavaděč: ${(p.loader || 'vanilla').toUpperCase()})`);
+            const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
+            if (sideConsoleStatus && !isRunning && !isLaunching) {
+                sideConsoleStatus.textContent = isInst
+                    ? 'Klient je připraven. Kliknutím na Hrát spustíš instanci s optimalizacemi.'
+                    : `Verze ${p.version} ještě není stažena. Kliknutím na Stáhnout ji nainstaluješ.`;
+            }
+        } else {
+            window.api.saveConfig({ activeProfileId: profileId });
+        }
         checkWardenProbe();
 
         document.querySelectorAll('.profile-row-card').forEach(c => {
@@ -1285,17 +1353,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 c.classList.remove('active-profile');
             }
         });
-
-        const p = (currentConfig.profiles || []).find(x => x.id === profileId);
-        if (p) {
-            appendLog(`[PROFIL] Aktivován profil: ${p.name} (${p.version})`);
-            const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
-            if (sideConsoleStatus && !isRunning && !isLaunching) {
-                sideConsoleStatus.textContent = isInst
-                    ? 'Klient je připraven. Kliknutím na Hrát spustíš instanci s optimalizacemi.'
-                    : `Verze ${p.version} ještě není stažena. Kliknutím na Stáhnout ji nainstaluješ.`;
-            }
-        }
     }
 
     if (sidebarPlayBtn) {
@@ -1304,15 +1361,64 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Version tab installer buttons
+    // Version tab installer buttons & stop buttons
     document.querySelectorAll('.btn-install-v').forEach(btn => {
         btn.addEventListener('click', async () => {
             const ver = btn.dataset.version;
-            const matchedProfile = (currentConfig.profiles || []).find(p => p.version === ver);
-            const pid = matchedProfile ? matchedProfile.id : (currentConfig.activeProfileId || 'minecraft-26.2');
+            const profiles = currentConfig.profiles || [];
+            let matchedProfile = profiles.find(p => p.id === currentConfig.activeProfileId && p.version === ver);
+            if (!matchedProfile) {
+                matchedProfile = profiles.find(p => p.version === ver);
+            }
+            const pid = matchedProfile ? matchedProfile.id : (currentConfig.activeProfileId || `minecraft-${ver}`);
             selectActiveProfile(pid);
-            appendLog(`[PROFIL] Spouštím instalaci / hraní verze ${ver}...`);
+            appendLog(`[PROFIL] Spouštím verzi ${ver}...`);
+            refreshVersionStatuses();
             startLaunch(pid, null);
+        });
+    });
+
+    document.querySelectorAll('.btn-stop-v').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            appendLog('[LAUNCHER] Zastavuji herní proces na přání uživatele...');
+            try {
+                await window.api.killGame();
+            } catch (e) {}
+            resetPlayState();
+            refreshVersionStatuses();
+        });
+    });
+
+    // Version tab modloader selection pills (Vanilla / Fabric)
+    document.querySelectorAll('.v-loader-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const parent = btn.closest('.v-loader-options');
+            if (!parent) return;
+            const ver = parent.dataset.version;
+            const loader = btn.dataset.loader || 'vanilla';
+
+            parent.querySelectorAll('.v-loader-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const profiles = currentConfig.profiles || [];
+            let matchedAny = false;
+            profiles.forEach(p => {
+                if (p.version === ver) {
+                    p.loader = loader;
+                    matchedAny = true;
+                }
+            });
+            const activeProfile = profiles.find(p => p.id === currentConfig.activeProfileId);
+            if (activeProfile && activeProfile.version === ver) {
+                currentConfig.loader = loader;
+            } else if (!activeProfile || matchedAny) {
+                currentConfig.loader = loader;
+            }
+            await window.api.saveConfig({ profiles, loader: currentConfig.loader });
+            showToast(`Zavaděč pro verzi ${ver} nastaven na: ${loader.toUpperCase()}`, 'info');
+            appendLog(`[PROFIL] Verze ${ver} nastavena na zavaděč: ${loader.toUpperCase()}`);
+            refreshVersionStatuses();
+            renderProfilesList();
         });
     });
 
@@ -1344,10 +1450,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        if (isLaunching) return;
-
         isLaunching = true;
         if (sidebarPlayBtn) sidebarPlayBtn.style.opacity = '0.5';
+        refreshVersionStatuses();
 
         const targetPid = profileId || currentConfig.activeProfileId || 'minecraft-26.2';
         const targetProf = (currentConfig.profiles || []).find(x => x.id === targetPid);
@@ -1383,7 +1488,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 try {
                     installedVersions = await window.api.getInstalledVersions();
-                } catch (e) {}
+                } catch (e) { }
 
                 // Record real lastPlayed timestamp for profile
                 const launchedProfile = (currentConfig.profiles || []).find(x => x.id === targetPid);
@@ -1455,6 +1560,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ? 'Klient je připraven. Kliknutím na Hrát spustíš instanci s optimalizacemi.'
                 : `Verze ${activeP ? activeP.version : ''} ještě není stažena. Kliknutím na Stáhnout ji nainstaluješ.`;
         }
+        document.querySelectorAll('.v-card-progress').forEach(p => p.style.display = 'none');
+        refreshVersionStatuses();
     }
 
     // ── Modrinth Catalog Browsing (Mods, Resourcepacks & Shaders) ──────────
@@ -1755,14 +1862,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 activeMojangCapeUrl = active.url;
                 return active.url;
             }
+            return null; // Oficiální účet bez aktivního pláště nemá žádný plášť
         } else {
+            // Warez / offline: žádný defaultní plášť, POUZE pokud si hráč sám nahrál vlastní cape!
             if (currentConfig.customCapePath && currentConfig.customCapePath !== 'none') {
                 return (currentConfig.customCapePath.startsWith('http') || currentConfig.customCapePath.startsWith('file://'))
                     ? currentConfig.customCapePath
                     : `file://${currentConfig.customCapePath}`;
             }
+            return null;
         }
-        return getDefaultServerCapeUrl();
     }
 
     /**
@@ -1776,7 +1885,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             cancelHeroReturn();
             if (heroSkinViewer) {
-                try { heroSkinViewer.dispose(); } catch (_) {}
+                try { heroSkinViewer.dispose(); } catch (_) { }
                 heroSkinViewer = null;
             }
 
@@ -1814,7 +1923,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 canvas.style.cursor = 'grabbing';
                 try {
                     canvas.setPointerCapture(e.pointerId);
-                } catch (_) {}
+                } catch (_) { }
             };
 
             canvas.onpointermove = (e) => {
@@ -1840,7 +1949,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (e.pointerId && canvas.hasPointerCapture(e.pointerId)) {
                         canvas.releasePointerCapture(e.pointerId);
                     }
-                } catch (_) {}
+                } catch (_) { }
 
                 scheduleHeroReturn();
             };
@@ -2455,7 +2564,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     javaDetectedList.innerHTML = `<span class="java-pill">Java 25/21 automatická detekce</span>`;
                 }
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     if (btnDetectJava) {
@@ -2505,7 +2614,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             disableVsync: checkDisableVsync ? checkDisableVsync.checked : false,
             enableNativeWayland: checkNativeWayland ? checkNativeWayland.checked : false,
             enableDiscordRpc: checkDiscordRpc ? checkDiscordRpc.checked : true,
-            enableAudioDlc: checkAudioDlc ? checkAudioDlc.checked : true,
             customJvmArgs: jvmArgsInput ? jvmArgsInput.value.trim() : null,
             customEnvVars: customEnvVarsInput ? customEnvVarsInput.value.trim() : ''
         };
@@ -2635,117 +2743,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // ── Minecraft Hudba & Zvuky (DLC) UI Logic ──────────────────────────────
-    function updateAudioDlcBadge(enabled) {
-        if (!dlcAudioBadge) return;
-        if (enabled) {
-            dlcAudioBadge.textContent = 'Výchozí: Zapnuto';
-            dlcAudioBadge.classList.remove('off');
-        } else {
-            dlcAudioBadge.textContent = 'Vypnuto (Rychlý start)';
-            dlcAudioBadge.classList.add('off');
-        }
-    }
 
-    async function refreshAudioDlcStatusUi() {
-        if (!dlcAudioStatusText) return;
-        try {
-            const res = await window.api.checkAudioDlc();
-            if (!res) return;
-            if (res.installed) {
-                dlcAudioStatusText.textContent = `✓ Kompletně nainstalováno (${res.totalAudioFiles} zvuků a skladeb)`;
-                dlcAudioStatusText.className = 'dlc-status-info installed';
-                if (btnDownloadAudioDlc) {
-                    btnDownloadAudioDlc.innerHTML = '<span>✓ Audio balíček je kompletní</span>';
-                    btnDownloadAudioDlc.disabled = true;
-                }
-            } else if (res.missingCount > 0) {
-                dlcAudioStatusText.textContent = `Stav: Chybí ${res.missingCount} z ${res.totalAudioFiles} audio souborů (~${res.missingMB} MB)`;
-                dlcAudioStatusText.className = 'dlc-status-info';
-                if (btnDownloadAudioDlc) {
-                    btnDownloadAudioDlc.innerHTML = '<span>⬇️ Stáhnout audio balíček nyní</span>';
-                    btnDownloadAudioDlc.disabled = false;
-                }
-            } else {
-                dlcAudioStatusText.textContent = 'Stav: K dispozici k automatickému stažení při spuštění hry.';
-                dlcAudioStatusText.className = 'dlc-status-info';
-                if (btnDownloadAudioDlc) {
-                    btnDownloadAudioDlc.innerHTML = '<span>⬇️ Stáhnout audio balíček nyní</span>';
-                    btnDownloadAudioDlc.disabled = false;
-                }
-            }
-        } catch (e) {
-            console.warn('Chyba při zjišťování stavu Audio DLC:', e);
-        }
-    }
-
-    if (checkAudioDlc) {
-        checkAudioDlc.addEventListener('change', async () => {
-            const isEnabled = checkAudioDlc.checked;
-            updateAudioDlcBadge(isEnabled);
-            await window.api.saveConfig({ enableAudioDlc: isEnabled });
-            currentConfig.enableAudioDlc = isEnabled;
-            if (isEnabled) {
-                showToast('🎵 Audio DLC zapnuto: Hudba a zvuky se automaticky stáhnou s hrou.', 'info');
-            } else {
-                showToast('⚡ Rychlý start: Hudba a zvuky vynechány. Můžeš je kdykoliv doinstalovat níže.', 'info');
-            }
-        });
-    }
-
-    if (btnCheckAudioDlc) {
-        btnCheckAudioDlc.addEventListener('click', async () => {
-            if (dlcAudioStatusText) dlcAudioStatusText.textContent = 'Zjišťování stavu audio souborů...';
-            await refreshAudioDlcStatusUi();
-            showToast('Stav audio balíčku byl aktualizován.', 'info');
-        });
-    }
-
-    if (btnDownloadAudioDlc) {
-        btnDownloadAudioDlc.addEventListener('click', async () => {
-            try {
-                btnDownloadAudioDlc.disabled = true;
-                btnDownloadAudioDlc.innerHTML = '<span>⏳ Stahování...</span>';
-                if (dlcProgressBox) dlcProgressBox.style.display = 'block';
-                if (dlcProgressBar) dlcProgressBar.style.width = '0%';
-                if (dlcProgressPercent) dlcProgressPercent.textContent = '0%';
-                if (dlcProgressStatus) dlcProgressStatus.textContent = 'Příprava stahování audio balíčku...';
-
-                const removeListener = window.api.onAudioDlcProgress((data) => {
-                    if (dlcProgressBar) dlcProgressBar.style.width = `${data.percent}%`;
-                    if (dlcProgressPercent) dlcProgressPercent.textContent = `${data.percent}%`;
-                    if (dlcProgressStatus) {
-                        dlcProgressStatus.textContent = `Stahování: ${data.current} / ${data.total} (${data.percent}%)`;
-                    }
-                });
-
-                const res = await window.api.downloadAudioDlc();
-                if (removeListener) removeListener();
-
-                if (res && res.success) {
-                    if (dlcProgressBar) dlcProgressBar.style.width = '100%';
-                    if (dlcProgressPercent) dlcProgressPercent.textContent = '100%';
-                    if (dlcProgressStatus) dlcProgressStatus.textContent = '✓ Stahování dokončeno!';
-                    showToast('🎵 Minecraft Audio balíček (DLC) byl úspěšně stažen!', 'success');
-                    setTimeout(() => {
-                        if (dlcProgressBox) dlcProgressBox.style.display = 'none';
-                        refreshAudioDlcStatusUi();
-                    }, 1200);
-                } else if (res && res.error) {
-                    showToast(`Chyba stahování audio balíčku: ${res.error}`, 'error');
-                    if (dlcProgressBox) dlcProgressBox.style.display = 'none';
-                    btnDownloadAudioDlc.disabled = false;
-                    btnDownloadAudioDlc.innerHTML = '<span>⬇️ Zkusit znovu</span>';
-                }
-            } catch (err) {
-                console.error('Chyba při stahování DLC:', err);
-                showToast(`Chyba: ${err.message}`, 'error');
-                if (dlcProgressBox) dlcProgressBox.style.display = 'none';
-                btnDownloadAudioDlc.disabled = false;
-                btnDownloadAudioDlc.innerHTML = '<span>⬇️ Zkusit znovu</span>';
-            }
-        });
-    }
 
     // ── Console Output ──────────────────────────────────────────────────────
     function appendLog(line) {
@@ -2765,12 +2763,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── IPC Launch Events ───────────────────────────────────────────────────
     window.api.onProgress((data) => {
-        if (!progressContainer) return;
-        progressContainer.style.display = 'flex';
         const percent = Math.min(Math.max(data.percent || 0, 0), 100);
-        if (progressBar) progressBar.style.width = `${percent}%`;
-        if (progressPercent) progressPercent.textContent = `${percent}%`;
-        if (progressText) progressText.textContent = data.text || 'Načítání hry...';
+        if (progressContainer) {
+            progressContainer.style.display = 'flex';
+            if (progressBar) progressBar.style.width = `${percent}%`;
+            if (progressPercent) progressPercent.textContent = `${percent}%`;
+            if (progressText) progressText.textContent = data.text || 'Načítání hry...';
+        }
+
+        // Živý indikátor stahování přímo v kartě spouštěné verze
+        const activeProfile = (currentConfig.profiles || []).find(p => p.id === currentConfig.activeProfileId);
+        const activeVer = activeProfile ? activeProfile.version : (currentConfig.version || '26.2');
+        const idSuffix = activeVer ? activeVer.replace(/\./g, '') : '262';
+        const vBox = document.getElementById(`vProgressBox${idSuffix}`);
+        const vBar = document.getElementById(`vProgressBar${idSuffix}`);
+        const vPct = document.getElementById(`vProgressPercent${idSuffix}`);
+        const vTxt = document.getElementById(`vProgressText${idSuffix}`);
+        const vBadge = document.getElementById(`vStatus${idSuffix}`);
+
+        if (vBox) {
+            vBox.style.display = 'flex';
+            if (vBar) vBar.style.width = `${percent}%`;
+            if (vPct) vPct.textContent = `${percent}%`;
+            if (vTxt) vTxt.textContent = data.text || 'Načítání...';
+        }
+        if (vBadge) {
+            vBadge.className = 'v-status-badge downloading';
+            const vLabel = vBadge.querySelector('.v-status-label') || vBadge;
+            vLabel.textContent = `⏳ Stahování... ${percent}%`;
+        }
     });
 
     window.api.onLog((line) => appendLog(line));

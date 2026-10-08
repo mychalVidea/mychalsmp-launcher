@@ -552,7 +552,12 @@ ipcMain.handle('update-profile-settings', async (event, profileId, updates) => {
         }
         return p;
     });
-    saveConfig({ profiles });
+    const extra = {};
+    if (config.activeProfileId === profileId) {
+        if (updates.version) extra.version = updates.version;
+        if (updates.loader) extra.loader = updates.loader;
+    }
+    saveConfig({ profiles, ...extra });
     return { success: true };
 });
 
