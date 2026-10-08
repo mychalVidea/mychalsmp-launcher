@@ -1,6 +1,6 @@
 {
   "name": "mychalsmp-launcher",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "Oficiální multiplatformní launcher pro síť MYCHAL SMP s optimalizovaným klientem pro Windows 11 a Linux",
   "main": "src/main/index.js",
   "scripts": {

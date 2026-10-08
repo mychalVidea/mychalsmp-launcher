@@ -1,4 +1,9 @@
-const fs = require('fs');
+let fs;
+try {
+    fs = require('original-fs');
+} catch (e) {
+    fs = require('fs');
+}
 const path = require('path');
 const os = require('os');
 const { app, shell } = require('electron');
@@ -110,18 +115,24 @@ function isNewerVersion(remote, local) {
  * by unlinking/renaming the destination first.
  */
 function safeCopyFile(src, dst) {
-    if (fs.existsSync(dst)) {
-        try {
-            fs.unlinkSync(dst);
-        } catch (e1) {
+    const prevNoAsar = process.noAsar;
+    process.noAsar = true;
+    try {
+        if (fs.existsSync(dst)) {
             try {
-                const oldPath = dst + '.old.' + Date.now();
-                fs.renameSync(dst, oldPath);
-                try { fs.unlinkSync(oldPath); } catch (_) {}
-            } catch (e2) {}
+                fs.unlinkSync(dst);
+            } catch (e1) {
+                try {
+                    const oldPath = dst + '.old.' + Date.now();
+                    fs.renameSync(dst, oldPath);
+                    try { fs.unlinkSync(oldPath); } catch (_) {}
+                } catch (e2) {}
+            }
         }
+        fs.copyFileSync(src, dst);
+    } finally {
+        process.noAsar = prevNoAsar;
     }
-    fs.copyFileSync(src, dst);
 }
 
 /**
@@ -137,96 +148,103 @@ async function applyUpdate(assetUrl, onProgress) {
 
     // ── 1. Blesková Delta Aktualizace (jen změněné soubory app.asar ~3 MB) ────
     if (assetUrl.endsWith('.asar')) {
-        let resourcesDir = null;
-        const exeDir = path.dirname(process.execPath);
-        const candidates = [
-            process.resourcesPath,
-            path.join(exeDir, 'resources'),
-            path.join(os.homedir(), '.local', 'share', 'mychalsmp-launcher', 'resources')
-        ];
+        const prevNoAsar = process.noAsar;
+        process.noAsar = true;
+        try {
+            let resourcesDir = null;
+            const exeDir = path.dirname(process.execPath);
+            const candidates = [
+                process.resourcesPath,
+                path.join(exeDir, 'resources'),
+                path.join(os.homedir(), '.local', 'share', 'mychalsmp-launcher', 'resources')
+            ];
 
-        for (const cand of candidates) {
-            if (cand && fs.existsSync(cand) && (fs.existsSync(path.join(cand, 'app.asar')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher.exe')))) {
-                resourcesDir = cand;
-                break;
-            }
-        }
-
-        if (!resourcesDir) {
-            resourcesDir = process.resourcesPath || path.join(exeDir, 'resources');
-            try { fs.mkdirSync(resourcesDir, { recursive: true }); } catch (e) {}
-        }
-
-        const targetAsar = path.join(resourcesDir, 'app.asar');
-        const tmpAsar = path.join(os.tmpdir(), `mychalsmp-update-${Date.now()}.asar`);
-
-        const res = await fetch(assetUrl, {
-            headers: { 'User-Agent': 'mychalsmp-launcher-updater' }
-        });
-        if (!res.ok) throw new Error(`Chyba stahování delta balíčku: HTTP ${res.status}`);
-
-        const totalBytes = parseInt(res.headers.get('content-length')) || 0;
-        let receivedBytes = 0;
-        const fileStream = fs.createWriteStream(tmpAsar);
-        const nodeStream = Readable.fromWeb(res.body);
-
-        let lastReport = 0;
-        nodeStream.on('data', (chunk) => {
-            receivedBytes += chunk.length;
-            const now = Date.now();
-            if (now - lastReport > 40 || receivedBytes === totalBytes) {
-                lastReport = now;
-                const percent = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0;
-                if (onProgress) {
-                    onProgress({
-                        current: receivedBytes,
-                        total: totalBytes,
-                        percent: Math.min(percent, 100),
-                        status: 'downloading',
-                        isDelta: true
-                    });
+            for (const cand of candidates) {
+                if (cand && fs.existsSync(cand) && (fs.existsSync(path.join(cand, 'app.asar')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher.exe')))) {
+                    resourcesDir = cand;
+                    break;
                 }
             }
-        });
 
-        await pipeline(nodeStream, fileStream);
+            if (!resourcesDir) {
+                resourcesDir = process.resourcesPath || path.join(exeDir, 'resources');
+                try { fs.mkdirSync(resourcesDir, { recursive: true }); } catch (e) {}
+            }
 
-        if (onProgress) {
-            onProgress({
-                current: totalBytes,
-                total: totalBytes,
-                percent: 100,
-                status: 'extracting',
-                isDelta: true
+            const targetAsar = path.join(resourcesDir, 'app.asar');
+            // Použijeme .download příponu během streamu, aby Electron nezkoušel balíček parsovat
+            const tmpAsar = path.join(os.tmpdir(), `mychalsmp-update-${Date.now()}.download`);
+
+            const res = await fetch(assetUrl, {
+                headers: { 'User-Agent': 'mychalsmp-launcher-updater' }
             });
-        }
+            if (!res.ok) throw new Error(`Chyba stahování delta balíčku: HTTP ${res.status}`);
 
-        // Záloha a atomické přepsání
-        const backupAsar = path.join(resourcesDir, 'app.asar.bak');
-        try {
-            if (fs.existsSync(targetAsar)) {
-                fs.copyFileSync(targetAsar, backupAsar);
+            const totalBytes = parseInt(res.headers.get('content-length')) || 0;
+            let receivedBytes = 0;
+            const fileStream = fs.createWriteStream(tmpAsar);
+            const nodeStream = Readable.fromWeb(res.body);
+
+            let lastReport = 0;
+            nodeStream.on('data', (chunk) => {
+                receivedBytes += chunk.length;
+                const now = Date.now();
+                if (now - lastReport > 40 || receivedBytes === totalBytes) {
+                    lastReport = now;
+                    const percent = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0;
+                    if (onProgress) {
+                        onProgress({
+                            current: receivedBytes,
+                            total: totalBytes,
+                            percent: Math.min(percent, 100),
+                            status: 'downloading',
+                            isDelta: true
+                        });
+                    }
+                }
+            });
+
+            await pipeline(nodeStream, fileStream);
+
+            if (onProgress) {
+                onProgress({
+                    current: totalBytes,
+                    total: totalBytes,
+                    percent: 100,
+                    status: 'extracting',
+                    isDelta: true
+                });
             }
-        } catch (e) {}
 
-        try {
-            safeCopyFile(tmpAsar, targetAsar);
-            try { fs.unlinkSync(tmpAsar); } catch (e) {}
-        } catch (copyErr) {
-            if (fs.existsSync(backupAsar)) {
-                try { safeCopyFile(backupAsar, targetAsar); } catch (e) {}
+            // Záloha a atomické přepsání
+            const backupAsar = path.join(resourcesDir, 'app.asar.bak');
+            try {
+                if (fs.existsSync(targetAsar)) {
+                    fs.copyFileSync(targetAsar, backupAsar);
+                }
+            } catch (e) {}
+
+            try {
+                safeCopyFile(tmpAsar, targetAsar);
+                try { fs.unlinkSync(tmpAsar); } catch (e) {}
+            } catch (copyErr) {
+                if (fs.existsSync(backupAsar)) {
+                    try { safeCopyFile(backupAsar, targetAsar); } catch (e) {}
+                }
+                throw new Error(`Chyba při zápisu delta balíčku: ${copyErr.message}`);
             }
-            throw new Error(`Chyba při zápisu delta balíčku: ${copyErr.message}`);
-        }
 
-        const targetExe = process.execPath;
-        return {
-            success: true,
-            applied: true,
-            isDelta: true,
-            targetExe: targetExe,
-            message: 'Blesková delta aktualizace byla úspěšně nainstalována.'
-        };
+            const targetExe = process.execPath;
+            return {
+                success: true,
+                applied: true,
+                isDelta: true,
+                targetExe: targetExe,
+                message: 'Blesková delta aktualizace byla úspěšně nainstalována.'
+            };
+        } finally {
+            process.noAsar = prevNoAsar;
+        }
     }
 
     // ── 2. Plná instalace archivu .tar.gz (Linux) se souborovým diff-syncem ───

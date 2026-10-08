@@ -103,6 +103,16 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
         );
         logExcerpt = errorLines.slice(-15).join('\n') || logTail.split('\n').slice(-15).join('\n');
     }
+    
+    // Pokud logTail neobsahoval žádnou chybu nebo byl prázdný, vytáhneme chyby přímo z paměťových logů (stdout/stderr)
+    if (!logExcerpt && memoryLogText) {
+        const memLines = memoryLogText.split('\n').map(l => l.trim()).filter(Boolean);
+        const errorLines = memLines.filter(l =>
+            l.includes('FATAL') || l.includes('ERROR') || l.includes('Exception') || l.includes('Error') ||
+            l.includes('GLFW') || l.includes('GLX') || l.includes('Failed') || l.includes('[GAME]') || l.includes('[STDERR]')
+        );
+        logExcerpt = errorLines.slice(-15).join('\n') || memLines.slice(-15).join('\n');
+    }
 
     // ── Diagnostic Rule 1: Out of Memory / Insufficient RAM ──────────────────
     if (
@@ -262,7 +272,31 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
         };
     }
 
-    // ── Fallback: Generic Exit Code 1 / Unknown crash ────────────────────────
+    // ── Diagnostic Rule 8: GLFW / OpenGL / GLX Initialization Failure ────────
+    if (
+        /Failed to initialize GLFW/i.test(combinedText) ||
+        /DISPLAY environment variable is missing/i.test(combinedText) ||
+        /libGLX_nvidia/i.test(combinedText) ||
+        /GLX: Failed to create context/i.test(combinedText) ||
+        /No OpenGL context found/i.test(combinedText) ||
+        /GLFW error/i.test(combinedText)
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Chyba grafického subsystému GLFW / OpenGL',
+            severity: 'critical',
+            description: 'Minecraft nedokázal inicializovat grafické okno nebo OpenGL kontext (chyba GLFW / GLX ovladače). To obvykle nastává při vynucení dedikované grafiky (NVIDIA) na zařízeních s integrovanou Intel/AMD grafikou nebo při chybějícím grafickém serveru.',
+            recommendation: 'Deaktivuj volbu "Vynutit diskrétní GPU" v nastavení grafiky nebo ověř grafické ovladače.',
+            logExcerpt: logExcerpt || 'Detekována chyba: Failed to initialize GLFW (GLX/Display context)',
+            autoFix: {
+                id: 'DISABLE_DISCRETE_GPU',
+                label: '⚡ Deaktivovat diskrétní GPU v nastavení',
+                description: 'Vypne vynucení NVIDIA GPU, které způsobuje pád na Intel a AMD grafických kartách.'
+            }
+        };
+    }
     return {
         hasCrash: true,
         exitCode,
@@ -444,6 +478,16 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                 success: true,
                 message: 'Nativní Wayland okno bylo úspěšně aktivováno v nastavení.',
                 updatedConfig: { enableNativeWayland: true }
+            };
+        }
+
+        case 'DISABLE_DISCRETE_GPU': {
+            config.enableDiscreteGpu = false;
+            if (saveConfigFn) saveConfigFn({ enableDiscreteGpu: false });
+            return {
+                success: true,
+                message: 'Vynucení diskrétní GPU bylo úspěšně vypnuto. Hra nyní použije standardní grafický adaptér.',
+                updatedConfig: { enableDiscreteGpu: false }
             };
         }
 

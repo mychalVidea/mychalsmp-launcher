@@ -84,7 +84,7 @@ const DEFAULT_CONFIG = {
     customJvmArgs: '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC',
     enableGameMode: true,
     enableMangoHud: false,
-    enableDiscreteGpu: true,
+    enableDiscreteGpu: false,
     enableZink: false,
     disableVsync: false,
     customEnvVars: '',

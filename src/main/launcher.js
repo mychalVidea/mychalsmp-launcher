@@ -2,6 +2,7 @@ const { Client } = require('minecraft-launcher-core');
 const Handler = require('minecraft-launcher-core/components/handler');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { execSync } = require('child_process');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
@@ -166,6 +167,15 @@ Client.prototype.startMinecraft = function(launchArguments) {
  * Zkontroluje, zda herní klient (<version>.jar) již existuje na disku v .minecraft nebo jiných instalacích.
  * Pokud ano, bleskově jej zkopíruje bez stahování 30–40 MB přes internet!
  */
+function getFileSha1(filePath) {
+    try {
+        const buffer = fs.readFileSync(filePath);
+        return crypto.createHash('sha1').update(buffer).digest('hex');
+    } catch (e) {
+        return null;
+    }
+}
+
 Handler.prototype.getJar = async function() {
     if (this.client && this.client._isCancelled) {
         return Promise.reject(new Error('LAUNCH_CANCELLED'));
@@ -175,12 +185,23 @@ Handler.prototype.getJar = async function() {
     const jarName = `${versionNumber}.jar`;
     const targetJarPath = path.join(this.options.directory, jarName);
     const targetJsonPath = path.join(this.options.directory, `${this.options.version.number}.json`);
+    const expectedSha1 = this.version && this.version.downloads && this.version.downloads.client ? this.version.downloads.client.sha1 : null;
 
-    // 1. Zkontrolovat, zda cílový client jar již existuje
+    // 1. Zkontrolovat, zda cílový client jar již existuje a je aktuální (ověření SHA-1 hashe od Microsoftu/Mojangu)
     if (fs.existsSync(targetJarPath)) {
-        try { fs.writeFileSync(targetJsonPath, JSON.stringify(this.version, null, 4)); } catch (e) {}
-        this.client.emit('debug', `[OPTIMALIZACE]: Verze ${jarName} již existuje na disku, stahování přeskočeno.`);
-        return;
+        let isUpToDate = true;
+        if (expectedSha1) {
+            const actualSha1 = getFileSha1(targetJarPath);
+            if (actualSha1 && actualSha1 !== expectedSha1) {
+                isUpToDate = false;
+                this.client.emit('debug', `[AKTUALIZACE]: Detekován nový patch / revize verze ${versionNumber} od Microsoftu/Mojangu (lokální SHA-1 ${actualSha1} neodpovídá ${expectedSha1}). Stahuji aktualizovaný klient jar...`);
+            }
+        }
+        if (isUpToDate) {
+            try { fs.writeFileSync(targetJsonPath, JSON.stringify(this.version, null, 4)); } catch (e) {}
+            this.client.emit('debug', `[OPTIMALIZACE]: Verze ${jarName} již existuje na disku a je aktuální, stahování přeskočeno.`);
+            return;
+        }
     }
 
     // 2. Bleskové převzetí existujícího jaru ze systému (.minecraft, PrismLauncher, Modrinth)
@@ -189,6 +210,11 @@ Handler.prototype.getJar = async function() {
     for (const cand of candidates) {
         const candJar = path.join(cand, 'versions', versionNumber, `${versionNumber}.jar`);
         if (fs.existsSync(candJar)) {
+            // Ověříme, zda i kandidát odpovídá novému Mojang hashi
+            if (expectedSha1) {
+                const candSha1 = getFileSha1(candJar);
+                if (candSha1 !== expectedSha1) continue;
+            }
             try {
                 fs.mkdirSync(this.options.directory, { recursive: true });
                 fs.copyFileSync(candJar, targetJarPath);
@@ -199,7 +225,7 @@ Handler.prototype.getJar = async function() {
         }
     }
 
-    // 3. Pokud není na disku, stáhnout z oficiálního Mojang serveru
+    // 3. Pokud není na disku nebo neodpovídá novému patchi, stáhnout z oficiálního Mojang serveru
     if (!copied) {
         await this.downloadAsync(this.version.downloads.client.url, this.options.directory, jarName, true, 'version-jar');
     }
@@ -523,8 +549,14 @@ function getInstalledVersions(baseDir) {
                 const v = dirent.name;
                 const jsonPath = path.join(versionsDir, v, `${v}.json`);
                 const jarPath = path.join(versionsDir, v, `${v}.jar`);
-                if (fs.existsSync(jsonPath) || fs.existsSync(jarPath)) {
-                    installed.push(v);
+                // Verze je nainstalovaná pouze tehdy, pokud má json i platný client jar (> 100 KB)
+                if (fs.existsSync(jarPath) && fs.existsSync(jsonPath)) {
+                    try {
+                        const st = fs.statSync(jarPath);
+                        if (st.size > 100000) {
+                            installed.push(v);
+                        }
+                    } catch (e) {}
                 }
             }
         }
@@ -710,10 +742,15 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
         // Discrete GPU (NVIDIA & AMD Prime Offloading)
         if (config.enableDiscreteGpu) {
             setGameEnv('DRI_PRIME', '1');
-            setGameEnv('__NV_PRIME_RENDER_OFFLOAD', '1');
-            setGameEnv('__GLX_VENDOR_LIBRARY_NAME', 'nvidia');
-            setGameEnv('__VK_LAYER_NV_optimus', 'NVIDIA_only');
-            onLog('[VÝKON] Diskrétní GPU aktivována (DRI_PRIME=1, NVIDIA Prime Render Offload)');
+            const hasNvidia = fs.existsSync('/proc/driver/nvidia') || fs.existsSync('/sys/module/nvidia');
+            if (hasNvidia) {
+                setGameEnv('__NV_PRIME_RENDER_OFFLOAD', '1');
+                setGameEnv('__GLX_VENDOR_LIBRARY_NAME', 'nvidia');
+                setGameEnv('__VK_LAYER_NV_optimus', 'NVIDIA_only');
+                onLog('[VÝKON] Diskrétní GPU aktivována (DRI_PRIME=1, NVIDIA Prime Render Offload)');
+            } else {
+                onLog('[VÝKON] Diskrétní GPU aktivována (DRI_PRIME=1, Intel/AMD Prime Offload)');
+            }
         }
 
         // Zink (OpenGL over Vulkan)

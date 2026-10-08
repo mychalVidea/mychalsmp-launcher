@@ -1212,8 +1212,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     </div>
                     <div class="profile-actions">
                         ${upgradeBtnHtml}
-                        <button class="mc-btn mc-btn-green btn-launch-profile" data-profile-id="${escapeHtml(p.id)}">
-                            <span>▶ Hrát</span>
+                        <button class="mc-btn ${(() => {
+                            if (isRunning && isActive) return 'mc-btn-red';
+                            const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
+                            return isInst ? 'mc-btn-green' : 'mc-btn-primary';
+                        })()} btn-launch-profile" data-profile-id="${escapeHtml(p.id)}">
+                            <span>${(() => {
+                                if (isRunning && isActive) return '■ Stop';
+                                const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
+                                return isInst ? '▶ Hrát' : '⬇ Stáhnout';
+                            })()}</span>
                         </button>
                         <button class="mc-btn mc-btn-secondary btn-profile-settings" data-profile-id="${escapeHtml(p.id)}" title="Nastavení profilu">⚙</button>
                     </div>
@@ -1275,6 +1283,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const p = (currentConfig.profiles || []).find(x => x.id === profileId);
         if (p) {
             appendLog(`[PROFIL] Aktivován profil: ${p.name} (${p.version})`);
+            const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
+            if (sideConsoleStatus && !isRunning && !isLaunching) {
+                sideConsoleStatus.textContent = isInst
+                    ? 'Klient je připraven. Kliknutím na Hrát spustíš instanci s optimalizacemi.'
+                    : `Verze ${p.version} ještě není stažena. Kliknutím na Stáhnout ji nainstaluješ.`;
+            }
         }
     }
 
@@ -1326,15 +1340,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         isLaunching = true;
         if (sidebarPlayBtn) sidebarPlayBtn.style.opacity = '0.5';
 
+        const targetPid = profileId || currentConfig.activeProfileId || 'minecraft-26.2';
+        const targetProf = (currentConfig.profiles || []).find(x => x.id === targetPid);
+        const isAlreadyInstalled = targetProf && Array.isArray(installedVersions) && installedVersions.includes(targetProf.version);
+
         if (progressContainer) {
             progressContainer.style.display = 'flex';
             if (progressBar) progressBar.style.width = '10%';
             if (progressPercent) progressPercent.textContent = '10%';
-            if (progressText) progressText.textContent = 'Příprava herních dat a knihoven...';
+            if (progressText) progressText.textContent = isAlreadyInstalled ? 'Příprava herních dat a knihoven...' : 'Stahuji verzi a herní data...';
         }
 
-        appendLog(`[LAUNCHER] Zahajuji spuštění profilu ${profileId || 'aktivní'}...`);
-        if (sideConsoleStatus) sideConsoleStatus.textContent = 'Připravuji herní data a knihovny...';
+        appendLog(isAlreadyInstalled
+            ? `[LAUNCHER] Zahajuji spuštění profilu ${profileId || 'aktivní'}...`
+            : `[LAUNCHER] Zahajuji stahování a instalaci verze ${targetProf?.version || ''}...`);
+        if (sideConsoleStatus) sideConsoleStatus.textContent = isAlreadyInstalled ? 'Připravuji herní data a knihovny...' : 'Stahuji verzi a herní data...';
 
         let actualServerIp = serverIp;
         if (actualServerIp && (actualServerIp.includes('mychalsmp.xyz') || actualServerIp.includes('mychalsmp'))) {
@@ -1352,8 +1372,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 isRunning = true;
                 isLaunching = false;
 
+                try {
+                    installedVersions = await window.api.getInstalledVersions();
+                } catch (e) {}
+
                 // Record real lastPlayed timestamp for profile
-                const targetPid = profileId || currentConfig.activeProfileId;
                 const launchedProfile = (currentConfig.profiles || []).find(x => x.id === targetPid);
                 if (launchedProfile) {
                     launchedProfile.lastPlayed = Date.now();
@@ -1371,7 +1394,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const btn = activeCard.querySelector('.btn-launch-profile');
                     if (btn) {
                         btn.innerHTML = '<span>■ Stop</span>';
-                        btn.classList.remove('mc-btn-green');
+                        btn.classList.remove('mc-btn-green', 'mc-btn-primary');
                         btn.classList.add('mc-btn-red');
                     }
                 }
@@ -1409,11 +1432,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             sidebarPlayBtn.querySelector('span').textContent = '▶';
         }
         document.querySelectorAll('.btn-launch-profile').forEach(btn => {
-            btn.innerHTML = '<span>▶ Hrát</span>';
-            btn.classList.remove('mc-btn-red');
-            btn.classList.add('mc-btn-green');
+            const pid = btn.dataset.profileId;
+            const prof = (currentConfig.profiles || []).find(p => p.id === pid);
+            const isInst = prof && Array.isArray(installedVersions) && installedVersions.includes(prof.version);
+            btn.innerHTML = `<span>${isInst ? '▶ Hrát' : '⬇ Stáhnout'}</span>`;
+            btn.classList.remove('mc-btn-red', 'mc-btn-green', 'mc-btn-primary');
+            btn.classList.add(isInst ? 'mc-btn-green' : 'mc-btn-primary');
         });
-        if (sideConsoleStatus) sideConsoleStatus.textContent = 'Klient je připraven.';
+        const activeP = (currentConfig.profiles || []).find(x => x.id === (currentConfig.activeProfileId || 'minecraft-26.2'));
+        const activeInst = activeP && Array.isArray(installedVersions) && installedVersions.includes(activeP.version);
+        if (sideConsoleStatus) {
+            sideConsoleStatus.textContent = activeInst
+                ? 'Klient je připraven. Kliknutím na Hrát spustíš instanci s optimalizacemi.'
+                : `Verze ${activeP ? activeP.version : ''} ještě není stažena. Kliknutím na Stáhnout ji nainstaluješ.`;
+        }
     }
 
     // ── Modrinth Catalog Browsing (Mods, Resourcepacks & Shaders) ──────────
