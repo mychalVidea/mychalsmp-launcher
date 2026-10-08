@@ -216,22 +216,38 @@ async function applyUpdate(assetUrl, onProgress) {
                 });
             }
 
-            // Záloha a atomické přepsání
-            const backupAsar = path.join(resourcesDir, 'app.asar.bak');
-            try {
-                if (fs.existsSync(targetAsar)) {
-                    fs.copyFileSync(targetAsar, backupAsar);
-                }
-            } catch (e) {}
+            // Validace staženého balíčku
+            const stat = fs.statSync(tmpAsar);
+            if (stat.size < 1000000) {
+                try { fs.unlinkSync(tmpAsar); } catch (_) {}
+                throw new Error('Stažený aktualizační balíček je nekompletní.');
+            }
 
-            try {
-                safeCopyFile(tmpAsar, targetAsar);
-                try { fs.unlinkSync(tmpAsar); } catch (e) {}
-            } catch (copyErr) {
-                if (fs.existsSync(backupAsar)) {
-                    try { safeCopyFile(backupAsar, targetAsar); } catch (e) {}
+            if (process.platform === 'win32') {
+                // Na Windows NIKDY nepřepisujeme běžící app.asar za chodu Electron procesu.
+                // Soubor je uzamčen Windows kernelem; přepisování za chodu způsobuje SyntaxError / poškození asar.
+                // Uložíme do app.asar.pending, který při ukončení launcheru bleskově přemístí oddělený PowerShell proces.
+                const pendingAsar = path.join(resourcesDir, 'app.asar.pending');
+                fs.copyFileSync(tmpAsar, pendingAsar);
+                try { fs.unlinkSync(tmpAsar); } catch (_) {}
+            } else {
+                // Linux: Atomické přepsání s lokální zálohou
+                const backupAsar = path.join(resourcesDir, 'app.asar.bak');
+                try {
+                    if (fs.existsSync(targetAsar)) {
+                        fs.copyFileSync(targetAsar, backupAsar);
+                    }
+                } catch (e) {}
+
+                try {
+                    safeCopyFile(tmpAsar, targetAsar);
+                    try { fs.unlinkSync(tmpAsar); } catch (e) {}
+                } catch (copyErr) {
+                    if (fs.existsSync(backupAsar)) {
+                        try { safeCopyFile(backupAsar, targetAsar); } catch (e) {}
+                    }
+                    throw new Error(`Chyba při zápisu delta balíčku: ${copyErr.message}`);
                 }
-                throw new Error(`Chyba při zápisu delta balíčku: ${copyErr.message}`);
             }
 
             const targetExe = process.execPath;

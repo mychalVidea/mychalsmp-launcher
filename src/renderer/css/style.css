@@ -577,17 +577,28 @@ body {
     z-index: 1;
 }
 
-.stage-badge {
+.stage-user-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #38bdf8;
+    background: rgba(14, 165, 233, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+}
+
+.user-status-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #21DE00;
+    box-shadow: 0 0 8px #21DE00;
     display: inline-block;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.8px;
-    color: var(--brand-blue);
-    background: rgba(10, 103, 229, 0.15);
-    border: 1px solid rgba(10, 103, 229, 0.3);
-    padding: 3px 8px;
-    border-radius: 4px;
-    margin-bottom: 6px;
 }
 
 .stage-title {
@@ -1900,20 +1911,31 @@ body {
     border-radius: 4px;
 }
 
+.cape-none-box {
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 22px;
+    color: var(--brand-gray);
+}
+
 .cape-canvas-render {
-    width: 38px;
-    height: 61px;
+    width: 40px;
+    height: 64px;
     image-rendering: pixelated;
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.7));
     border-radius: 2px;
 }
 
 .cape-item-thumb {
-    width: 38px;
-    height: 61px;
+    width: 40px;
+    height: 64px;
     image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
     object-fit: cover;
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.7));
     border-radius: 2px;
 }
 
@@ -2637,7 +2659,7 @@ body {
     border-radius: 8px;
     padding: 3px;
     width: 100%;
-    max-width: 280px;
+    max-width: 340px;
     margin: 8px auto 0;
 }
 
@@ -2646,9 +2668,9 @@ body {
     background: transparent;
     border: none;
     color: #94a3b8;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
-    padding: 6px 4px;
+    padding: 6px 2px;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -3831,8 +3853,8 @@ body {
 .installed-mods-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 14px 18px;
+    gap: 4px;
+    padding: 10px 16px;
     max-height: calc(100vh - 210px);
     overflow-y: auto;
 }
@@ -3840,115 +3862,195 @@ body {
 .installed-mod-row {
     background: var(--surface);
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
-    padding: 10px 14px;
+    border-radius: 6px;
+    padding: 5px 10px;
+    min-height: 44px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
-    transition: var(--transition);
+    gap: 10px;
+    transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .installed-mod-row:hover {
     background: var(--surface2);
-    border-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.12);
 }
 
-.installed-mod-row.disabled-mod {
-    opacity: 0.6;
+.installed-mod-row.mod-disabled {
+    opacity: 0.55;
+    filter: grayscale(0.4);
 }
 
-.installed-mod-left {
+.mod-row-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
     flex: 1;
 }
 
-.mod-dot-status {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+.mod-avatar-wrapper {
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(15, 23, 42, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.mod-dot-status.active {
-    background: var(--brand-green);
-    box-shadow: 0 0 8px rgba(33, 222, 0, 0.6);
+.mod-avatar-thumb {
+    width: 30px;
+    height: 30px;
+    object-fit: cover;
+    image-rendering: -webkit-optimize-contrast;
+    border-radius: 5px;
 }
 
-.mod-dot-status.disabled {
-    background: #64748b;
+.mod-avatar-fallback {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    color: #38bdf8;
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
 }
 
-.installed-mod-details {
+.mod-row-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
     min-width: 0;
     flex: 1;
 }
 
-.installed-mod-title {
-    font-size: 13px;
+.mod-row-title-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.mod-row-name {
+    font-size: 12.5px;
     font-weight: 700;
     color: #f1f5f9;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 320px;
 }
 
-.installed-mod-sub {
-    font-size: 11px;
+.mod-version-tag {
+    font-size: 9px;
+    font-weight: 700;
     color: #94a3b8;
-    display: flex;
-    gap: 8px;
-    margin-top: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 1px 5px;
+    border-radius: 4px;
+    flex-shrink: 0;
 }
 
-.installed-mod-actions {
+.mod-row-badge {
+    font-size: 9.5px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.mod-row-badge.badge-enabled {
+    background: rgba(33, 222, 0, 0.12);
+    color: var(--brand-green);
+    border: 1px solid rgba(33, 222, 0, 0.25);
+}
+
+.mod-row-badge.badge-disabled {
+    background: rgba(148, 163, 184, 0.1);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.mod-row-file-meta {
+    font-size: 10px;
+    color: #64748b;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mod-file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+}
+
+.mod-file-size {
+    color: #475569;
+}
+
+.mod-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex-shrink: 0;
 }
 
 .btn-mod-toggle {
-    background: var(--surface2);
-    border: 1px solid var(--surface-border);
-    color: #e2e8f0;
     font-size: 11px;
-    font-weight: 600;
-    padding: 5px 12px;
-    border-radius: 6px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 5px;
     cursor: pointer;
-    transition: var(--transition);
+    transition: 0.15s ease;
+    border: 1px solid transparent;
 }
 
-.btn-mod-toggle:hover {
-    border-color: #38bdf8;
-    color: #fff;
+.btn-mod-toggle.btn-disable {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
 }
 
-.btn-mod-toggle.btn-mod-active {
-    background: rgba(33, 222, 0, 0.12);
-    border-color: rgba(33, 222, 0, 0.4);
-    color: #21de00;
-}
-
-.btn-mod-toggle.btn-mod-disabled {
-    background: rgba(245, 21, 21, 0.08);
-    border-color: rgba(245, 21, 21, 0.3);
+.btn-mod-toggle.btn-disable:hover {
+    background: rgba(245, 21, 21, 0.15);
+    border-color: rgba(245, 21, 21, 0.4);
     color: #f87171;
+}
+
+.btn-mod-toggle.btn-enable {
+    background: rgba(33, 222, 0, 0.12);
+    border-color: rgba(33, 222, 0, 0.35);
+    color: var(--brand-green);
+}
+
+.btn-mod-toggle.btn-enable:hover {
+    background: rgba(33, 222, 0, 0.22);
+    border-color: rgba(33, 222, 0, 0.5);
+    color: #fff;
 }
 
 .btn-mod-delete {
     background: transparent;
-    border: 1px solid transparent;
-    color: #94a3b8;
-    font-size: 12px;
-    padding: 5px 8px;
-    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 5px;
     cursor: pointer;
-    transition: var(--transition);
+    transition: 0.15s ease;
 }
 
 .btn-mod-delete:hover {

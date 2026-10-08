@@ -932,15 +932,30 @@ async function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.lo
         }
     }
 
-    // Plášť aplikujeme POUZE pokud je explicitně nastaven a není 'none' / prázdný
-    const hasExplicitCape = config.customCapePath && config.customCapePath !== 'none';
-    const capeCandidates = hasExplicitCape ? [
-        config.customCapePath,
-        path.join(gameDir, 'custom_cape.png'),
-        path.join(BASE_DIR, 'custom_cape.png')
-    ].filter(Boolean) : [];
-
-    const activeCape = capeCandidates.find(p => fs.existsSync(p));
+    // Plášť aplikujeme POUZE pokud je explicitně nastaven a není 'none' / prázdný / defaultní
+    const hasExplicitCape = config.customCapePath && config.customCapePath !== 'none' && !config.customCapePath.startsWith('data:image');
+    let activeCape = null;
+    if (hasExplicitCape) {
+        if (config.customCapePath.startsWith('http://') || config.customCapePath.startsWith('https://')) {
+            try {
+                const destCape = path.join(BASE_DIR, 'custom_cape.png');
+                const resp = await fetch(config.customCapePath, {
+                    headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
+                });
+                if (resp.ok) {
+                    const buf = await resp.arrayBuffer();
+                    if (buf.byteLength > 100) {
+                        fs.writeFileSync(destCape, Buffer.from(buf));
+                        activeCape = destCape;
+                    }
+                }
+            } catch (e) {
+                onLog(`[POSTAVA] Stažení online pláště selhalo: ${e.message}`);
+            }
+        } else if (fs.existsSync(config.customCapePath)) {
+            activeCape = config.customCapePath;
+        }
+    }
 
     if (!activeSkin && !activeCape) {
         return;
@@ -951,6 +966,9 @@ async function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.lo
         fs.mkdirSync(rpDir, { recursive: true });
 
         const packDir = path.join(rpDir, 'mychalsmp-character');
+        if (fs.existsSync(packDir)) {
+            try { fs.rmSync(packDir, { recursive: true, force: true }); } catch (_) {}
+        }
         const wideDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player', 'wide');
         const slimDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player', 'slim');
         const playerRoot = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player');

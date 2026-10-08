@@ -138,10 +138,12 @@
                                 </div>
                             </div>
                             <div class="stage-caption">
-                                <div class="stage-badge">OFICIÁLNÍ SÍŤ MYCHAL SMP</div>
-                                <h1 class="stage-title">MYCHAL <span>SMP</span></h1>
-                                <p class="stage-subtitle">Rychlý start Minecraftu s optimalizací Sodium a přímým
-                                    napojením na síť.</p>
+                                <div class="stage-user-status" id="heroUserStatus">
+                                    <span class="user-status-indicator"></span>
+                                    <span id="heroAccountTypeBadge">Připraven ke hře</span>
+                                </div>
+                                <h1 class="stage-title">Vítej zpět, <span id="heroPlayerNick">Hráč</span>!</h1>
+                                <p class="stage-subtitle" id="heroPlayerSubtitle">Všechny mody i profily jsou načteny. Zvol herní verzi a můžeš vyrazit do hry.</p>
                                 <div class="version-pills-row">
                                     <span class="v-pill active" title="Doporučená síťová verze">26.2 (Doporučeno)</span>
                                     <span class="v-pill" title="Nejnovější aktivní vydání">26.3 (Nejnovější)</span>
@@ -351,18 +353,18 @@
                     </div>
 
                     <div class="mods-topbar-switch">
-                        <button type="button" class="mods-switch-btn active" id="btnSwitchInstalledMods"
+                        <button type="button" class="mods-switch-btn active" id="btnSwitchCatalogMods" data-subview="catalog">
+                            <span>🌐 Modrinth Katalog</span>
+                        </button>
+                        <button type="button" class="mods-switch-btn" id="btnSwitchInstalledMods"
                             data-subview="installed">
                             <span>📦 Mody v profilu (<span id="installedModsCount">0</span>)</span>
-                        </button>
-                        <button type="button" class="mods-switch-btn" id="btnSwitchCatalogMods" data-subview="catalog">
-                            <span>🌐 Modrinth Katalog</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- SUBVIEW 1: INSTALLED MODS IN CURRENT PROFILE -->
-                <div class="mods-subview" id="viewInstalledMods">
+                <div class="mods-subview" id="viewInstalledMods" style="display: none;">
                     <div class="installed-mods-toolbar">
                         <div class="catalog-search-wrapper flex-1">
                             <span class="search-icon">🔍</span>
@@ -380,8 +382,8 @@
                     </div>
                 </div>
 
-                <!-- SUBVIEW 2: MODRINTH CATALOG BROWSER -->
-                <div class="mods-subview" id="viewCatalogMods" style="display: none;">
+                <!-- SUBVIEW 2: MODRINTH CATALOG BROWSER (DEFAULT) -->
+                <div class="mods-subview" id="viewCatalogMods">
                     <div class="mods-catalog-header">
                         <div class="catalog-subtabs">
                             <button class="mod-tab-btn active" data-mod-type="mod">Mody</button>
@@ -499,6 +501,10 @@
                             <button type="button" class="btn-3d-chip" id="btn3DElytraToggle"
                                 title="Přepnout Plášť vs. Elytra">
                                 <span id="label3DElytra">🪽 Elytra</span>
+                            </button>
+                            <button type="button" class="btn-3d-chip" id="btn3DFlyingToggle"
+                                title="Létající poloha (plachtění s pláštěm a elytrou)">
+                                <span id="label3DFlying">🚀 Létání</span>
                             </button>
                         </div>
 

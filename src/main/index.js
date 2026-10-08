@@ -263,6 +263,107 @@ ipcMain.handle('download-mod-or-pack', async (event, modOptions) => {
     }
 });
 
+// ── Mod Metadata & Icon Extractor ───────────────────────────────────────────
+const modMetadataCache = new Map();
+
+function getCachedModMetadata(jarPath, mtimeMs) {
+    const cacheKey = `${jarPath}:${mtimeMs}`;
+    if (modMetadataCache.has(cacheKey)) {
+        return modMetadataCache.get(cacheKey);
+    }
+
+    let meta = null;
+    try {
+        let AdmZip;
+        try { AdmZip = require('adm-zip'); } catch (_) {}
+        if (AdmZip && fs.existsSync(jarPath)) {
+            const zip = new AdmZip(jarPath);
+            let name = null;
+            let version = null;
+            let iconDataUrl = null;
+            let modId = null;
+
+            // 1. Fabric mod descriptor
+            const fabEntry = zip.getEntry('fabric.mod.json');
+            if (fabEntry) {
+                try {
+                    const fab = JSON.parse(fabEntry.getData().toString('utf8'));
+                    if (fab.name) name = fab.name;
+                    if (fab.id) modId = fab.id;
+                    if (fab.version) version = fab.version;
+                    let iconPath = fab.icon;
+                    if (iconPath && typeof iconPath === 'object') {
+                        iconPath = iconPath['128'] || iconPath['64'] || iconPath['32'] || Object.values(iconPath)[0];
+                    }
+                    if (iconPath && typeof iconPath === 'string') {
+                        const cleanIcon = iconPath.replace(/^\//, '');
+                        const iEntry = zip.getEntry(cleanIcon) || zip.getEntry(`assets/${modId}/${cleanIcon}`) || zip.getEntry('icon.png');
+                        if (iEntry && iEntry.header.size < 600000) {
+                            iconDataUrl = `data:image/png;base64,${iEntry.getData().toString('base64')}`;
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // 2. Quilt descriptor
+            if (!name) {
+                const quiltEntry = zip.getEntry('quilt.mod.json');
+                if (quiltEntry) {
+                    try {
+                        const q = JSON.parse(quiltEntry.getData().toString('utf8'));
+                        const qMeta = q.quilt_loader?.metadata;
+                        if (qMeta?.name) name = qMeta.name;
+                        if (qMeta?.version) version = qMeta.version;
+                        let iconPath = qMeta?.icon;
+                        if (iconPath && typeof iconPath === 'string') {
+                            const iEntry = zip.getEntry(iconPath.replace(/^\//, ''));
+                            if (iEntry && iEntry.header.size < 600000) {
+                                iconDataUrl = `data:image/png;base64,${iEntry.getData().toString('base64')}`;
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            // 3. Forge / NeoForge mods.toml
+            if (!name) {
+                const tomlEntry = zip.getEntry('META-INF/mods.toml');
+                if (tomlEntry) {
+                    try {
+                        const txt = tomlEntry.getData().toString('utf8');
+                        const mName = txt.match(/displayName\s*=\s*["']([^"']+)["']/);
+                        if (mName) name = mName[1];
+                        const mVer = txt.match(/version\s*=\s*["']([^"']+)["']/);
+                        if (mVer && mVer[1] !== '${file.jarVersion}') version = mVer[1];
+                        const mLogo = txt.match(/logoFile\s*=\s*["']([^"']+)["']/);
+                        if (mLogo) {
+                            const lEntry = zip.getEntry(mLogo[1].replace(/^\//, '')) || zip.getEntry(`assets/${modId || ''}/${mLogo[1].replace(/^\//, '')}`);
+                            if (lEntry && lEntry.header.size < 600000) {
+                                iconDataUrl = `data:image/png;base64,${lEntry.getData().toString('base64')}`;
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            // 4. Fallback: najít jakoukoliv icon.png v archivu
+            if (!iconDataUrl) {
+                try {
+                    const iconEntry = zip.getEntry('icon.png') || zip.getEntries().find(e => (e.entryName.endsWith('icon.png') || e.entryName.endsWith('logo.png')) && e.header.size < 500000);
+                    if (iconEntry) {
+                        iconDataUrl = `data:image/png;base64,${iconEntry.getData().toString('base64')}`;
+                    }
+                } catch (_) {}
+            }
+
+            meta = { name, version, iconDataUrl };
+        }
+    } catch (_) {}
+
+    modMetadataCache.set(cacheKey, meta);
+    return meta;
+}
+
 ipcMain.handle('get-profile-mods', async (event, profileId) => {
     const config = loadConfig();
     const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
@@ -283,9 +384,16 @@ ipcMain.handle('get-profile-mods', async (event, profileId) => {
                 const stat = fs.statSync(fullPath);
                 const isEnabled = !lower.endsWith('.disabled');
                 const cleanName = file.replace(/\.disabled$/i, '').replace(/\.jar$/i, '');
+
+                // Rychlé čtení metadat a ikony z JAR archivu s cache
+                let meta = getCachedModMetadata(fullPath, stat.mtimeMs);
+
                 mods.push({
                     filename: file,
                     cleanName,
+                    name: meta?.name || cleanName,
+                    version: meta?.version || null,
+                    iconDataUrl: meta?.iconDataUrl || null,
                     enabled: isEnabled,
                     sizeBytes: stat.size,
                     sizeFormatted: (stat.size / (1024 * 1024)).toFixed(1) + ' MB',
@@ -293,7 +401,7 @@ ipcMain.handle('get-profile-mods', async (event, profileId) => {
                 });
             }
         }
-        mods.sort((a, b) => a.cleanName.localeCompare(b.cleanName));
+        mods.sort((a, b) => (a.name || a.cleanName).localeCompare(b.name || b.cleanName));
         return { success: true, mods, modsDir, profileName: profile?.name || profileId };
     } catch (e) {
         return { success: false, error: e.message, mods: [] };
@@ -859,6 +967,41 @@ ipcMain.handle('apply-update', async (event, assetUrl) => {
 });
 
 ipcMain.handle('restart-launcher', () => {
+    if (process.platform === 'win32') {
+        const exeDir = path.dirname(process.execPath);
+        const candidates = [
+            process.resourcesPath,
+            path.join(exeDir, 'resources')
+        ];
+        let resourcesDir = candidates.find(c => c && fs.existsSync(c)) || process.resourcesPath;
+        const pendingAsar = path.join(resourcesDir, 'app.asar.pending');
+        const targetAsar = path.join(resourcesDir, 'app.asar');
+
+        if (fs.existsSync(pendingAsar)) {
+            const pid = process.pid;
+            const psScript = `
+                $proc = Get-Process -Id ${pid} -ErrorAction SilentlyContinue;
+                if ($proc) { $proc.WaitForExit(8000); }
+                Start-Sleep -Milliseconds 400;
+                Move-Item -LiteralPath '${pendingAsar.replace(/'/g, "''")}' -Destination '${targetAsar.replace(/'/g, "''")}' -Force;
+                Start-Process -FilePath '${process.execPath.replace(/'/g, "''")}';
+            `;
+            const { spawn } = require('child_process');
+            const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript], {
+                detached: true,
+                stdio: 'ignore',
+                windowsHide: true
+            });
+            child.unref();
+            app.exit(0);
+            return;
+        }
+
+        app.relaunch();
+        app.exit(0);
+        return;
+    }
+
     let targetExe = path.join(require('os').homedir(), '.local', 'share', 'mychalsmp-launcher', 'mychalsmp-launcher');
     if (process.platform === 'linux') {
         const exeDir = path.dirname(process.execPath);

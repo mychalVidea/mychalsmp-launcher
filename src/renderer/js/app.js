@@ -110,7 +110,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (tabId === 'mods') {
             renderModsProfileDropdown();
-            loadProfileMods();
+            if (btnSwitchCatalogMods && btnSwitchCatalogMods.classList.contains('active')) {
+                loadModrinthMods();
+                loadProfileMods();
+            } else {
+                loadProfileMods();
+            }
         } else if (tabId === 'servers') {
             renderServersFullTab();
         } else if (tabId === 'character') {
@@ -183,6 +188,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             currentConfig = await window.api.getConfig();
             installedVersions = await window.api.getInstalledVersions();
+
+            // Automatické pročištění starého defaultního canvas pláště z konfigurace
+            if (currentConfig && currentConfig.customCapePath && (
+                currentConfig.customCapePath.startsWith('data:image') ||
+                currentConfig.customCapePath === 'default' ||
+                currentConfig.customCapePath === 'none'
+            )) {
+                currentConfig.customCapePath = null;
+                window.api.saveOfflineSkin({ capePath: null }).catch(() => {});
+            }
 
             // Profile info
             const isMs = currentConfig.authType === 'microsoft';
@@ -288,6 +303,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (greetingNick) greetingNick.textContent = displayName;
         if (heroNickLabel) heroNickLabel.textContent = displayName;
+        const heroPlayerNick = document.getElementById('heroPlayerNick');
+        if (heroPlayerNick) heroPlayerNick.textContent = displayName;
+        const heroAccountTypeBadge = document.getElementById('heroAccountTypeBadge');
+        if (heroAccountTypeBadge) {
+            heroAccountTypeBadge.textContent = isMicrosoft ? 'Microsoft účet připojen' : 'Offline profil připraven';
+        }
         if (inputNick) {
             inputNick.value = displayName;
             inputNick.readOnly = isMicrosoft;
@@ -1727,36 +1748,49 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const profId = selectedModsProfileId || currentConfig.activeProfileId;
-        listEl.innerHTML = filtered.map(m => `
+        listEl.innerHTML = filtered.map(m => {
+            const displayName = m.name || m.cleanName;
+            const initial = (displayName || 'M').charAt(0).toUpperCase();
+            return `
             <div class="installed-mod-row ${m.enabled ? 'mod-enabled' : 'mod-disabled'}" data-filename="${escapeHtml(m.filename)}">
-                <div class="mod-row-icon">${m.enabled ? '📦' : '⏸️'}</div>
-                <div class="mod-row-info">
-                    <div class="mod-row-title-line">
-                        <span class="mod-row-name">${escapeHtml(m.cleanName)}</span>
-                        <span class="mod-row-badge ${m.enabled ? 'badge-enabled' : 'badge-disabled'}">
-                            ${m.enabled ? '✓ Aktivní' : 'Vypnuto'}
-                        </span>
+                <div class="mod-row-left">
+                    <div class="mod-avatar-wrapper">
+                        ${m.iconDataUrl
+                            ? `<img src="${m.iconDataUrl}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                               <div class="mod-avatar-fallback" style="display:none;">${escapeHtml(initial)}</div>`
+                            : `<div class="mod-avatar-fallback">${escapeHtml(initial)}</div>`
+                        }
                     </div>
-                    <div class="mod-row-file-meta">
-                        <span class="mod-file-name">${escapeHtml(m.filename)}</span>
-                        <span>•</span>
-                        <span class="mod-file-size">${escapeHtml(m.sizeFormatted)}</span>
+                    <div class="mod-row-info">
+                        <div class="mod-row-title-line">
+                            <span class="mod-row-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
+                            ${m.version ? `<span class="mod-version-tag">v${escapeHtml(m.version)}</span>` : ''}
+                            <span class="mod-row-badge ${m.enabled ? 'badge-enabled' : 'badge-disabled'}">
+                                ${m.enabled ? '✓ Aktivní' : 'Vypnuto'}
+                            </span>
+                        </div>
+                        <div class="mod-row-file-meta">
+                            <span class="mod-file-name" title="${escapeHtml(m.filename)}">${escapeHtml(m.filename)}</span>
+                            <span>•</span>
+                            <span class="mod-file-size">${escapeHtml(m.sizeFormatted)}</span>
+                        </div>
                     </div>
                 </div>
                 <div class="mod-row-actions">
-                    <button type="button" class="mc-btn btn-mod-toggle ${m.enabled ? 'btn-disable' : 'btn-enable'}"
+                    <button type="button" class="btn-mod-toggle ${m.enabled ? 'btn-disable' : 'btn-enable'}"
                         data-filename="${escapeHtml(m.filename)}"
                         title="${m.enabled ? 'Deaktivovat mód' : 'Aktivovat mód'}">
                         <span>${m.enabled ? 'Vypnout' : 'Zapnout'}</span>
                     </button>
-                    <button type="button" class="mc-btn mc-btn-secondary btn-mod-delete"
+                    <button type="button" class="btn-mod-delete"
                         data-filename="${escapeHtml(m.filename)}"
                         title="Smazat soubor módu">
                         <span>🗑️ Smazat</span>
                     </button>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
 
         // Bind toggle buttons
         listEl.querySelectorAll('.btn-mod-toggle').forEach(btn => {
@@ -2030,72 +2064,65 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     /**
-     * Generates the official MYCHAL SMP server cape texture as a data URI.
-     * Dimensions: 64x32 Minecraft 1.8+ format.
+     * Výchozí stav pláště: žádný plášť (hráč začíná vždy s čistým vzhledem bez vnuceného pláště).
      */
     function getDefaultServerCapeUrl() {
-        if (defaultServerCapeDataUrl) return defaultServerCapeDataUrl;
+        return null;
+    }
+
+    /**
+     * Dynamická animace klidového stavu (Idle) s přirozeným vlněním pláště ve větru.
+     */
+    function createCapeIdleAnimation() {
+        if (!window.skinview3d) return null;
         try {
-            const c = document.createElement('canvas');
-            c.width = 64;
-            c.height = 32;
-            const ctx = c.getContext('2d');
-            if (!ctx) return null;
+            class DynamicCapeIdleAnimation extends window.skinview3d.IdleAnimation {
+                animate(player) {
+                    super.animate(player);
+                    if (player && player.cape) {
+                        const t = this.progress * 3;
+                        // Organické vlnění pláště v jemném vánku při stání
+                        player.cape.rotation.x = 0.28 + 0.11 * Math.sin(t) + 0.04 * Math.sin(t * 2.3);
+                        player.cape.rotation.z = 0.04 * Math.sin(t * 0.9);
+                        player.cape.rotation.y = 0.02 * Math.cos(t * 1.1);
+                    }
+                }
+            }
+            return new DynamicCapeIdleAnimation();
+        } catch (_) {
+            return new window.skinview3d.IdleAnimation();
+        }
+    }
 
-            ctx.clearRect(0, 0, 64, 32);
-
-            // Edges & Top/Bottom border (#0a67e5)
-            ctx.fillStyle = '#0a67e5';
-            ctx.fillRect(1, 0, 10, 1);  // top
-            ctx.fillRect(11, 0, 10, 1); // bottom
-            ctx.fillRect(0, 1, 1, 16);  // left edge
-            ctx.fillRect(11, 1, 1, 16); // right edge
-
-            // Front of cape (facing player's back: 1, 1, 10, 16)
-            ctx.fillStyle = '#0d111e';
-            ctx.fillRect(1, 1, 10, 16);
-            ctx.fillStyle = '#0a67e5';
-            ctx.fillRect(1, 1, 10, 1);
-            ctx.fillRect(1, 16, 10, 1);
-
-            // Back of cape (visible from behind: 12, 1, 10, 16)
-            ctx.fillStyle = '#0e1322';
-            ctx.fillRect(12, 1, 10, 16);
-
-            // Outer border in brand blue #0a67e5
-            ctx.fillStyle = '#0a67e5';
-            ctx.fillRect(12, 1, 10, 1);  // top
-            ctx.fillRect(12, 16, 10, 1); // bottom
-            ctx.fillRect(12, 1, 1, 16);  // left
-            ctx.fillRect(21, 1, 1, 16);  // right
-
-            // Beacon Base / Pedestal
-            ctx.fillStyle = '#1e293b';
-            ctx.fillRect(13, 13, 8, 3);
-            ctx.fillStyle = '#2563eb';
-            ctx.fillRect(14, 11, 6, 2);
-
-            // Beacon Crystal / Diamond glow
-            ctx.fillStyle = '#38bdf8';
-            ctx.fillRect(16, 4, 2, 6);
-            ctx.fillRect(15, 5, 4, 4);
-
-            // Bright white center core
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(16, 6, 2, 2);
-
-            defaultServerCapeDataUrl = c.toDataURL('image/png');
-            return defaultServerCapeDataUrl;
-        } catch (e) {
-            return null;
+    /**
+     * Dynamická animace letu (Flying) s aerodynamickým vláním pláště za postavou.
+     */
+    function createCapeFlyingAnimation() {
+        if (!window.skinview3d) return null;
+        try {
+            class DynamicCapeFlyingAnimation extends window.skinview3d.FlyingAnimation {
+                animate(player) {
+                    super.animate(player);
+                    if (player && player.cape) {
+                        const t = this.progress * 8;
+                        // Aerodynamické plachtění / vlání pláště za letícím hráčem
+                        player.cape.rotation.x = 1.18 + 0.16 * Math.sin(t * 2) + 0.05 * Math.sin(t * 4.3);
+                        player.cape.rotation.z = 0.05 * Math.sin(t * 1.5);
+                        player.cape.rotation.y = 0.03 * Math.cos(t * 1.8);
+                    }
+                }
+            }
+            return new DynamicCapeFlyingAnimation();
+        } catch (_) {
+            return new window.skinview3d.FlyingAnimation();
         }
     }
 
     /**
      * Resolves the effective cape URL:
      * 1. Active official Mojang cape (if Microsoft auth)
-     * 2. Custom cape path (if offline custom file)
-     * 3. Fallback official MYCHAL SMP server cape
+     * 2. Custom cape path (if offline custom file or selected preset)
+     * 3. Explicit null (NO default cape forced)
      */
     function getEffectiveCape() {
         const isMicrosoft = currentConfig.authType === 'microsoft';
@@ -2109,8 +2136,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             return null; // Oficiální účet bez aktivního pláště nemá žádný plášť
         } else {
-            // Warez / offline: žádný defaultní plášť, POUZE pokud si hráč sám nahrál vlastní cape!
-            if (currentConfig.customCapePath && currentConfig.customCapePath !== 'none') {
+            // Warez / offline: žádný defaultní plášť, POUZE pokud si hráč sám nahrál nebo vybral cape!
+            if (currentConfig.customCapePath && currentConfig.customCapePath !== 'none' && !currentConfig.customCapePath.startsWith('data:image')) {
                 return (currentConfig.customCapePath.startsWith('http') || currentConfig.customCapePath.startsWith('file://'))
                     ? currentConfig.customCapePath
                     : `file://${currentConfig.customCapePath}`;
@@ -2147,7 +2174,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             heroSkinViewer.fov = 48;
             heroSkinViewer.autoRotate = false; // Strictly no auto-rotation
             heroSkinViewer.controls.enabled = false; // Direct smooth drag on playerWrapper
-            heroSkinViewer.animation = new window.skinview3d.IdleAnimation();
+            heroSkinViewer.animation = createCapeIdleAnimation() || new window.skinview3d.IdleAnimation();
 
             // Set default resting pose
             heroSkinViewer.playerWrapper.rotation.set(DEFAULT_HERO_ROT_X, DEFAULT_HERO_ROT_Y, 0);
@@ -2283,7 +2310,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             skinViewer.controls.enableRotate = true;
             skinViewer.controls.enableZoom = true;
             skinViewer.controls.enablePan = false;
-            skinViewer.animation = new window.skinview3d.IdleAnimation();
+            skinViewer.animation = createCapeIdleAnimation() || new window.skinview3d.IdleAnimation();
 
             // 3D Toolbar Buttons
             const btnFront = document.getElementById('btn3DFrontView');
@@ -2351,11 +2378,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!skinViewer) return;
                     isFlyingAnimationActive = !isFlyingAnimationActive;
                     if (isFlyingAnimationActive) {
-                        skinViewer.animation = new window.skinview3d.FlyingAnimation();
+                        skinViewer.animation = createCapeFlyingAnimation() || new window.skinview3d.FlyingAnimation();
                         if (labelFlying) labelFlying.textContent = '🧍 Postavit';
                         btnFlying.classList.add('active');
                     } else {
-                        skinViewer.animation = new window.skinview3d.IdleAnimation();
+                        skinViewer.animation = createCapeIdleAnimation() || new window.skinview3d.IdleAnimation();
                         if (labelFlying) labelFlying.textContent = '🚀 Létání';
                         btnFlying.classList.remove('active');
                     }
@@ -2512,21 +2539,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         img.src = imgSrc;
     }
 
-    // ── Cape Thumbnail Renderer (Upright 10:16 Minecraft Model) ─────────────
+    // ── Cape Thumbnail Renderer (Upright 10:16 Minecraft Model, Razor Sharp) ─────
     function drawCapeModelThumb(imgSrc, canvas) {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        ctx.imageSmoothingEnabled = false;
 
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
-            canvas.width = 40;
-            canvas.height = 64;
+            // Použijeme přesný 8x celočíselný násobek Minecraft 10x16 poměru (80x128)
+            canvas.width = 80;
+            canvas.height = 128;
+
+            // Kritické: V HTML5 canvasu změna width/height resetuje imageSmoothingEnabled zpět na true!
+            ctx.imageSmoothingEnabled = false;
+            if ('mozImageSmoothingEnabled' in ctx) ctx.mozImageSmoothingEnabled = false;
+            if ('webkitImageSmoothingEnabled' in ctx) ctx.webkitImageSmoothingEnabled = false;
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // In Minecraft 64x32 cape textures, the back of the cape is at (1, 1, 10, 16)
+            // V Minecraft 64x32 texturách je zadní strana pláště na souřadnicích (1, 1, 10, 16)
             const scale = (img.naturalWidth || 64) / 64;
             const sx = 1 * scale;
             const sy = 1 * scale;
@@ -2536,10 +2569,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
         };
         img.onerror = () => {
-            canvas.width = 40;
-            canvas.height = 64;
+            canvas.width = 80;
+            canvas.height = 128;
+            ctx.imageSmoothingEnabled = false;
             ctx.fillStyle = '#0a67e5';
-            ctx.fillRect(0, 0, 40, 64);
+            ctx.fillRect(0, 0, 80, 128);
         };
         img.src = imgSrc;
     }
@@ -2591,9 +2625,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     } else {
                         equippedBadge.style.display = 'none';
                         activeMojangCapeUrl = null;
-                        const fallbackCape = getDefaultServerCapeUrl();
-                        updateSkinViewer3D(lastLoadedSkinUrl, fallbackCape, currentConfig.customSkinVariant === 'slim');
-                        updateHeroSkinViewer3D(lastLoadedSkinUrl, fallbackCape, currentConfig.customSkinVariant === 'slim');
+                        updateSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
+                        updateHeroSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
                     }
                 }
 
@@ -2626,7 +2659,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const currentCape = currentConfig.customCapePath;
         const presets = [
-            { id: 'server', name: 'MYCHAL SMP', url: getDefaultServerCapeUrl() },
+            { id: 'none', name: 'Žádný plášť', url: null },
             { id: '15th', name: '15th Anniversary', url: 'https://textures.minecraft.net/texture/2330a5f037dd78696b99684c3116805d76d655f26194b308be73cb55ad48c9' },
             { id: 'cherry', name: 'Cherry Blossom', url: 'https://textures.minecraft.net/texture/414f5ae33b4972e2c88f9a2cbfa7dcc2668b8b8ebf4b4f5352fa1d59baee27cb' },
             { id: 'vanilla', name: 'Vanilla Cape', url: 'https://textures.minecraft.net/texture/42d20e7df5d46816ab9c6c5ea577907f9c894ad691d57e2a9b21f39185a6cf17' },
@@ -2636,28 +2669,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             { id: 'tiktok', name: 'TikTok Cape', url: 'https://textures.minecraft.net/texture/3449e7b39886a8775080c3eec5ee4f6cb9607147dbfb56a42a59a72df9e8e4db' }
         ];
 
-        let allItems = [];
+        let allItems = presets;
         if (currentCape && currentCape !== 'none' && !presets.some(p => p.url === currentCape)) {
             const formatted = (currentCape.startsWith('http') || currentCape.startsWith('file://'))
                 ? currentCape
                 : `file://${currentCape}`;
-            allItems.push({
-                id: 'custom',
-                name: 'Vlastní soubor',
-                url: formatted
-            });
+            allItems = [
+                presets[0], // 'none' je vždy na prvním místě
+                { id: 'custom', name: 'Vlastní soubor', url: formatted },
+                ...presets.slice(1)
+            ];
         }
-        allItems = allItems.concat(presets);
 
         container.innerHTML = allItems.map((c, idx) => {
-            const isActive = currentCape && (
-                currentCape === c.url ||
-                (c.url.startsWith('file://') && currentCape.includes(c.url.replace('file://', '')))
-            );
+            const isNone = (c.url === null);
+            const isActive = isNone
+                ? (!currentCape || currentCape === 'none')
+                : (currentCape && (
+                    currentCape === c.url ||
+                    (c.url.startsWith('file://') && currentCape.includes(c.url.replace('file://', '')))
+                ));
             return `
                 <div class="cape-item-card ${isActive ? 'active-cape' : ''}" data-cape-idx="${idx}" title="${escapeHtml(c.name)}">
                     <div class="cape-item-preview-box">
-                        <canvas class="cape-canvas-render" id="offCapeCanvas_${idx}" width="40" height="64"></canvas>
+                        ${isNone
+                            ? `<div class="cape-none-box"><span class="cape-none-icon">🚫</span><span class="cape-none-txt">Žádný</span></div>`
+                            : `<canvas class="cape-canvas-render" id="offCapeCanvas_${idx}" width="40" height="64"></canvas>`
+                        }
                     </div>
                     ${isActive ? '<span class="cape-active-indicator">✓ Aktivní</span>' : ''}
                     <span class="cape-item-name">${escapeHtml(c.name)}</span>
@@ -2666,8 +2704,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }).join('');
 
         allItems.forEach((c, idx) => {
-            const canvas = document.getElementById(`offCapeCanvas_${idx}`);
-            if (canvas) drawCapeModelThumb(c.url, canvas);
+            if (c.url) {
+                const canvas = document.getElementById(`offCapeCanvas_${idx}`);
+                if (canvas) drawCapeModelThumb(c.url, canvas);
+            }
         });
 
         container.querySelectorAll('.cape-item-card').forEach(card => {
@@ -2675,6 +2715,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const idx = parseInt(card.dataset.capeIdx, 10);
                 const item = allItems[idx];
                 if (!item) return;
+
+                if (item.url === null) {
+                    currentConfig.customCapePath = null;
+                    await window.api.saveOfflineSkin({ capePath: null });
+                    const isSlim = currentConfig.customSkinVariant === 'slim';
+                    const effectiveSkin = currentConfig.customSkinPath || (currentConfig.authType === 'microsoft' && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
+                    const skinSrc = effectiveSkin
+                        ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
+                        : `https://minotar.net/skin/${encodeURIComponent(currentConfig.offlineUsername || currentConfig.username || 'Hráč')}`;
+
+                    updateSkinViewer3D(skinSrc, null, isSlim);
+                    updateHeroSkinViewer3D(skinSrc, null, isSlim);
+                    loadOfflinePresetCapes();
+
+                    const capePathLabel = document.getElementById('offlineCapePathLabel');
+                    if (capePathLabel) {
+                        capePathLabel.textContent = 'Žádný plášť';
+                    }
+                    showToast('✓ Plášť byl odebrán (žádný plášť).', 'info');
+                    return;
+                }
 
                 currentConfig.customCapePath = item.url;
                 await window.api.saveOfflineSkin({ capePath: item.url });
