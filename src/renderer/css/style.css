@@ -29,6 +29,102 @@
     --transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ---- SVG ICONS & MICRO-INTERACTIONS (Matching mychalsmp-web-main) ---- */
+.ui-icon-svg {
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+    vertical-align: middle;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+    shape-rendering: geometricPrecision;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                color 0.2s ease,
+                stroke 0.2s ease,
+                filter 0.25s ease;
+}
+
+.ui-icon-svg--sm {
+    width: 14px;
+    height: 14px;
+    vertical-align: -2px;
+}
+
+.ui-icon-svg--xs {
+    width: 12px;
+    height: 12px;
+}
+
+.ui-icon-svg--lg {
+    width: 20px;
+    height: 20px;
+}
+
+.ui-icon-svg--xl {
+    width: 24px;
+    height: 24px;
+}
+
+.ui-icon-svg--gold {
+    color: #fbbf24;
+    filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.45));
+}
+
+.ui-icon-svg--blue {
+    color: var(--brand-blue);
+    filter: drop-shadow(0 0 6px rgba(10, 103, 229, 0.45));
+}
+
+.ui-icon-svg--green {
+    color: var(--brand-green);
+    filter: drop-shadow(0 0 6px rgba(33, 222, 0, 0.45));
+}
+
+.ui-icon-svg--red {
+    color: var(--brand-red);
+    filter: drop-shadow(0 0 6px rgba(245, 21, 21, 0.45));
+}
+
+/* Micro-Animations & Hover Motion */
+button:hover .ui-icon-svg:not(.ui-icon-spin) {
+    transform: translateY(-1px) scale(1.08);
+}
+
+.btn-icon-spin:hover .ui-icon-svg {
+    transform: rotate(180deg);
+}
+
+.ui-icon-spin {
+    animation: uiIconSpin 0.9s linear infinite;
+}
+
+@keyframes uiIconSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.ui-icon-pulse {
+    animation: uiIconPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes uiIconPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.18); opacity: 0.85; }
+}
+
+.ui-icon-bounce {
+    animation: uiIconBounce 1.2s ease infinite;
+}
+
+@keyframes uiIconBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -1534,11 +1630,13 @@ body {
 .mods-browser-layout {
     display: grid;
     grid-template-columns: 210px 1fr;
+    grid-template-rows: minmax(0, 1fr);
     gap: 16px;
     padding: 14px 24px 16px 24px;
     flex: 1;
     min-height: 0;
-    height: auto;
+    height: 100%;
+    max-height: 100%;
     overflow: hidden;
 }
 
@@ -1552,6 +1650,7 @@ body {
     gap: 16px;
     height: 100%;
     max-height: 100%;
+    min-height: 0;
     overflow-y: auto;
     flex-shrink: 0;
 }
@@ -1577,12 +1676,14 @@ body {
 
 .mods-cards-container {
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 8px;
     padding-right: 6px;
     height: 100%;
     min-height: 0;
+    max-height: 100%;
 }
 
 .mod-card-row {

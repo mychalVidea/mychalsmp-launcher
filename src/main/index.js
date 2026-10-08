@@ -54,7 +54,7 @@ function createSplashWindow() {
         alwaysOnTop: true,
         show: true,
         backgroundColor: '#00000000',
-        icon: path.join(__dirname, '../renderer/assets/server-icon.png'),
+        icon: path.join(__dirname, '../renderer/assets/logo.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -79,7 +79,7 @@ function createWindow() {
         frame: false, // Custom sleek titlebar
         backgroundColor: '#0a0b12',
         show: false,
-        icon: path.join(__dirname, '../renderer/assets/server-icon.png'),
+        icon: path.join(__dirname, '../renderer/assets/logo.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -111,7 +111,7 @@ function ensureLinuxDesktopShortcut() {
     try {
         const homeDir = require('os').homedir();
         const execPath = process.execPath;
-        const iconSource = path.join(__dirname, '../renderer/assets/server-icon.png');
+        const iconSource = path.join(__dirname, '../renderer/assets/logo.png');
 
         const iconDir = path.join(homeDir, '.local', 'share', 'icons', 'hicolor', '512x512', 'apps');
         if (!fs.existsSync(iconDir)) fs.mkdirSync(iconDir, { recursive: true });

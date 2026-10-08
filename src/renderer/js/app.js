@@ -378,7 +378,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (panelMs) panelMs.style.display = 'flex';
             if (panelOff) panelOff.style.display = 'none';
             if (badgePill) {
-                badgePill.textContent = '🟢 Microsoft Účet';
+                badgePill.innerHTML = '<span class="status-dot online"></span> Microsoft Účet';
                 badgePill.className = 'skin-badge-pill pill-microsoft';
             }
             loadMojangCapes();
@@ -388,7 +388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (panelMs) panelMs.style.display = 'none';
             if (panelOff) panelOff.style.display = 'flex';
             if (badgePill) {
-                badgePill.textContent = '🟡 Offline Profil (Uloženo lokálně)';
+                badgePill.innerHTML = '<span class="status-dot" style="background:#eab308; box-shadow:0 0 6px rgba(234,179,8,0.5);"></span> Offline Profil (Uloženo lokálně)';
                 badgePill.className = 'skin-badge-pill';
             }
             const offCapeSec = document.getElementById('offlineCapesSection');
@@ -468,16 +468,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const label = statusBadge.querySelector('.v-status-label') || statusBadge;
                     if (isThisRunning) {
                         statusBadge.className = 'v-status-badge running';
-                        label.textContent = '⚡ Spuštěno';
+                        label.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-pulse" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Spuštěno';
                     } else if (isThisLaunching) {
                         statusBadge.className = 'v-status-badge downloading';
-                        label.textContent = '⏳ Příprava / Stahování...';
+                        label.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Příprava / Stahování...';
                     } else if (isInstalled) {
                         statusBadge.className = 'v-status-badge installed';
-                        label.textContent = '✓ Nainstalováno';
+                        label.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Nainstalováno';
                     } else {
                         statusBadge.className = 'v-status-badge';
-                        label.textContent = '⚪ Připraveno ke stažení';
+                        label.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg> Připraveno ke stažení';
                     }
                 }
 
@@ -490,13 +490,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         btnAction.style.display = 'flex';
                         if (isThisLaunching) {
                             btnAction.disabled = true;
-                            btnAction.innerHTML = `<span>⏳ Načítání hry...</span>`;
+                            btnAction.innerHTML = `<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Načítání hry...</span>`;
                         } else if (isInstalled) {
                             btnAction.disabled = false;
-                            btnAction.innerHTML = `<span>▶ Hrát Minecraft ${ver}</span>`;
+                            btnAction.innerHTML = `<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Hrát Minecraft ${ver}</span>`;
                         } else {
                             btnAction.disabled = false;
-                            btnAction.innerHTML = `<span>⬇ Stáhnout & Hrát ${ver}</span>`;
+                            btnAction.innerHTML = `<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Stáhnout & Hrát ${ver}</span>`;
                         }
                     }
                 }
@@ -544,7 +544,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const backupBadge = isMychal ? '<span class="server-backup-badge" title="Záložní číselná IP při výpadku DNS: 130.61.89.37:25565">Záloha: 130.61.89.37</span>' : '';
             const iconSrc = isMychal ? 'assets/server-icon.png' : (s.icon || 'assets/server-icon.png');
             const offlineCross = (!isMychal && s.online === false)
-                ? '<span class="server-offline-cross-badge" title="Server neodpovídá / je offline">❌</span>'
+                ? '<span class="server-offline-cross-badge" title="Server neodpovídá / je offline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span>'
                 : '';
 
             return `
@@ -556,18 +556,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="item-info">
                         <div class="item-name">
                             ${escapeHtml(s.name)}
-                            ${isPinned ? '<span title="Připnutý server" style="font-size: 11px; margin-left: 4px;">📌</span>' : ''}
+                            ${isPinned ? '<span title="Připnutý server" style="margin-left: 4px; display: inline-flex;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg></span>' : ''}
                         </div>
                         <div class="item-ip">${escapeHtml(s.ip)}${backupBadge}</div>
                     </div>
                     <div class="tracked-server-actions">
                         <button class="btn-pin-server ${isPinned ? 'pinned' : ''}" data-server-id="${escapeHtml(s.id)}" title="${isPinned ? 'Odepnout server' : 'Připnout server na začátek'}">
-                            📌
+                            <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg>
                         </button>
                         <button class="btn-quick-join" data-server="${escapeHtml(s.ip)}" title="Rychlé připojení">
-                            ▶ Join
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Join
                         </button>
-                        ${!isMychal ? `<button class="btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Smazat server">✕</button>` : ''}
+                        ${!isMychal ? `<button class="btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Smazat server"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
                     </div>
                 </div>
             `;
@@ -611,19 +611,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             const port = s.port || 25565;
             const iconSrc = isMychal ? 'assets/server-icon.png' : (s.icon || 'assets/server-icon.png');
             const offlineBadge = (!isMychal && s.online === false)
-                ? '<span class="server-offline-badge-pill" style="margin-left: 8px;">❌ Offline</span>'
-                : (isMychal ? '' : (s.online ? '<span style="color: #21DE00; font-size: 12px; margin-left: 8px;">🟢 Online</span>' : ''));
+                ? '<span class="server-offline-badge-pill" style="margin-left: 8px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Offline</span>'
+                : (isMychal ? '' : (s.online ? '<span style="color: #21DE00; font-size: 12px; margin-left: 8px; display: inline-flex; align-items: center; gap: 4px;"><span class="status-dot online"></span> Online</span>' : ''));
 
             const extraInfo = isMychal
                 ? `<div class="server-full-telemetry" style="color: var(--brand-blue);">
                     Oficiální síťová infrastruktura MYCHAL SMP • Port: ${port}
-                    <br><span style="color: #94a3b8; font-size: 12px;">🛡️ Záložní IP (Unknown host fallback): <strong style="color: #fff;">130.61.89.37:25565</strong></span>
+                    <br><span style="color: #94a3b8; font-size: 12px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> Záložní IP (Unknown host fallback): <strong style="color: #fff;">130.61.89.37:25565</strong></span>
                    </div>`
                 : `<div class="server-full-telemetry">Vlastní přidaný server • Port: ${port} ${offlineBadge}</div>`;
 
             const backupJoinBtn = isMychal ? `
                 <button class="mc-btn mc-btn-secondary btn-quick-join-backup" data-server="130.61.89.37:25565" title="Připojit se přímo přes číselnou záložní IP">
-                    <span>🌐 Záložní IP</span>
+                    <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> Záložní IP</span>
                 </button>
             ` : '';
 
@@ -631,25 +631,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <div class="server-full-card ${isPinned ? 'is-pinned-card' : ''}">
                     <div style="position: relative; flex-shrink: 0;">
                         <img src="${escapeHtml(iconSrc)}" class="server-full-icon" onerror="this.src='assets/server-icon.png'">
-                        ${(!isMychal && s.online === false) ? '<span class="server-offline-cross-badge">❌</span>' : ''}
+                        ${(!isMychal && s.online === false) ? '<span class="server-offline-cross-badge"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span>' : ''}
                     </div>
                     <div class="server-full-info">
                         <div class="server-full-name">
                             ${escapeHtml(s.name)}
-                            ${isPinned ? '<span title="Připnutý server" style="font-size: 14px; margin-left: 6px;">📌 Pinned</span>' : ''}
+                            ${isPinned ? '<span title="Připnutý server" style="margin-left: 6px; display: inline-flex;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg></span>' : ''}
                         </div>
                         <div class="server-full-ip">${escapeHtml(s.ip)}</div>
                         ${extraInfo}
                     </div>
                     <div class="server-full-actions" style="display: flex; align-items: center; gap: 8px;">
-                        <button class="btn-pin-server ${isPinned ? 'pinned' : ''}" data-server-id="${escapeHtml(s.id)}" title="${isPinned ? 'Odepnout server' : 'Připnout server na začátek'}" style="font-size: 16px; padding: 6px 10px;">
-                            📌
+                        <button class="btn-pin-server ${isPinned ? 'pinned' : ''}" data-server-id="${escapeHtml(s.id)}" title="${isPinned ? 'Odepnout server' : 'Připnout server na začátek'}" style="padding: 6px 10px;">
+                            <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg>
                         </button>
                         ${backupJoinBtn}
                         <button class="mc-btn mc-btn-green btn-quick-join" data-server="${escapeHtml(s.ip)}">
-                            <span>⚡ Quick Play</span>
+                            <span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-pulse" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Quick Play</span>
                         </button>
-                        ${!isMychal ? `<button class="mc-btn mc-btn-secondary btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Smazat server" style="color: #ef4444;">✕</button>` : ''}
+                        ${!isMychal ? `<button class="mc-btn mc-btn-secondary btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Smazat server" style="color: #ef4444;"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
                     </div>
                 </div>
             `;
@@ -732,7 +732,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             await window.api.saveConfig({ servers });
             renderServerTracker();
             renderServersFullTab();
-            showToast(target.pinned ? `📌 Server "${target.name}" byl připnut nahoru!` : `Server "${target.name}" byl odepnut.`, 'info');
+            showToast(target.pinned ? `Server "${target.name}" byl připnut nahoru!` : `Server "${target.name}" byl odepnut.`, 'info');
         }
     }
 
@@ -813,7 +813,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (newServerStatusBadge) {
-                newServerStatusBadge.textContent = '🔄 Ověřuji server...';
+                newServerStatusBadge.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Ověřuji server...';
                 newServerStatusBadge.style.color = '#38bdf8';
             }
             if (newServerStatusDot) {
@@ -844,7 +844,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             newServerStatusDot.style.background = '#21DE00';
                         }
                         if (newServerStatusBadge) {
-                            newServerStatusBadge.textContent = `✓ Online (${status.latency} ms) • ${status.players.online}/${status.players.max} hráčů`;
+                            newServerStatusBadge.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Online (${status.latency} ms) • ${status.players.online}/${status.players.max} hráčů`;
                             newServerStatusBadge.style.color = '#21DE00';
                         }
                         if (newServerPingDetails) {
@@ -868,7 +868,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         newServerStatusDot.style.background = '#f51515';
                     }
                     if (newServerStatusBadge) {
-                        newServerStatusBadge.textContent = '❌ Server neodpovídá (offline / neplatná adresa)';
+                        newServerStatusBadge.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Server neodpovídá (offline / neplatná adresa)';
                         newServerStatusBadge.style.color = '#f51515';
                     }
                     if (newServerPingDetails) {
@@ -921,7 +921,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             closeAddServerModal();
             renderServerTracker();
             renderServersFullTab();
-            showToast(`✓ Server "${rawName}" byl úspěšně přidán${isPinned ? ' a připnut' : ''}!`, 'success');
+            showToast(`Server "${rawName}" byl úspěšně přidán${isPinned ? ' a připnut' : ''}!`, 'success');
         });
     }
 
@@ -974,8 +974,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 <span class="illegal-mod-name">${escapeHtml(m.modName)}</span>
                                 <span class="illegal-mod-pill">${escapeHtml(m.categoryLabel)}</span>
                             </div>
-                            <span class="illegal-mod-file">📁 ${escapeHtml(m.filename)}</span>
-                            <span class="illegal-mod-reason">⚠️ ${escapeHtml(m.reason)}</span>
+                            <span class="illegal-mod-file"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> ${escapeHtml(m.filename)}</span>
+                            <span class="illegal-mod-reason"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> ${escapeHtml(m.reason)}</span>
                         </div>
                         <button class="btn-disable-single-mod" data-filename="${escapeHtml(m.filename)}">Zakázat (.disabled)</button>
                     </div>
@@ -985,9 +985,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     btn.addEventListener('click', async () => {
                         const fn = btn.dataset.filename;
                         btn.disabled = true;
-                        btn.textContent = '⏳ Zakazuji...';
+                        btn.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Zakazuji...';
                         await window.api.disableIllegalMods(currentConfig.activeProfileId, fn);
-                        showToast(`✓ Mód ${fn} byl přejmenován na .disabled`, 'info');
+                        showToast(`Mód ${fn} byl přejmenován na .disabled`, 'info');
                         await checkWardenProbe();
                         openWardenModal();
                     });
@@ -1017,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnLaunchWithoutSmp.addEventListener('click', () => {
             closeWardenModal();
             appendLog('[PROFIL] Spouštím hru bez připojení k serveru MYCHAL SMP (módy povoleny pro singleplayer a jiné servery)...');
-            showToast('🎮 Spouštím hru bez připojení k SMP – módy povoleny.', 'info');
+            showToast('Spouštím hru bez připojení k SMP – módy povoleny.', 'info');
             startLaunch(currentConfig.activeProfileId, null);
         });
     }
@@ -1026,10 +1026,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnCleanIllegalMods) {
         btnCleanIllegalMods.addEventListener('click', async () => {
             btnCleanIllegalMods.disabled = true;
-            btnCleanIllegalMods.textContent = '⏳ Zakazuji módy...';
+            btnCleanIllegalMods.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Zakazuji módy...</span>';
             try {
                 const res = await window.api.disableIllegalMods(currentConfig.activeProfileId, null);
-                showToast(`✓ Všechny nepovolené módy (${res.disabledCount}) byly přejmenovány na .disabled!`, 'success');
+                showToast(`Všechny nepovolené módy (${res.disabledCount}) byly přejmenovány na .disabled!`, 'success');
                 appendLog(`Zakázáno ${res.disabledCount} nepovolených módů z profilu.`);
                 closeWardenModal();
                 await checkWardenProbe();
@@ -1037,7 +1037,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showToast('Chyba: ' + e.message, 'error');
             } finally {
                 btnCleanIllegalMods.disabled = false;
-                btnCleanIllegalMods.innerHTML = '<span>🧹 Zakázat tyto módy a odemknout Quick Play</span>';
+                btnCleanIllegalMods.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg> Zakázat tyto módy a odemknout Quick Play</span>';
             }
         });
     }
@@ -1046,7 +1046,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnQuickPlayMychal) {
         btnQuickPlayMychal.addEventListener('click', async () => {
             if (currentIllegalMods.length > 0) {
-                showToast('🛡️ Quick Play zablokován: Nalezeny nepovolené módy v profilu!', 'error');
+                showToast('Quick Play zablokován: Nalezeny nepovolené módy v profilu!', 'error');
                 openWardenModal();
                 return;
             }
@@ -1120,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (updateProgressBar) updateProgressBar.style.width = '100%';
                 if (updateProgressText) {
                     updateProgressText.textContent = data.step || (data.isDelta
-                        ? '⚡ Aplikuji delta změny v kódu launcheru...'
+                        ? 'Aplikuji delta změny v kódu launcheru...'
                         : 'Rozbaluji aktualizační archiv...');
                 }
                 if (updateProgressSize) updateProgressSize.textContent = data.isDelta ? 'Delta instalace' : 'Rozbalování';
@@ -1145,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (desc) {
             if (update.isDelta) {
                 const mb = update.downloadSize ? (update.downloadSize / 1048576).toFixed(1) + ' MB' : '~3 MB';
-                desc.innerHTML = `Byla vydána nová verze MYCHAL SMP Launcheru (máš v${update.currentVersion || '1.0.0'}).<br><span style="display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: #21de00; font-weight: 700; background: rgba(33, 222, 0, 0.12); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(33, 222, 0, 0.3);">⚡ Blesková delta aktualizace: stahují se pouze změny (${mb} namísto ~90 MB)</span>`;
+                desc.innerHTML = `Byla vydána nová verze MYCHAL SMP Launcheru (máš v${update.currentVersion || '1.0.0'}).<br><span style="display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: #21de00; font-weight: 700; background: rgba(33, 222, 0, 0.12); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(33, 222, 0, 0.3);"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Blesková delta aktualizace: stahují se pouze změny (${mb} namísto ~90 MB)</span>`;
             } else {
                 desc.textContent = `Byla vydána nová verze MYCHAL SMP Launcheru (máš nainstalovanou v${update.currentVersion || '1.0.0'}). Chceš aktualizaci stáhnout a nainstalovat?`;
             }
@@ -1168,8 +1168,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (btnConfirm) {
             btnConfirm.disabled = false;
             btnConfirm.innerHTML = update.isDelta
-                ? '<span>⚡ Aktualizovat bleskově (Delta)</span>'
-                : '<span>⬇️ Aktualizovat nyní</span>';
+                ? '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-pulse" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Aktualizovat bleskově (Delta)</span>'
+                : '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Aktualizovat nyní</span>';
         }
 
         modal.style.display = 'flex';
@@ -1205,7 +1205,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnManualCheckUpdate.addEventListener('click', async () => {
             btnManualCheckUpdate.disabled = true;
             const orig = btnManualCheckUpdate.innerHTML;
-            btnManualCheckUpdate.innerHTML = '<span>⏳ Kontroluji...</span>';
+            btnManualCheckUpdate.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Kontroluji...</span>';
             try {
                 await checkLauncherUpdates(false);
             } finally {
@@ -1231,8 +1231,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             isUpdatingCurrently = true;
             btnConfirmUpdate.disabled = true;
             btnConfirmUpdate.innerHTML = pendingUpdateData.isDelta
-                ? '<span>⚡ Stahuji delta aktualizaci...</span>'
-                : '<span>⏳ Stahuji aktualizaci...</span>';
+                ? '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Stahuji delta aktualizaci...</span>'
+                : '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Stahuji aktualizaci...</span>';
 
             const notes = document.getElementById('updateReleaseNotes');
             if (notes) notes.style.display = 'none';
@@ -1284,7 +1284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (updateProgressContainer) updateProgressContainer.style.display = 'none';
                 if (btnConfirmUpdate) {
                     btnConfirmUpdate.disabled = false;
-                    btnConfirmUpdate.innerHTML = '<span>⬇️ Zkusit znovu</span>';
+                    btnConfirmUpdate.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Zkusit znovu</span>';
                 }
             }
         });
@@ -1305,18 +1305,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             headingTitle.textContent = hasAnyPlayed ? 'Naposledy hrané profily' : 'Dostupné herní profily';
         }
         if (headingIcon) {
-            headingIcon.textContent = hasAnyPlayed ? '🕒' : '🎮';
+            headingIcon.innerHTML = hasAnyPlayed
+                ? '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>'
+                : '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="4"></rect><line x1="6" y1="12" x2="10" y2="12"></line><line x1="8" y1="10" x2="8" y2="14"></line><line x1="15" y1="11" x2="15.01" y2="11"></line><line x1="18" y1="13" x2="18.01" y2="13"></line></svg>';
         }
 
         list.innerHTML = profiles.map(p => {
             const isActive = p.id === activeId;
-            const iconSymbol = p.icon === 'sword' ? '⚔️' :
-                p.icon === 'latest' ? '✨' :
-                    p.icon === 'chest' ? '📦' :
-                        p.icon === 'upgrade' ? '⚡' :
-                            p.icon === 'import' ? '📥' :
-                                p.icon === 'shield' ? '🛡️' :
-                                    p.icon === 'rocket' ? '🚀' : '🎮';
+            const getIconSvg = (icon) => {
+                switch (icon) {
+                    case 'sword':
+                        return '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline><line x1="13" y1="19" x2="19" y2="13"></line><line x1="16" y1="16" x2="20" y2="20"></line><line x1="19" y1="21" x2="21" y2="19"></line></svg>';
+                    case 'latest':
+                        return '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold ui-icon-pulse" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>';
+                    case 'chest':
+                        return '<svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>';
+                    case 'upgrade':
+                        return '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>';
+                    case 'import':
+                        return '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+                    case 'shield':
+                        return '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>';
+                    case 'rocket':
+                        return '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path></svg>';
+                    default:
+                        return '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="4"></rect><line x1="6" y1="12" x2="10" y2="12"></line><line x1="8" y1="10" x2="8" y2="14"></line><line x1="15" y1="11" x2="15.01" y2="11"></line><line x1="18" y1="13" x2="18.01" y2="13"></line></svg>';
+                }
+            };
+            const iconSymbol = getIconSvg(p.icon);
 
             const badgeClass = (p.id === 'minecraft-26.2' || p.id === 'mychalsmp-26.2') ? 'p-recommended' :
                 p.version === '26.3' ? 'p-latest' :
@@ -1341,7 +1357,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const canUpgrade = p.version !== '26.3' && p.version !== '26.4';
             const upgradeBtnHtml = canUpgrade ? `
                 <button class="btn-upgrade-profile" data-profile-id="${escapeHtml(p.id)}" title="Upgradovat profil a stáhnout nové verze módů">
-                    ⚡ Upgrade
+                    <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Upgrade
                 </button>
             ` : '';
 
@@ -1363,12 +1379,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return isInst ? 'mc-btn-green' : 'mc-btn-primary';
                 })()} btn-launch-profile" data-profile-id="${escapeHtml(p.id)}">
                             <span>${(() => {
-                    if (isRunning && isActive) return '■ Stop';
+                    if (isRunning && isActive) return '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg> Stop';
                     const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
-                    return isInst ? '▶ Hrát' : '⬇ Stáhnout';
+                    return isInst ? '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Hrát' : '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Stáhnout';
                 })()}</span>
                         </button>
-                        <button class="mc-btn mc-btn-secondary btn-profile-settings" data-profile-id="${escapeHtml(p.id)}" title="Nastavení profilu">⚙</button>
+                        <button class="mc-btn mc-btn-secondary btn-profile-settings" data-profile-id="${escapeHtml(p.id)}" title="Nastavení profilu"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                     </div>
                 </div>
             `;
@@ -1564,7 +1580,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (currentIllegalMods && currentIllegalMods.length > 0) {
                 // If launch wasn't explicitly triggered from quick play, don't block the user, simply launch without connecting to SMP
                 actualServerIp = null;
-                showToast('🛡️ Připojení na MYCHAL SMP přeskočeno (profil obsahuje nepovolené módy pro SMP). Hra spuštěna bez serveru.', 'info');
+                showToast('Připojení na MYCHAL SMP přeskočeno (profil obsahuje nepovolené módy pro SMP). Hra spuštěna bez serveru.', 'info');
                 appendLog('[BEZPEČNOST] Quick Play na MYCHAL SMP přeskočen z důvodu nepovolených módů v profilu. Hra spuštěna bez automatického připojení k serveru.');
             }
         }
@@ -1590,13 +1606,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (sidebarPlayBtn) {
                     sidebarPlayBtn.style.opacity = '1';
                     sidebarPlayBtn.style.background = '#ef4444';
-                    sidebarPlayBtn.querySelector('span').textContent = '■';
+                    sidebarPlayBtn.querySelector('span').innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>';
                 }
                 const activeCard = document.querySelector(`.profile-row-card[data-profile-id="${targetPid}"]`);
                 if (activeCard) {
                     const btn = activeCard.querySelector('.btn-launch-profile');
                     if (btn) {
-                        btn.innerHTML = '<span>■ Stop</span>';
+                        btn.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg> Stop</span>';
                         btn.classList.remove('mc-btn-green', 'mc-btn-primary');
                         btn.classList.add('mc-btn-red');
                     }
@@ -1605,7 +1621,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 appendLog('[LAUNCHER] Instance Minecraftu byla úspěšně spuštěna.');
             } else if (res && res.blockedByWarden) {
                 appendLog(`[BEZPEČNOST] ${res.error}`);
-                showToast('🛡️ Quick Play na MYCHAL SMP zablokován: Nalezeny nepovolené módy.', 'error');
+                showToast('Quick Play na MYCHAL SMP zablokován: Nalezeny nepovolené módy.', 'error');
                 openWardenModal();
                 resetPlayState();
                 return;
@@ -1632,13 +1648,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (sidebarPlayBtn) {
             sidebarPlayBtn.style.opacity = '1';
             sidebarPlayBtn.style.background = '#22c55e';
-            sidebarPlayBtn.querySelector('span').textContent = '▶';
+            sidebarPlayBtn.querySelector('span').innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
         }
         document.querySelectorAll('.btn-launch-profile').forEach(btn => {
             const pid = btn.dataset.profileId;
             const prof = (currentConfig.profiles || []).find(p => p.id === pid);
             const isInst = prof && Array.isArray(installedVersions) && installedVersions.includes(prof.version);
-            btn.innerHTML = `<span>${isInst ? '▶ Hrát' : '⬇ Stáhnout'}</span>`;
+            btn.innerHTML = `<span>${isInst ? '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Hrát' : '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Stáhnout'}</span>`;
             btn.classList.remove('mc-btn-red', 'mc-btn-green', 'mc-btn-primary');
             btn.classList.add(isInst ? 'mc-btn-green' : 'mc-btn-primary');
         });
@@ -1669,10 +1685,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         select.innerHTML = profiles.map(p => {
             const isSelected = p.id === selectedModsProfileId;
-            const icon = p.imported ? '📥' : (p.version === '26.2' ? '⭐' : '🎮');
             const loader = p.loader && p.loader !== 'vanilla' ? ` [${p.loader.toUpperCase()}]` : ' [VANILLA]';
             const name = p.name || p.id;
-            return `<option value="${escapeHtml(p.id)}" ${isSelected ? 'selected' : ''}>${icon} ${escapeHtml(name)} (${p.version}${loader})</option>`;
+            return `<option value="${escapeHtml(p.id)}" ${isSelected ? 'selected' : ''}>${escapeHtml(name)} (${p.version}${loader})</option>`;
         }).join('');
 
         select.onchange = (e) => {
@@ -1805,15 +1820,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (currentProfileModsList.length === 0) {
                 listEl.innerHTML = `
                     <div class="empty-mods-state">
-                        <div class="empty-mods-icon">📦</div>
+                        <div class="empty-mods-icon">
+                            <svg class="ui-icon-svg ui-icon-svg--xl" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                        </div>
                         <div class="empty-mods-title">V tomto profilu zatím nejsou žádné módy</div>
                         <p class="empty-mods-desc">Přidej módy z Modrinth katalogu jedním kliknutím nebo vlož .jar soubory do složky mods.</p>
                         <div class="empty-mods-actions">
                             <button type="button" class="mc-btn mc-btn-primary" id="btnEmptyGoCatalog">
-                                <span>🌐 Přejít do Modrinth katalogu</span>
+                                <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> Přejít do Modrinth katalogu</span>
                             </button>
                             <button type="button" class="mc-btn mc-btn-secondary" id="btnEmptyOpenFolder">
-                                <span>📂 Otevřít složku mods</span>
+                                <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Otevřít složku mods</span>
                             </button>
                         </div>
                     </div>
@@ -1856,7 +1873,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <span class="mod-row-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
                             ${m.version ? `<span class="mod-version-tag">v${escapeHtml(m.version)}</span>` : ''}
                             <span class="mod-row-badge ${m.enabled ? 'badge-enabled' : 'badge-disabled'}">
-                                ${m.enabled ? '✓ Aktivní' : 'Vypnuto'}
+                                ${m.enabled ? '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Aktivní' : 'Vypnuto'}
                             </span>
                         </div>
                         <div class="mod-row-file-meta">
@@ -1875,7 +1892,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <button type="button" class="btn-mod-delete"
                         data-filename="${escapeHtml(m.filename)}"
                         title="Smazat soubor módu">
-                        <span>🗑️ Smazat</span>
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Smazat</span>
                     </button>
                 </div>
             </div>
@@ -1891,7 +1908,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const res = await window.api.toggleProfileMod(profId, filename);
                     if (res && res.success) {
-                        showToast(res.enabled ? '✓ Mód aktivován' : '⏸️ Mód vypnut', 'info');
+                        showToast(res.enabled ? 'Mód aktivován' : 'Mód vypnut', 'info');
                         await loadProfileMods(profId);
                     } else {
                         showToast('Chyba při změně módu: ' + (res?.error || 'Neznámá chyba'), 'error');
@@ -1912,7 +1929,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const res = await window.api.deleteProfileMod(profId, filename);
                     if (res && res.success) {
-                        showToast('✓ Soubor módu byl smazán.', 'success');
+                        showToast('Soubor módu byl smazán.', 'success');
                         await loadProfileMods(profId);
                     } else {
                         showToast('Chyba při mazání módu: ' + (res?.error || 'Neznámá chyba'), 'error');
@@ -2137,33 +2154,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             let statusPill = '';
 
             if (hasUpdate) {
-                statusPill = `<span class="mod-status-pill mod-status-update">⬆ Nová verze v${escapeHtml(latestVer)}</span>`;
+                statusPill = `<span class="mod-status-pill mod-status-update"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> Nová verze v${escapeHtml(latestVer)}</span>`;
                 btnHtml = `
                     <div class="mod-card-actions">
                         <button class="mc-btn btn-update-mod btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="update" data-old-file="${escapeHtml(installedMod?.filename || '')}" title="Aktualizovat na novější verzi v${escapeHtml(latestVer)}">
-                            <span>⬆ AKTUALIZOVAT</span>
+                            <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> AKTUALIZOVAT</span>
                         </button>
                         <button class="mc-btn btn-catalog-delete-mod" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
-                            <span>🗑️</span>
+                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span>
                         </button>
                     </div>
                 `;
             } else if (isInstalled) {
-                statusPill = `<span class="mod-status-pill mod-status-installed">✓ Nainstalováno${currentVer ? ` (v${escapeHtml(currentVer)})` : ''}</span>`;
+                statusPill = `<span class="mod-status-pill mod-status-installed"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Nainstalováno${currentVer ? ` (v${escapeHtml(currentVer)})` : ''}</span>`;
                 btnHtml = `
                     <div class="mod-card-actions">
                         <button class="mc-btn btn-download-success btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="installed" title="Již nainstalováno v profilu">
-                            <span>✓ NAINSTALOVÁNO</span>
+                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> NAINSTALOVÁNO</span>
                         </button>
                         <button class="mc-btn btn-catalog-delete-mod" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
-                            <span>🗑️</span>
+                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span>
                         </button>
                     </div>
                 `;
             } else {
                 btnHtml = `
                     <button class="mc-btn mc-btn-green btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="download" title="Stáhnout do profilu">
-                        <span>📥 STÁHNOUT</span>
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> STÁHNOUT</span>
                     </button>
                 `;
             }
@@ -2179,8 +2196,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         </div>
                         <div class="mod-desc-text">${escapeHtml(m.description)}</div>
                         <div class="mod-stats-row">
-                            <span>⬇ ${downloadsFormatted} stažení</span>
-                            <span>❤️ ${(m.follows || 1000).toLocaleString()} oblíbení</span>
+                            <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> ${downloadsFormatted} stažení</span>
+                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg> ${(m.follows || 1000).toLocaleString()} oblíbení</span>
                             <span>Verze: ${currentModFilter.version}</span>
                         </div>
                     </div>
@@ -2204,7 +2221,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     for (let idx = 0; idx < total; idx++) {
                         const item = updateableMods[idx];
-                        btnUpdateAll.innerHTML = `<span class="spinner-inline">⏳</span> <span>Aktualizuji ${idx + 1}/${total}...</span>`;
+                        btnUpdateAll.innerHTML = `<span class="spinner-inline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span> <span>Aktualizuji ${idx + 1}/${total}...</span>`;
                         try {
                             const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
                             const prof = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
@@ -2230,7 +2247,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                     }
 
-                    showToast(`✓ Úspěšně aktualizováno ${successCount} z ${total} módů!`, 'success');
+                    showToast(`Úspěšně aktualizováno ${successCount} z ${total} módů!`, 'success');
                     btnUpdateAll.disabled = false;
                     btnUpdateAll.style.display = 'none';
 
@@ -2259,7 +2276,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const res = await window.api.deleteProfileMod(targetProfileId, filename);
                     if (res && res.success) {
-                        showToast(`✓ ${modTitle} byl smazán z profilu.`, 'success');
+                        showToast(`${modTitle} byl smazán z profilu.`, 'success');
                         const pRes = await window.api.getProfileMods(targetProfileId);
                         if (pRes && pRes.success) {
                             currentProfileModsList = pRes.mods || [];
@@ -2322,7 +2339,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Micro-animation: Button spinner state
                 btn.disabled = true;
                 btn.classList.add('btn-downloading');
-                btn.innerHTML = `<span class="spinner-inline">⏳</span> <span>${isUpdate ? 'Aktualizuji...' : 'Stahuji...'}</span>`;
+                btn.innerHTML = `<span class="spinner-inline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span> <span>${isUpdate ? 'Aktualizuji...' : 'Stahuji...'}</span>`;
 
                 try {
                     const res = await window.api.downloadModOrPack({
@@ -2339,12 +2356,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         btn.classList.remove('btn-downloading', 'btn-update-mod', 'mc-btn-green', 'mc-btn-primary');
                         btn.classList.add('btn-download-success');
                         btn.dataset.action = 'installed';
-                        btn.innerHTML = `<span class="checkmark-anim">✓</span> <span>STAŽENO</span>`;
+                        btn.innerHTML = `<span class="checkmark-anim"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span>STAŽENO</span>`;
 
                         const sub = res.subfolder || 'mods';
                         const toastMsg = isUpdate
-                            ? `✓ ${title} byl úspěšně aktualizován na novou verzi!`
-                            : `✓ ${title} byl úspěšně stažen do ${sub}/!`;
+                            ? `${title} byl úspěšně aktualizován na novou verzi!`
+                            : `${title} byl úspěšně stažen do ${sub}/!`;
                         showToast(toastMsg, 'success');
                         appendLog(`[DOWNLOAD] ${title} (${res.filename}) ${isUpdate ? 'aktualizován' : 'stažen'} do ${sub}/ v profilu ${targetProfileId}.`);
 
@@ -2365,7 +2382,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             };
                             const niceNew = loaderLabels[res.newLoader] || res.newLoader;
                             const nicePrev = loaderLabels[res.prevLoader] || res.prevLoader || 'Vanilla';
-                            showToast(`⚡ Profil byl automaticky přepnut na ${niceNew} loader!`, 'info');
+                            showToast(`Profil byl automaticky přepnut na ${niceNew} loader!`, 'info');
                             appendLog(`[LOADER] Profil "${pObj ? pObj.name : targetProfileId}" byl automaticky přepnut z ${nicePrev} na ${niceNew} pro spuštění módů.`);
 
                             renderModsProfileDropdown();
@@ -2382,12 +2399,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         await checkWardenProbe();
                     } else {
                         btn.classList.remove('btn-downloading');
-                        btn.innerHTML = `<span>⚠️ Chyba</span>`;
+                        btn.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> <span>Chyba</span>`;
                         showToast(`Chyba při stahování: ${res.error || 'Neznámá chyba'}`, 'error');
                     }
                 } catch (e) {
                     btn.classList.remove('btn-downloading');
-                    btn.innerHTML = `<span>⚠️ Chyba</span>`;
+                    btn.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> <span>Chyba</span>`;
                     showToast(`Chyba: ${e.message}`, 'error');
                 } finally {
                     setTimeout(() => {
@@ -2752,7 +2769,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             skinViewer.controls.enablePan = false;
             skinViewer.animation = createCapeIdleAnimation() || new window.skinview3d.IdleAnimation();
 
-            // 3D Toolbar Buttons: [ 🔄 360° ] [ 🧥 Plášť ] [ 🚀 Létání ]
+            // 3D Toolbar Buttons: [ 360° ] [ Plášť ] [ Létání ]
             const btnRotate = document.getElementById('btn3DRotateToggle');
             const btnElytra = document.getElementById('btn3DElytraToggle');
             const btnFlying = document.getElementById('btn3DFlyingToggle');
@@ -2774,7 +2791,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!skinViewer) return;
                     isBackEquipmentElytra = !isBackEquipmentElytra;
                     skinViewer.playerObject.backEquipment = isBackEquipmentElytra ? 'elytra' : 'cape';
-                    if (labelElytra) labelElytra.textContent = isBackEquipmentElytra ? '🪽 Elytra' : '🧥 Plášť';
+                    if (labelElytra) labelElytra.textContent = isBackEquipmentElytra ? 'Elytra' : 'Plášť';
                     btnElytra.classList.toggle('active', !isBackEquipmentElytra);
                 };
             }
@@ -2785,11 +2802,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     isFlyingAnimationActive = !isFlyingAnimationActive;
                     if (isFlyingAnimationActive) {
                         skinViewer.animation = createCapeFlyingAnimation() || new window.skinview3d.FlyingAnimation();
-                        if (labelFlying) labelFlying.textContent = '🧍 Postavit';
+                        if (labelFlying) labelFlying.textContent = 'Postavit';
                         btnFlying.classList.add('active');
                     } else {
                         skinViewer.animation = createCapeIdleAnimation() || new window.skinview3d.IdleAnimation();
-                        if (labelFlying) labelFlying.textContent = '🚀 Létání';
+                        if (labelFlying) labelFlying.textContent = 'Létání';
                         btnFlying.classList.remove('active');
                     }
                 };
@@ -3021,7 +3038,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <div class="cape-item-preview-box">
                                 <canvas class="cape-canvas-render" id="mojangCapeCanvas_${idx}" width="40" height="64"></canvas>
                             </div>
-                            ${isActive ? '<span class="cape-active-indicator">✓ Aktivní</span>' : ''}
+                            ${isActive ? '<span class="cape-active-indicator"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Aktivní</span>' : ''}
                             <span class="cape-item-name">${escapeHtml(c.alias || 'Plášť')}</span>
                         </div>
                     `;
@@ -3051,10 +3068,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 container.querySelectorAll('.cape-item-card').forEach(card => {
                     card.addEventListener('click', async () => {
                         const capeId = card.dataset.capeId;
-                        showToast('⏳ Nastavuji plášť na Mojang účtu...', 'info');
+                        showToast('Nastavuji plášť na Mojang účtu...', 'info');
                         const equipRes = await window.api.setMojangCape(capeId);
                         if (equipRes && equipRes.success) {
-                            showToast('✓ Plášť byl úspěšně aktivován na tvém Mojang účtu!', 'success');
+                            showToast('Plášť byl úspěšně aktivován na tvém Mojang účtu!', 'success');
                             await loadMojangCapes();
                         } else {
                             showToast('Chyba při nastavování pláště: ' + (equipRes.error || 'Neznámá chyba'), 'error');
@@ -3133,12 +3150,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const variant = currentConfig.customSkinVariant || 'classic';
             btnUploadMojangSkin.disabled = true;
-            btnUploadMojangSkin.innerHTML = '<span>⏳ Nahrávám na Mojang účet...</span>';
+            btnUploadMojangSkin.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Nahrávám na Mojang účet...</span>';
 
             try {
                 const res = await window.api.uploadMojangSkin(filePath, variant);
                 if (res && res.success) {
-                    showToast('✓ Skin byl úspěšně nahrán a uložen na tvůj oficiální Mojang účet!', 'success');
+                    showToast('Skin byl úspěšně nahrán a uložen na tvůj oficiální Mojang účet!', 'success');
                     appendLog('[MOJANG] Skin byl úspěšně aktualizován na Mojang serverech.');
                     if (res.skin && res.skin.url) {
                         currentConfig.customSkinPath = filePath;
@@ -3151,7 +3168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showToast('Chyba: ' + e.message, 'error');
             } finally {
                 btnUploadMojangSkin.disabled = false;
-                btnUploadMojangSkin.innerHTML = '<span>☁️ Nahrát skin na Mojang účet</span>';
+                btnUploadMojangSkin.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/></svg> <span>Nahrát skin na Mojang účet</span>';
             }
         });
     }
@@ -3163,7 +3180,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!confirm('Opravdu chceš resetovat svůj oficiální skin na výchozí Steve/Alex?')) return;
             const res = await window.api.resetMojangSkin();
             if (res && res.success) {
-                showToast('✓ Skin byl resetován na výchozí.', 'success');
+                showToast('Skin byl resetován na výchozí.', 'success');
                 const defaultSkin = `https://minotar.net/skin/${encodeURIComponent(currentConfig.username)}`;
                 drawSkinToCanvas(defaultSkin, currentConfig.customSkinVariant === 'slim');
             } else {
@@ -3178,7 +3195,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnHideMojangCape.addEventListener('click', async () => {
             const res = await window.api.setMojangCape(null);
             if (res && res.success) {
-                showToast('✓ Plášť byl skryt na tvém Mojang účtu.', 'success');
+                showToast('Plášť byl skryt na tvém Mojang účtu.', 'success');
                 await loadMojangCapes();
             } else {
                 showToast('Chyba: ' + (res.error || 'Chyba'), 'error');
@@ -3202,7 +3219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     variant: currentConfig.customSkinVariant || 'classic'
                 });
                 updateUserUI(currentConfig.username, 'offline', destPath);
-                showToast('✓ Offline skin byl uložen v launcheru!', 'success');
+                showToast('Offline skin byl uložen v launcheru!', 'success');
                 appendLog(`[SKIN] Vlastní offline skin nastaven: ${destPath}`);
             }
         });
@@ -3218,7 +3235,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await window.api.saveOfflineSkin({ capePath: capePath });
                 updateUserUI(currentConfig.username, 'offline', currentConfig.customSkinPath);
                 loadOfflinePresetCapes();
-                showToast('✓ Offline plášť byl uložen v launcheru!', 'success');
+                showToast('Offline plášť byl uložen v launcheru!', 'success');
                 appendLog(`[CAPE] Vlastní offline plášť nastaven: ${capePath}`);
             }
         });
@@ -3232,7 +3249,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             await window.api.saveOfflineSkin({ capePath: null });
             updateUserUI(currentConfig.username, 'offline', currentConfig.customSkinPath);
             loadOfflinePresetCapes();
-            showToast('✓ Offline plášť byl odebrán.', 'info');
+            showToast('Offline plášť byl odebrán.', 'info');
         });
     }
 
@@ -3249,8 +3266,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentConfig.authType = 'offline';
                 // Note: customSkinPath is kept!
                 updateUserUI(nick, 'offline', currentConfig.customSkinPath);
-                temporaryButtonText(btnSaveCharacter, '✓ Postava uložena!');
-                showToast(`✓ Postava "${nick}" byla uložena s tvým skinem!`, 'success');
+                temporaryButtonText(btnSaveCharacter, '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span>Postava uložena!</span>');
+                showToast(`Postava "${nick}" byla uložena s tvým skinem!`, 'success');
             }
         });
     }
@@ -3259,7 +3276,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.api && window.api.onAuthStatus) {
         window.api.onAuthStatus((statusText) => {
             if (authMicrosoftBtn && authMicrosoftBtn.disabled) {
-                authMicrosoftBtn.textContent = `⏳ ${statusText}`;
+                authMicrosoftBtn.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>${escapeHtml(statusText)}</span>`;
             }
             appendLog(`[AUTH] ${statusText}`);
         });
@@ -3268,8 +3285,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (authMicrosoftBtn) {
         authMicrosoftBtn.addEventListener('click', async () => {
             authMicrosoftBtn.disabled = true;
-            const originalText = authMicrosoftBtn.textContent;
-            authMicrosoftBtn.textContent = '⏳ Čekám na okno Microsoftu...';
+            const originalHtml = authMicrosoftBtn.innerHTML;
+            authMicrosoftBtn.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Čekám na okno Microsoftu...</span>';
             appendLog('[AUTH] Otevírám oficiální Microsoft přihlašovací okno...');
 
             try {
@@ -3280,7 +3297,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     currentConfig.microsoftAccount = res.auth;
                     updateUserUI(res.profile.name, 'microsoft', res.profile.skinUrl);
                     appendLog(`[AUTH] Úspěšné přihlášení Microsoft účtu: ${res.profile.name}`);
-                    showToast(`✓ Úspěšně přihlášen Microsoft účet: ${res.profile.name}`, 'success');
+                    showToast(`Úspěšně přihlášen Microsoft účet: ${res.profile.name}`, 'success');
                 } else {
                     appendLog(`[AUTH] Přihlášení k Microsoft účtu: ${res.error || 'Zrušeno'}`);
                     showToast(res.error || 'Přihlášení bylo zrušeno', 'error');
@@ -3290,7 +3307,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showToast(`Chyba: ${err.message}`, 'error');
             } finally {
                 authMicrosoftBtn.disabled = false;
-                authMicrosoftBtn.textContent = originalText;
+                authMicrosoftBtn.innerHTML = originalHtml;
             }
         });
     }
@@ -3351,7 +3368,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 javaPathInput.value = detected || '';
                 autoSaveSettings(true);
                 appendLog(`[JAVA] Detekováno: ${detected}`);
-                temporaryButtonText(btnDetectJava, '✓ Detekováno');
+                temporaryButtonText(btnDetectJava, '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span>Detekováno</span>');
             }
         });
     }
@@ -3485,8 +3502,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnSaveSettings.addEventListener('click', async () => {
             await autoSaveSettings(true);
             appendLog('[CONFIG] Nastavení bylo uloženo.');
-            temporaryButtonText(btnSaveSettings, '✓ Nastavení uloženo!');
-            showToast('✓ Nastavení klienta bylo uloženo!', 'success');
+            temporaryButtonText(btnSaveSettings, '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span>Nastavení uloženo!</span>');
+            showToast('Nastavení klienta bylo uloženo!', 'success');
         });
     }
 
@@ -3497,7 +3514,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (jvmInput) {
                 jvmInput.value = '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC';
                 autoSaveSettings(true);
-                showToast('⚡ Nastaveny doporučené parametry Generational ZGC (Java 21/25)!', 'info');
+                showToast('Nastaveny doporučené parametry Generational ZGC (Java 21/25)!', 'info');
             }
         });
     }
@@ -3567,7 +3584,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (vBadge) {
             vBadge.className = 'v-status-badge downloading';
             const vLabel = vBadge.querySelector('.v-status-label') || vBadge;
-            vLabel.textContent = `⏳ Stahování... ${percent}%`;
+            vLabel.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Stahování... ${percent}%</span>`;
         }
     });
 
@@ -3637,7 +3654,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (btnApplyCrashFix) {
                 if (crashData.autoFix) {
                     btnApplyCrashFix.style.display = 'inline-flex';
-                    if (fixTextElem) fixTextElem.textContent = crashData.autoFix.label || '⚡ Automatická oprava';
+                    if (fixTextElem) {
+                        const cleanLabel = (crashData.autoFix.label || 'Automatická oprava').replace(/^[⚡⚠️🔧\s]+/u, '');
+                        fixTextElem.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold ui-icon-pulse" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> <span>${escapeHtml(cleanLabel)}</span>`;
+                    }
                 } else {
                     btnApplyCrashFix.style.display = 'none';
                 }
@@ -3660,11 +3680,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnApplyCrashFix.addEventListener('click', async () => {
             if (!currentCrashData || !currentCrashData.autoFix) return;
             btnApplyCrashFix.disabled = true;
-            btnApplyCrashFix.textContent = '⏳ Aplikuji opravu...';
+            btnApplyCrashFix.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Aplikuji opravu...</span>';
             try {
                 const res = await window.api.applyCrashFix(currentCrashData.autoFix, currentConfig.activeProfileId);
                 if (res && res.success) {
-                    showToast(`✓ ${res.message}`, 'success');
+                    showToast(`${res.message}`.replace(/^[✓\s]+/u, ''), 'success');
                     appendLog(`[OPRAVA PÁDU] ${res.message}`);
                     closeCrashModal();
 
@@ -3687,7 +3707,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showToast('Chyba: ' + err.message, 'error');
             } finally {
                 btnApplyCrashFix.disabled = false;
-                btnApplyCrashFix.innerHTML = '<span id="btnApplyCrashFixText">⚡ Automatická oprava</span>';
+                btnApplyCrashFix.innerHTML = '<span id="btnApplyCrashFixText"><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold ui-icon-pulse" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> <span>Automatická oprava</span></span>';
             }
         });
     }
@@ -3779,16 +3799,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 container.dataset.value = val;
                 if (selectedText) selectedText.textContent = title;
-                if (selectedIcon) selectedIcon.textContent = icon;
+                if (selectedIcon) {
+                    const optIconEl = opt.querySelector('.custom-option-icon');
+                    if (optIconEl && optIconEl.innerHTML.trim()) {
+                        selectedIcon.innerHTML = optIconEl.innerHTML;
+                    } else if (typeof getIconSvg === 'function' && icon) {
+                        selectedIcon.innerHTML = getIconSvg(icon);
+                    } else {
+                        selectedIcon.innerHTML = '';
+                    }
+                }
 
                 options.forEach(o => {
                     o.classList.remove('active');
                     const check = o.querySelector('.custom-option-check');
-                    if (check) check.textContent = '';
+                    if (check) check.innerHTML = '';
                 });
                 opt.classList.add('active');
                 const check = opt.querySelector('.custom-option-check');
-                if (check) check.textContent = '✓';
+                if (check) {
+                    check.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+                }
 
                 closeDropdown();
                 if (typeof onSelect === 'function') onSelect(val);
@@ -3902,7 +3933,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             closeCreateProfileModal();
             renderProfilesList();
-            showToast(`✓ Profil "${rawName}" byl úspěšně vytvořen!`, 'success');
+            showToast(`Profil "${rawName}" byl úspěšně vytvořen!`, 'success');
         });
     }
 
@@ -3971,10 +4002,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (scannedStatsPills) {
                 scannedStatsPills.innerHTML = `
-                    <span class="stat-pill stat-good">📦 Nalezeno módů: ${scan.modCount}</span>
-                    <span class="stat-pill">🎨 Texture packů: ${scan.rpCount}</span>
-                    <span class="stat-pill ${scan.hasConfig ? 'stat-good' : ''}">⚙ Nastavení módů: ${scan.hasConfig ? 'Ano' : 'Ne'}</span>
-                    <span class="stat-pill ${scan.hasOptions ? 'stat-good' : ''}">🎮 Herní options.txt: ${scan.hasOptions ? 'Ano' : 'Ne'}</span>
+                    <span class="stat-pill stat-good"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg> Nalezeno módů: ${scan.modCount}</span>
+                    <span class="stat-pill"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.563-2.512 5.563-5.563C22 6.5 17.5 2 12 2Z"/></svg> Texture packů: ${scan.rpCount}</span>
+                    <span class="stat-pill ${scan.hasConfig ? 'stat-good' : ''}"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Nastavení módů: ${scan.hasConfig ? 'Ano' : 'Ne'}</span>
+                    <span class="stat-pill ${scan.hasOptions ? 'stat-good' : ''}"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg> Herní options.txt: ${scan.hasOptions ? 'Ano' : 'Ne'}</span>
                 `;
             }
 
@@ -3987,7 +4018,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnConfirmImport.addEventListener('click', async () => {
             if (!currentScannedData) return;
             btnConfirmImport.disabled = true;
-            btnConfirmImport.textContent = '⏳ Importuji data instance...';
+            btnConfirmImport.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Importuji data instance...</span>';
 
             try {
                 const importPayload = {
@@ -4004,7 +4035,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     closeImportModal();
                     await loadConfiguration();
                     renderProfilesList();
-                    alert(`✓ Profil byl úspěšně importován!\nPřeneseno ${res.importedModCount} módů a veškerá herní nastavení.`);
+                    alert(`Profil byl úspěšně importován!\nPřeneseno ${res.importedModCount} módů a veškerá herní nastavení.`);
                 } else {
                     alert('Chyba při importu: ' + res.error);
                 }
@@ -4012,7 +4043,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alert('Chyba: ' + e.message);
             } finally {
                 btnConfirmImport.disabled = false;
-                btnConfirmImport.innerHTML = '<span>✓ Dokončit import profilu</span>';
+                btnConfirmImport.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Dokončit import profilu</span>';
             }
         });
     }
@@ -4051,7 +4082,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (upgradeProgressArea) upgradeProgressArea.style.display = 'none';
         if (btnConfirmUpgrade) {
             btnConfirmUpgrade.disabled = false;
-            btnConfirmUpgrade.innerHTML = '<span>🚀 Spustit upgrade</span>';
+            btnConfirmUpgrade.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path></svg> Spustit upgrade</span>';
         }
 
         if (modalUpgradeProfile) modalUpgradeProfile.style.display = 'flex';
@@ -4078,7 +4109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const targetVer = upgradeTargetVersionSelect ? upgradeTargetVersionSelect.value : '26.3';
             btnConfirmUpgrade.disabled = true;
-            btnConfirmUpgrade.textContent = '⏳ Probíhá upgrade...';
+            btnConfirmUpgrade.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Probíhá upgrade...</span>';
             if (upgradeProgressArea) upgradeProgressArea.style.display = 'block';
 
             try {
@@ -4101,19 +4132,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (upgradeResultModsList) {
                             let html = '';
                             if (res.upgradedMods && res.upgradedMods.length > 0) {
-                                html += `<div style="font-weight:700; color:#86efac; margin-top:8px;">✓ Automaticky aktualizované módy (${res.upgradedMods.length}):</div>`;
+                                html += `<div style="display:flex; align-items:center; gap:6px; font-weight:700; color:#86efac; margin-top:8px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Automaticky aktualizované módy (${res.upgradedMods.length}):</div>`;
                                 html += res.upgradedMods.map(m => `
-                                    <div class="result-mod-tag" style="background:#132a1e; color:#86efac;">
-                                        ✓ ${escapeHtml(m.newFile)} (v${escapeHtml(m.version)})
+                                    <div class="result-mod-tag" style="display:flex; align-items:center; gap:6px; background:#132a1e; color:#86efac;">
+                                        <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> ${escapeHtml(m.newFile)} (v${escapeHtml(m.version)})
                                     </div>
                                 `).join('');
                             }
 
                             if (res.missingMods && res.missingMods.length > 0) {
-                                html += `<div style="font-weight:700; color:#fbbf24; margin-top:10px;">⚠️ Módy čekající na vydání pro ${targetVer} (${res.missingMods.length}):</div>`;
+                                html += `<div style="display:flex; align-items:center; gap:6px; font-weight:700; color:#fbbf24; margin-top:10px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Módy čekající na vydání pro ${escapeHtml(targetVer)} (${res.missingMods.length}):</div>`;
                                 html += res.missingMods.map(m => `
-                                    <div class="result-mod-tag" style="background:#2a2313; color:#fde047;">
-                                        ⏳ ${escapeHtml(m)} (Zatím bez odpovídající verze)
+                                    <div class="result-mod-tag" style="display:flex; align-items:center; gap:6px; background:#2a2313; color:#fde047;">
+                                        <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> ${escapeHtml(m)} (Zatím bez odpovídající verze)
                                     </div>
                                 `).join('');
                             }
@@ -4129,7 +4160,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alert('Chyba při upgradu: ' + e.message);
             } finally {
                 btnConfirmUpgrade.disabled = false;
-                btnConfirmUpgrade.innerHTML = '<span>🚀 Spustit upgrade</span>';
+                btnConfirmUpgrade.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path></svg> Spustit upgrade</span>';
             }
         });
     }
@@ -4213,7 +4244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 loader: newLoader
             });
 
-            showToast('✓ Nastavení profilu bylo uloženo!', 'success');
+            showToast('Nastavení profilu bylo uloženo!', 'success');
             closeProfileSettingsModal();
             await loadConfiguration();
             renderProfilesList();
@@ -4229,7 +4260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const res = await window.api.deleteProfile(activeSettingsProfileId);
             if (res && res.success) {
-                showToast(`✓ Profil "${pName}" byl smazán.`, 'success');
+                showToast(`Profil "${pName}" byl smazán.`, 'success');
                 closeProfileSettingsModal();
                 await loadConfiguration();
                 renderProfilesList();
@@ -4244,19 +4275,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnResetLauncherData) {
         btnResetLauncherData.addEventListener('click', async () => {
             const confirmReset = confirm(
-                '⚠️ VAROVÁNÍ: Opravdu chceš smazat veškerá data launcheru?\n\n' +
+                'VAROVÁNÍ: Opravdu chceš smazat veškerá data launcheru?\n\n' +
                 'Tato akce vymaže všechny stažené verze, instance, konfigurace a vrátí launcher do výchozího stavu.'
             );
             if (!confirmReset) return;
 
             btnResetLauncherData.disabled = true;
-            btnResetLauncherData.textContent = '⏳ Probíhá mazání dat...';
+            btnResetLauncherData.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Probíhá mazání dat...</span>';
             appendLog('[RESET] Zahájeno mazání dat launcheru...');
 
             try {
                 const res = await window.api.resetLauncherData();
                 if (res && res.success) {
-                    showToast('✓ Data launcheru byla smazána a launcher resetován.', 'success');
+                    showToast('Data launcheru byla smazána a launcher resetován.', 'success');
                     appendLog('[RESET] Tovární reset launcheru dokončen.');
                     setTimeout(async () => {
                         await loadConfiguration();
@@ -4270,7 +4301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alert('Chyba: ' + e.message);
             } finally {
                 btnResetLauncherData.disabled = false;
-                btnResetLauncherData.textContent = '🗑️ Smazat data launcheru (Reset)';
+                btnResetLauncherData.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> <span>Smazat data launcheru (Reset)</span>';
             }
         });
     }
@@ -4281,9 +4312,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!container) return;
         const toast = document.createElement('div');
         toast.className = `toast-message ${type === 'error' ? 'toast-error' : type === 'info' ? 'toast-info' : ''}`;
+        
+        let iconSvg = '';
+        if (type === 'error') {
+            iconSvg = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+        } else if (type === 'success') {
+            iconSvg = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+        } else {
+            iconSvg = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+        }
+
+        // Strip any leading emoji remnants if passed dynamically
+        const cleanMessage = String(message).replace(/^[✓⚠️ℹ️🚀🎮🧹📌❌⚡🟢🟡⚪⏳⬇▶]+\s*/gu, '');
+
         toast.innerHTML = `
-            <span>${type === 'error' ? '⚠️' : type === 'success' ? '✓' : 'ℹ️'}</span>
-            <span>${escapeHtml(message)}</span>
+            <span class="toast-icon">${iconSvg}</span>
+            <span class="toast-text">${escapeHtml(cleanMessage)}</span>
         `;
         container.appendChild(toast);
         setTimeout(() => {
@@ -4319,12 +4363,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
-    function temporaryButtonText(btn, tempText, duration = 2000) {
+    function temporaryButtonText(btn, tempHtml, duration = 2000) {
         if (!btn) return;
-        const originalText = btn.textContent;
-        btn.textContent = tempText;
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = tempHtml;
         setTimeout(() => {
-            btn.textContent = originalText;
+            btn.innerHTML = originalHtml;
         }, duration);
     }
 

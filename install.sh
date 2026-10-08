@@ -70,8 +70,12 @@ chmod +x "$INSTALL_DIR/mychalsmp-launcher"
 ln -sf "$INSTALL_DIR/mychalsmp-launcher" "$BIN_DIR/mychalsmp-launcher"
 
 # Zajištění ikony aplikace
-if [ -f "$INSTALL_DIR/resources/app/src/renderer/assets/server-icon.png" ]; then
+if [ -f "$INSTALL_DIR/resources/app/src/renderer/assets/logo.png" ]; then
+    cp "$INSTALL_DIR/resources/app/src/renderer/assets/logo.png" "$ICON_DIR/mychalsmp-launcher.png"
+elif [ -f "$INSTALL_DIR/resources/app/src/renderer/assets/server-icon.png" ]; then
     cp "$INSTALL_DIR/resources/app/src/renderer/assets/server-icon.png" "$ICON_DIR/mychalsmp-launcher.png"
+elif [ -f "$INSTALL_DIR/resources/logo.png" ]; then
+    cp "$INSTALL_DIR/resources/logo.png" "$ICON_DIR/mychalsmp-launcher.png"
 elif [ -f "$INSTALL_DIR/resources/server-icon.png" ]; then
     cp "$INSTALL_DIR/resources/server-icon.png" "$ICON_DIR/mychalsmp-launcher.png"
 fi
@@ -79,7 +83,7 @@ fi
 # Vytvoření zástupce v menu aplikací (.desktop)
 cat <<EOF > "$DESKTOP_DIR/mychalsmp-launcher.desktop"
 [Desktop Entry]
-Name=MYCHAL SMP Launcher
+Name=SMPLauncher
 Comment=Oficiální Minecraft launcher sítě MYCHAL SMP
 Exec=$INSTALL_DIR/mychalsmp-launcher %U
 Icon=mychalsmp-launcher
@@ -96,6 +100,6 @@ command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" || true
 
 echo ""
-echo "✅ [HOTOVO] MYCHAL SMP Launcher byl úspěšně nainstalován!"
+echo "✅ [HOTOVO] SMPLauncher byl úspěšně nainstalován!"
 echo "👉 Můžeš jej spustit z aplikačního menu systému nebo příkazem:"
 echo "   ~/.local/bin/mychalsmp-launcher"

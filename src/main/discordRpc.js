@@ -233,13 +233,13 @@ class DiscordRpcClient {
                     start: startTime || Date.now()
                 },
                 assets: {
-                    large_image: 'https://join.mychalsmp.xyz/imgs/smpclient-logo2.png',
-                    large_text: `Server: ${serverLabel}`,
-                    small_image: 'https://join.mychalsmp.xyz/imgs/icons/beacon.jpg',
-                    small_text: `SMPClient (${profileName})`
+                    large_image: isMychal ? 'https://raw.githubusercontent.com/mychalVidea/mychalsmp-launcher/main/src/renderer/assets/server-icon.png' : 'https://raw.githubusercontent.com/mychalVidea/mychalsmp-launcher/main/src/renderer/assets/logo.png',
+                    large_text: isMychal ? `MYCHAL SMP (${serverLabel})` : `Server: ${serverLabel}`,
+                    small_image: 'https://raw.githubusercontent.com/mychalVidea/mychalsmp-launcher/main/src/renderer/assets/logo.png',
+                    small_text: `SMPLauncher (${profileName})`
                 },
                 buttons: [
-                    { label: '🎮 Připojit se na SMP', url: 'https://join.mychalsmp.xyz' },
+                    { label: '🎮 Jak se připojit', url: 'https://join.mychalsmp.xyz/howto' },
                     { label: '🌐 Oficiální web', url: 'https://mychalsmp.xyz' }
                 ]
             };
@@ -247,16 +247,23 @@ class DiscordRpcClient {
             const isMychal = !server || server.toLowerCase().includes('mychalsmp');
             const serverLabel = isMychal ? 'mychalsmp.xyz' : server;
 
+            const assets = {
+                large_image: 'https://raw.githubusercontent.com/mychalVidea/mychalsmp-launcher/main/src/renderer/assets/logo.png',
+                large_text: 'SMPLauncher'
+            };
+
+            if (isMychal) {
+                assets.small_image = 'https://raw.githubusercontent.com/mychalVidea/mychalsmp-launcher/main/src/renderer/assets/server-icon.png';
+                assets.small_text = `Server: ${serverLabel}`;
+            }
+
             activity = {
-                details: 'V launcheru SMPClient',
+                details: 'V aplikaci SMPLauncher',
                 state: `Vybraný server: ${serverLabel}`,
-                assets: {
-                    large_image: 'https://join.mychalsmp.xyz/imgs/smpclient-logo2.png',
-                    large_text: `Server: ${serverLabel}`
-                },
+                assets,
                 buttons: [
-                    { label: '🌐 Web: mychalsmp.xyz', url: 'https://mychalsmp.xyz' },
-                    { label: '🎮 Jak se připojit', url: 'https://join.mychalsmp.xyz' }
+                    { label: '🌐 Oficiální web', url: 'https://mychalsmp.xyz' },
+                    { label: '🎮 Jak se připojit', url: 'https://join.mychalsmp.xyz/howto' }
                 ]
             };
         }
