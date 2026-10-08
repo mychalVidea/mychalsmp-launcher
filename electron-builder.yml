@@ -1,5 +1,5 @@
 appId: xyz.mychalsmp.launcher
-productName: MYCHAL SMP Launcher
+productName: SMPClient
 copyright: Copyright © 2026 mychalVidea
 directories:
   output: dist
@@ -28,8 +28,8 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  shortcutName: MYCHAL SMP Launcher
-  uninstallDisplayName: MYCHAL SMP Launcher
+  shortcutName: SMPClient
+  uninstallDisplayName: SMPClient
 
 linux:
   maintainer: "mychalVidea <admin@mychalsmp.xyz>"
@@ -40,6 +40,6 @@ linux:
   category: Game
   icon: build/icon.png
   desktop:
-    Name: MYCHAL SMP Launcher
-    Comment: Oficiální launcher Minecraft sítě MYCHAL SMP
+    Name: SMPClient
+    Comment: Oficiální herní klient pro síť MYCHAL SMP
     Categories: Game;ActionGame;AdventureGame;

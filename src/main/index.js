@@ -247,8 +247,8 @@ ipcMain.handle('detect-java', () => {
     return detectJavaPath();
 });
 
-ipcMain.handle('search-modrinth', async (event, query, version, loader, category, projectType) => {
-    return await searchModrinth(query, version, loader, category, projectType);
+ipcMain.handle('search-modrinth', async (event, query, version, loader, category, projectType, offset, limit) => {
+    return await searchModrinth(query, version, loader, category, projectType, offset, limit);
 });
 
 ipcMain.handle('download-mod-or-pack', async (event, modOptions) => {
@@ -258,6 +258,29 @@ ipcMain.handle('download-mod-or-pack', async (event, modOptions) => {
     const targetDir = targetProfile?.gameDir || BASE_DIR;
     try {
         const res = await downloadModOrPack(modOptions, targetDir);
+        if (res && res.success && (!modOptions?.projectType || modOptions.projectType === 'mod')) {
+            const detectedLoader = res.resolvedLoader || modOptions?.loader || 'fabric';
+            const currentLoader = targetProfile?.loader || 'vanilla';
+
+            // Pouze pokud byl profil nastaven na Vanilla, automaticky jej přepneme na zavaděč staženého módu
+            if (currentLoader === 'vanilla' && detectedLoader && ['fabric', 'forge', 'neoforge'].includes(detectedLoader)) {
+                const updatedProfiles = (config.profiles || []).map(p => {
+                    if (p.id === targetProfileId) {
+                        return { ...p, loader: detectedLoader };
+                    }
+                    return p;
+                });
+                const extra = {};
+                if (config.activeProfileId === targetProfileId) {
+                    extra.loader = detectedLoader;
+                }
+                saveConfig({ profiles: updatedProfiles, ...extra });
+                res.loaderChanged = true;
+                res.newLoader = detectedLoader;
+                res.prevLoader = currentLoader;
+                res.profileId = targetProfileId;
+            }
+        }
         return res;
     } catch (e) {
         return { success: false, error: e.message };
@@ -393,6 +416,14 @@ ipcMain.handle('get-profile-mods', async (event, profileId) => {
     }
 
     try {
+        let metaMap = {};
+        try {
+            const metaFile = path.join(modsDir, '.mod_meta.json');
+            if (fs.existsSync(metaFile)) {
+                metaMap = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+            }
+        } catch (_) {}
+
         const files = fs.readdirSync(modsDir);
         const mods = [];
         for (const file of files) {
@@ -402,6 +433,8 @@ ipcMain.handle('get-profile-mods', async (event, profileId) => {
                 const stat = fs.statSync(fullPath);
                 const isEnabled = !lower.endsWith('.disabled');
                 const cleanName = file.replace(/\.disabled$/i, '').replace(/\.jar$/i, '');
+                const baseFile = file.replace(/\.disabled$/i, '');
+                const fileMeta = metaMap[file] || metaMap[baseFile] || {};
 
                 // Rychlé čtení metadat a ikony z JAR archivu s cache
                 let meta = getCachedModMetadata(fullPath, stat.mtimeMs);
@@ -409,9 +442,11 @@ ipcMain.handle('get-profile-mods', async (event, profileId) => {
                 mods.push({
                     filename: file,
                     cleanName,
-                    modId: meta?.modId || cleanName.toLowerCase(),
-                    name: meta?.name || cleanName,
-                    version: meta?.version || null,
+                    modId: fileMeta.id || meta?.modId || cleanName.toLowerCase(),
+                    modrinthId: fileMeta.id || null,
+                    modrinthSlug: fileMeta.slug || null,
+                    name: fileMeta.title || meta?.name || cleanName,
+                    version: fileMeta.version || meta?.version || null,
                     iconDataUrl: meta?.iconDataUrl || null,
                     enabled: isEnabled,
                     sizeBytes: stat.size,
@@ -461,7 +496,8 @@ ipcMain.handle('delete-profile-mod', async (event, profileId, filename) => {
     const config = loadConfig();
     const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
     const gameDir = profile?.gameDir || BASE_DIR;
-    const filePath = path.join(gameDir, 'mods', filename);
+    const modsDir = path.join(gameDir, 'mods');
+    const filePath = path.join(modsDir, filename);
 
     if (!fs.existsSync(filePath)) {
         return { success: false, error: 'Soubor módu nebyl nalezen.' };
@@ -469,6 +505,28 @@ ipcMain.handle('delete-profile-mod', async (event, profileId, filename) => {
 
     try {
         fs.unlinkSync(filePath);
+
+        // Odstraníme záznam z .mod_meta.json
+        try {
+            const metaPath = path.join(modsDir, '.mod_meta.json');
+            if (fs.existsSync(metaPath)) {
+                const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+                const deletedInfo = meta[filename] || meta[filename + '.disabled'] || meta[filename.replace(/\.disabled$/i, '')];
+                delete meta[filename];
+                delete meta[filename + '.disabled'];
+                delete meta[filename.replace(/\.disabled$/i, '')];
+                fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+
+                // Také vyčistíme staré pole config.installedMods, pokud tam byl id nebo slug
+                if (deletedInfo && config.installedMods) {
+                    const cleanList = (config.installedMods || []).filter(m => m !== deletedInfo.id && m !== deletedInfo.slug);
+                    if (cleanList.length !== config.installedMods.length) {
+                        saveConfig({ installedMods: cleanList });
+                    }
+                }
+            }
+        } catch (_) {}
+
         return { success: true, filename };
     } catch (e) {
         return { success: false, error: e.message };

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MYCHAL SMP Launcher</title>
+    <title>SMPClient</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -18,8 +18,8 @@
     <header class="titlebar">
         <div class="titlebar-drag">
             <div class="brand">
-                <img src="assets/server-icon.png" alt="Server Icon" class="server-pixel-icon">
-                <span class="brand-title">MYCHAL<span>SMP</span></span>
+                <img src="assets/logo.png" alt="SMPClient Logo" class="server-pixel-icon" style="image-rendering: auto; object-fit: contain;">
+                <span class="brand-title">SMP<span>Client</span></span>
                 <span class="brand-badge">26.x</span>
             </div>
 
@@ -391,6 +391,12 @@
                             <button class="mod-tab-btn" data-mod-type="shader">Shadery</button>
                         </div>
 
+                        <div class="catalog-header-actions">
+                            <button type="button" class="mc-btn btn-update-all-mods" id="btnUpdateAllCatalogMods" style="display: none;" title="Aktualizovat všechny zastaralé módy v profilu">
+                                <span>⚡ AKTUALIZOVAT VŠECHNO (<span id="updateAllCount">0</span>)</span>
+                            </button>
+                        </div>
+
                         <div class="catalog-search-wrapper">
                             <span class="search-icon">🔍</span>
                             <input type="text" id="modSearchInput"
@@ -581,7 +587,7 @@
                                 <span class="notice-icon">ℹ️</span>
                                 <div>
                                     <strong>Offline (Warez) Profil:</strong><br>
-                                    Tvůj skin i plášť jsou uloženy v launcheru a automaticky se přenesou do hry.
+                                    Tvůj skin je uložen v launcheru a automaticky se přenese do hry.
                                 </div>
                             </div>
 
@@ -594,7 +600,8 @@
                                 </div>
                             </div>
 
-                            <div class="mojang-capes-section">
+                            <!-- Pláště jsou pro warez skryté (pouze pro oficiální Microsoft účty) -->
+                            <div class="mojang-capes-section" id="offlineCapesSection" style="display: none;">
                                 <div class="capes-header">
                                     <label>Oblíbené offline pláště (nebo nahraj vlastní):</label>
                                 </div>
@@ -652,15 +659,12 @@
                 <div class="settings-card">
                     <div class="form-group">
                         <div class="setting-title-row">
-                            <label for="ramSlider">Alokace operační paměti RAM (Maximální)</label>
+                            <label for="ramSlider">Alokace operační paměti RAM (Maximální) <small style="color: #21DE00; font-size: 11px; font-weight: 500; margin-left: 6px;">(Doporučeno 4–6 GB)</small></label>
                             <span class="setting-value-badge" id="ramValueBadge">4 GB</span>
                         </div>
                         <input type="range" id="ramSlider" min="2" max="16" step="1" value="4" class="slider">
-                        <div class="slider-marks">
-                            <span>2 GB</span>
-                            <span>4 GB (Doporučeno)</span>
-                            <span>8 GB</span>
-                            <span>16 GB</span>
+                        <div class="slider-marks" id="ramSliderMarks">
+                            <!-- Dynamicky generované přesné značky podle detekované RAM -->
                         </div>
                     </div>
 

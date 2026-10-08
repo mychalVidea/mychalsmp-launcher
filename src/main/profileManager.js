@@ -61,6 +61,10 @@ function scanInstanceDirectory(dirPath) {
                 if (mcComp && mcComp.version) detectedVersion = mcComp.version;
                 const fabComp = data.components.find(c => c.uid === 'net.fabricmc.fabric-loader' || c.id === 'net.fabricmc.fabric-loader');
                 if (fabComp) detectedLoader = 'fabric';
+                const forgeComp = data.components.find(c => c.uid === 'net.minecraftforge' || c.id === 'net.minecraftforge');
+                if (forgeComp) detectedLoader = 'forge';
+                const neoComp = data.components.find(c => c.uid === 'net.neoforged' || c.id === 'net.neoforged');
+                if (neoComp) detectedLoader = 'neoforge';
             }
         } catch (e) {}
     }
@@ -72,8 +76,11 @@ function scanInstanceDirectory(dirPath) {
             const cData = JSON.parse(fs.readFileSync(curseJsonPath, 'utf-8'));
             if (cData.gameVersion) detectedVersion = cData.gameVersion;
             if (cData.name) instanceName = cData.name;
-            if (cData.baseModLoader && cData.baseModLoader.name && cData.baseModLoader.name.toLowerCase().includes('fabric')) {
-                detectedLoader = 'fabric';
+            if (cData.baseModLoader && cData.baseModLoader.name) {
+                const bName = cData.baseModLoader.name.toLowerCase();
+                if (bName.includes('fabric') || bName.includes('quilt')) detectedLoader = 'fabric';
+                else if (bName.includes('neoforge')) detectedLoader = 'neoforge';
+                else if (bName.includes('forge')) detectedLoader = 'forge';
             }
         } catch (e) {}
     }
@@ -85,6 +92,11 @@ function scanInstanceDirectory(dirPath) {
             const mData = JSON.parse(fs.readFileSync(modrinthIndexPath, 'utf-8'));
             if (mData.game) detectedVersion = mData.game;
             if (mData.name) instanceName = mData.name;
+            if (mData.dependencies) {
+                if (mData.dependencies['fabric-loader'] || mData.dependencies['quilt-loader']) detectedLoader = 'fabric';
+                else if (mData.dependencies['neoforge']) detectedLoader = 'neoforge';
+                else if (mData.dependencies['forge']) detectedLoader = 'forge';
+            }
         } catch (e) {}
     }
 
@@ -112,6 +124,15 @@ function scanInstanceDirectory(dirPath) {
                 }
             }
         } catch (e) {}
+    }
+
+    // Pokud máme nalezené módy a loader je stále vanilla, odvodíme ho z módů
+    if (modCount > 0 && detectedLoader === 'vanilla') {
+        const hasNeoForge = modFiles.some(f => f.toLowerCase().includes('neoforge'));
+        const hasForge = modFiles.some(f => f.toLowerCase().includes('forge') && !f.toLowerCase().includes('neoforge'));
+        if (hasNeoForge) detectedLoader = 'neoforge';
+        else if (hasForge) detectedLoader = 'forge';
+        else detectedLoader = 'fabric';
     }
 
     // Scan resourcepacks
@@ -214,7 +235,9 @@ async function importInstanceProfile(data, baseDir) {
 
     saveConfig({
         profiles: currentProfiles,
-        activeProfileId: profileId
+        activeProfileId: profileId,
+        version: newProfile.version,
+        loader: newProfile.loader
     });
 
     return {

@@ -1468,6 +1468,35 @@ body {
     box-shadow: 0 0 10px var(--brand-blue-glow);
 }
 
+.catalog-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-update-all-mods {
+    background: rgba(33, 222, 0, 0.14);
+    color: #21de00;
+    border: 1px solid rgba(33, 222, 0, 0.35);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    padding: 7px 14px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-update-all-mods:hover {
+    background: rgba(33, 222, 0, 0.25);
+    border-color: #21de00;
+    box-shadow: 0 0 12px rgba(33, 222, 0, 0.35);
+    transform: translateY(-1px);
+}
+
 .search-icon {
     position: absolute;
     left: 10px;
@@ -1477,12 +1506,40 @@ body {
     color: var(--text-muted);
 }
 
+#tab-mods.active {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+#viewCatalogMods {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.mods-catalog-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 24px 0 24px;
+    background: var(--bg-dark);
+}
+
 .mods-browser-layout {
     display: grid;
     grid-template-columns: 210px 1fr;
     gap: 16px;
-    padding: 16px 24px;
-    height: calc(100% - 70px);
+    padding: 14px 24px 16px 24px;
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
 }
 
 .mods-filters-col {
@@ -1493,6 +1550,10 @@ body {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    height: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    flex-shrink: 0;
 }
 
 .filter-group-title {
@@ -1520,6 +1581,8 @@ body {
     flex-direction: column;
     gap: 8px;
     padding-right: 6px;
+    height: 100%;
+    min-height: 0;
 }
 
 .mod-card-row {
@@ -2088,10 +2151,41 @@ body {
 }
 
 .slider-marks {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
+    position: relative;
+    width: 100%;
+    height: 18px;
+    margin-top: 6px;
+}
+
+.slider-mark {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 11px;
     color: var(--text-muted);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s ease;
+}
+
+.slider-mark.mark-start {
+    transform: none;
+    left: 0 !important;
+}
+
+.slider-mark.mark-end {
+    transform: none;
+    left: auto !important;
+    right: 0;
+}
+
+.slider-mark:hover {
+    color: #38bdf8;
+}
+
+.slider-mark.recommended {
+    color: #21DE00;
+    font-weight: 600;
 }
 
 .input-with-button {
@@ -2593,6 +2687,35 @@ body {
     background: #0a67e5 !important;
     color: #ffffff !important;
     box-shadow: 0 0 20px rgba(10, 103, 229, 0.6);
+}
+
+.mod-card-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.btn-catalog-delete-mod {
+    padding: 9px 12px;
+    background: rgba(245, 21, 21, 0.12) !important;
+    border: 1px solid rgba(245, 21, 21, 0.35) !important;
+    color: #f87171 !important;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.btn-catalog-delete-mod:hover {
+    background: #f51515 !important;
+    border-color: #f51515 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 14px rgba(245, 21, 21, 0.45);
+    transform: translateY(-1px);
 }
 
 .mod-status-pill {

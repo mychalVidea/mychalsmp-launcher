@@ -209,24 +209,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             // System Hardware & RAM detection (up to 80% of system RAM)
             try {
                 const sysInfo = await window.api.getSystemInfo();
-                if (sysInfo && sysInfo.maxAllowedRamGB) {
-                    if (ramSlider) ramSlider.max = sysInfo.maxAllowedRamGB;
-                    if (profileRamSlider) profileRamSlider.max = sysInfo.maxAllowedRamGB;
-                    const newProfRam = document.getElementById('newProfileRamSlider');
-                    if (newProfRam) newProfRam.max = sysInfo.maxAllowedRamGB;
+                const maxRam = (sysInfo && sysInfo.maxAllowedRamGB) ? sysInfo.maxAllowedRamGB : 16;
+                if (ramSlider) ramSlider.max = maxRam;
+                if (profileRamSlider) profileRamSlider.max = maxRam;
+                const newProfRam = document.getElementById('newProfileRamSlider');
+                if (newProfRam) newProfRam.max = maxRam;
 
-                    const marks = document.querySelector('.slider-marks');
-                    if (marks) {
-                        marks.innerHTML = `
-                            <span>2 GB</span>
-                            <span>4 GB (Doporučeno)</span>
-                            <span>8 GB</span>
-                            <span>${sysInfo.maxAllowedRamGB} GB (Max 80% RAM)</span>
-                        `;
-                    }
-                }
+                renderRamSliderMarks(maxRam);
             } catch (sysErr) {
                 console.warn('Detekce hardware RAM selhala:', sysErr);
+                renderRamSliderMarks(16);
             }
 
             // RAM
@@ -295,6 +287,60 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    function renderRamSliderMarks(maxGb) {
+        const marksContainer = document.getElementById('ramSliderMarks') || document.querySelector('.slider-marks');
+        if (!marksContainer) return;
+        const min = 2;
+        const max = maxGb || 16;
+
+        // Clean landmarks within [min, max]
+        const candidates = [4, 8, 16, 24, 32, 48, 64];
+        const points = [min];
+
+        candidates.forEach(c => {
+            if (c > min && c < max) {
+                if (max - c >= 3) {
+                    points.push(c);
+                }
+            }
+        });
+
+        if (!points.includes(max)) {
+            points.push(max);
+        }
+
+        marksContainer.innerHTML = points.map((val, idx) => {
+            const isFirst = idx === 0;
+            const isLast = idx === points.length - 1;
+            const pct = Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
+            const isRec = (val === 4);
+
+            let label = `${val} GB`;
+            let extraClass = '';
+            if (isFirst) {
+                extraClass = 'mark-start';
+            } else if (isLast) {
+                extraClass = 'mark-end';
+                label = `${val} GB (Max)`;
+            } else if (isRec) {
+                extraClass = 'recommended';
+            }
+
+            return `<span class="slider-mark ${extraClass}" style="left: ${pct.toFixed(2)}%;" data-ram-val="${val}" title="${isRec ? 'Doporučeno pro většinu modpacků' : `Nastavit ${val} GB`}">${label}</span>`;
+        }).join('');
+
+        marksContainer.querySelectorAll('.slider-mark').forEach(mark => {
+            mark.addEventListener('click', () => {
+                const val = parseInt(mark.dataset.ramVal, 10);
+                if (!isNaN(val) && ramSlider) {
+                    ramSlider.value = val;
+                    if (ramValueBadge) ramValueBadge.textContent = `${val} GB`;
+                    autoSaveSettings(true);
+                }
+            });
+        });
+    }
+
     function updateUserUI(name, type, customSkin) {
         const isMicrosoft = type === 'microsoft';
         const displayName = isMicrosoft
@@ -345,7 +391,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 badgePill.textContent = '🟡 Offline Profil (Uloženo lokálně)';
                 badgePill.className = 'skin-badge-pill';
             }
-            loadOfflinePresetCapes();
+            const offCapeSec = document.getElementById('offlineCapesSection');
+            if (offCapeSec) offCapeSec.style.display = 'none';
+            const equippedBadge = document.getElementById('equippedCapeBadge');
+            if (equippedBadge) equippedBadge.style.display = 'none';
+            activeMojangCapeUrl = null;
+            updateSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
+            updateHeroSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
         }
 
         // Labels for offline paths
@@ -1618,14 +1670,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         select.innerHTML = profiles.map(p => {
             const isSelected = p.id === selectedModsProfileId;
             const icon = p.imported ? '📥' : (p.version === '26.2' ? '⭐' : '🎮');
-            const loader = p.loader && p.loader !== 'vanilla' ? ` [${p.loader.toUpperCase()}]` : '';
+            const loader = p.loader && p.loader !== 'vanilla' ? ` [${p.loader.toUpperCase()}]` : ' [VANILLA]';
             const name = p.name || p.id;
             return `<option value="${escapeHtml(p.id)}" ${isSelected ? 'selected' : ''}>${icon} ${escapeHtml(name)} (${p.version}${loader})</option>`;
         }).join('');
 
         select.onchange = (e) => {
             selectedModsProfileId = e.target.value;
+            const p = (currentConfig.profiles || []).find(x => x.id === selectedModsProfileId);
+            if (p) {
+                if (p.loader && ['fabric', 'forge', 'neoforge'].includes(p.loader)) {
+                    currentModFilter.loader = p.loader;
+                    const radio = document.querySelector(`input[name="filterLoader"][value="${p.loader}"]`);
+                    if (radio) radio.checked = true;
+                }
+                if (p.version) {
+                    currentModFilter.version = p.version;
+                    const vRadio = document.querySelector(`input[name="filterVersion"][value="${p.version}"]`);
+                    if (vRadio) vRadio.checked = true;
+                }
+            }
             loadProfileMods(selectedModsProfileId);
+            if (btnSwitchCatalogMods && btnSwitchCatalogMods.classList.contains('active')) {
+                loadModrinthMods();
+            }
         };
     }
 
@@ -1655,12 +1723,27 @@ document.addEventListener('DOMContentLoaded', async () => {
             loadProfileMods();
         });
 
-        btnSwitchCatalogMods.addEventListener('click', () => {
+        btnSwitchCatalogMods.addEventListener('click', async () => {
             btnSwitchCatalogMods.classList.add('active');
             btnSwitchInstalledMods.classList.remove('active');
             if (viewInstalledMods) viewInstalledMods.style.display = 'none';
             if (viewCatalogMods) viewCatalogMods.style.display = 'block';
-            loadModrinthMods();
+
+            // Vždy načteme čerstvý stav profilu z disku, aby se ihned projevily smazané nebo přidané módy
+            const profId = selectedModsProfileId || currentConfig.activeProfileId;
+            if (profId) {
+                try {
+                    const pRes = await window.api.getProfileMods(profId);
+                    if (pRes && pRes.success) {
+                        currentProfileModsList = pRes.mods || [];
+                    }
+                } catch (_) {}
+            }
+            if (lastLoadedCatalogMods && lastLoadedCatalogMods.length > 0) {
+                renderModCards(lastLoadedCatalogMods);
+            } else {
+                loadModrinthMods();
+            }
         });
     }
 
@@ -1690,11 +1773,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (countEl) countEl.textContent = currentProfileModsList.length;
             if (summaryEl) {
                 const activeCount = currentProfileModsList.filter(m => m.enabled).length;
-                summaryEl.innerHTML = `Profil: <strong>${escapeHtml(res.profileName || profId)}</strong> • Aktivních: <strong>${activeCount}/${currentProfileModsList.length}</strong>`;
+                const pObj = (currentConfig.profiles || []).find(p => p.id === profId);
+                const ldr = pObj && pObj.loader && pObj.loader !== 'vanilla' ? pObj.loader.toUpperCase() : 'VANILLA';
+                const ldrColor = ldr === 'VANILLA' ? '#94a3b8' : '#0a67e5';
+                summaryEl.innerHTML = `Profil: <strong>${escapeHtml(res.profileName || profId)}</strong> • Zavaděč: <strong style="color: ${ldrColor};">${ldr}</strong> • Aktivních: <strong>${activeCount}/${currentProfileModsList.length}</strong>`;
             }
 
             renderFilteredInstalledMods();
-            if (lastLoadedCatalogMods && lastLoadedCatalogMods.length > 0 && viewCatalogMods && viewCatalogMods.style.display !== 'none') {
+            // VŽDY aktualizujeme i karty v katalogu, aby se okamžitě projevil smazaný mód
+            if (lastLoadedCatalogMods && lastLoadedCatalogMods.length > 0) {
                 renderModCards(lastLoadedCatalogMods);
             }
         } catch (e) {
@@ -1892,22 +1979,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     function findInstalledModForCatalog(catalogMod, profileMods) {
         if (!profileMods || profileMods.length === 0) return null;
 
+        const catId = (catalogMod.id || '').toLowerCase().trim();
         const catSlug = (catalogMod.slug || catalogMod.id || '').toLowerCase().trim();
+        const catProjId = (catalogMod.project_id || '').toLowerCase().trim();
         const catTitle = (catalogMod.title || '').toLowerCase().trim();
 
         const clean = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const cleanSlug = clean(catSlug);
         const cleanTitle = clean(catTitle);
+        const cleanId = clean(catId);
 
         for (const inst of profileMods) {
+            // 0. Metadata shoda z .mod_meta.json
+            const instMId = (inst.modrinthId || '').toLowerCase().trim();
+            const instMSlug = (inst.modrinthSlug || '').toLowerCase().trim();
+            if (instMId && (instMId === catId || instMId === catSlug || instMId === catProjId)) {
+                return inst;
+            }
+            if (instMSlug && (instMSlug === catId || instMSlug === catSlug || instMSlug === catProjId)) {
+                return inst;
+            }
+
             const instModId = (inst.modId || '').toLowerCase().trim();
             const instName = (inst.name || '').toLowerCase().trim();
             const instFile = (inst.filename || '').toLowerCase().trim();
             const cleanInstId = clean(instModId);
             const cleanInstName = clean(instName);
+            const cleanInstFile = clean(instFile);
 
             // 1. Přesná shoda ID / slug
-            if (cleanSlug && (cleanSlug === cleanInstId || catSlug === instModId)) {
+            if (cleanSlug && (cleanSlug === cleanInstId || cleanId === cleanInstId || catSlug === instModId)) {
                 return inst;
             }
 
@@ -1916,11 +2017,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return inst;
             }
 
-            // 3. Shoda začátku názvu souboru (např. sodium-fabric-0.6.6 vs slug sodium)
+            // 3. Shoda začátku nebo části názvu souboru (např. sodium-fabric-0.6.6 vs slug sodium)
             if (catSlug && catSlug.length >= 3) {
                 if (instFile.startsWith(catSlug + '-') || instFile.startsWith(catSlug + '_') || instFile.startsWith(catSlug + '.')) {
                     return inst;
                 }
+            }
+            if (cleanSlug && cleanSlug.length >= 3 && (cleanInstFile.startsWith(cleanSlug) || cleanInstFile.includes(cleanSlug))) {
+                return inst;
             }
 
             // 4. Fallback na cleanName
@@ -1932,17 +2036,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     let lastLoadedCatalogMods = [];
+    let catalogOffset = 0;
+    const catalogLimit = 24;
+    let isCatalogLoading = false;
+    let hasMoreCatalogMods = true;
 
-    async function loadModrinthMods() {
+    async function loadModrinthMods(reset = true) {
         if (!modsCardsList) return;
-        const typeLabels = { mod: 'mody', resourcepack: 'resource packy', shader: 'shadery' };
-        const label = typeLabels[currentModFilter.projectType] || 'položky';
-        modsCardsList.innerHTML = `<div class="mods-loading">Načítám ${label} z katalogu Modrinth...</div>`;
+        if (reset) {
+            catalogOffset = 0;
+            hasMoreCatalogMods = true;
+            lastLoadedCatalogMods = [];
+            const typeLabels = { mod: 'mody', resourcepack: 'resource packy', shader: 'shadery' };
+            const label = typeLabels[currentModFilter.projectType] || 'položky';
+            modsCardsList.innerHTML = `<div class="mods-loading">Načítám ${label} z katalogu Modrinth...</div>`;
+        }
+
+        if (isCatalogLoading) return;
+        isCatalogLoading = true;
 
         try {
-            // Zajistíme, že máme načtené aktuální módy profilu pro přesnou detekci stavu stažení
+            // VŽDY načteme aktuální módy profilu přímo z disku pro 100% přesnou detekci stavu stažení
             const profId = selectedModsProfileId || currentConfig.activeProfileId;
-            if (profId && (!currentProfileModsList || currentProfileModsList.length === 0)) {
+            if (profId) {
                 try {
                     const pRes = await window.api.getProfileMods(profId);
                     if (pRes && pRes.success) {
@@ -1956,13 +2072,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentModFilter.version,
                 currentModFilter.loader,
                 currentModFilter.category,
-                currentModFilter.projectType || 'mod'
+                currentModFilter.projectType || 'mod',
+                catalogOffset,
+                catalogLimit
             );
 
-            lastLoadedCatalogMods = mods || [];
-            renderModCards(mods);
+            const received = Array.isArray(mods) ? mods : [];
+            if (received.length < catalogLimit) {
+                hasMoreCatalogMods = false;
+            }
+
+            if (reset) {
+                lastLoadedCatalogMods = received;
+            } else {
+                lastLoadedCatalogMods = [...lastLoadedCatalogMods, ...received];
+            }
+
+            catalogOffset += received.length;
+            renderModCards(lastLoadedCatalogMods);
         } catch (e) {
-            modsCardsList.innerHTML = `<div class="mods-loading">Nepodařilo se načíst data z katalogu.</div>`;
+            if (reset) {
+                modsCardsList.innerHTML = `<div class="mods-loading">Nepodařilo se načíst data z katalogu.</div>`;
+            }
+        } finally {
+            isCatalogLoading = false;
         }
     }
 
@@ -1970,17 +2103,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!modsCardsList) return;
         if (!mods || mods.length === 0) {
             modsCardsList.innerHTML = `<div class="mods-loading">Nenalezeny žádné položky odpovídající hledání.</div>`;
+            const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
+            if (btnUpdateAll) btnUpdateAll.style.display = 'none';
             return;
         }
 
-        const installedList = currentConfig.installedMods || [];
+        const targetProfile = (currentConfig.profiles || []).find(p => p.id === (selectedModsProfileId || currentConfig.activeProfileId));
+        const targetMcVersion = targetProfile?.version || currentModFilter.version || '26.2';
+
+        const updateableMods = [];
 
         modsCardsList.innerHTML = mods.map(m => {
             const installedMod = findInstalledModForCatalog(m, currentProfileModsList);
-            const isInstalled = !!installedMod || installedList.includes(m.id) || m.installed;
+            // Zásadní oprava: Zda je mód nainstalován, závisí VÝHRADNĚ na tom, zda skutečně existuje v profilu!
+            const isInstalled = !!installedMod;
             const currentVer = installedMod ? (installedMod.version || '') : '';
             const latestVer = m.latest_version_number || '';
-            const hasUpdate = isInstalled && isModVersionNewer(latestVer, currentVer);
+
+            // Kontrola, zda nová verze podporuje stejnou verzi hry:
+            // Pokud je nová verze pro jinou verzi MC, neukazujeme aktualizaci, ale "Staženo" / "Nainstalováno"
+            const latestSupportsOurMc = !m.latest_game_versions || m.latest_game_versions.length === 0 || m.latest_game_versions.includes(targetMcVersion);
+            const hasUpdate = isInstalled && isModVersionNewer(latestVer, currentVer) && latestSupportsOurMc;
+
+            if (hasUpdate) {
+                updateableMods.push({ mod: m, installedMod });
+            }
 
             const downloadsFormatted = m.downloads > 1000000
                 ? (m.downloads / 1000000).toFixed(1) + 'M'
@@ -1992,16 +2139,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (hasUpdate) {
                 statusPill = `<span class="mod-status-pill mod-status-update">⬆ Nová verze v${escapeHtml(latestVer)}</span>`;
                 btnHtml = `
-                    <button class="mc-btn btn-update-mod btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="update" data-old-file="${escapeHtml(installedMod?.filename || '')}" title="Aktualizovat na novější verzi v${escapeHtml(latestVer)}">
-                        <span>⬆ AKTUALIZOVAT</span>
-                    </button>
+                    <div class="mod-card-actions">
+                        <button class="mc-btn btn-update-mod btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="update" data-old-file="${escapeHtml(installedMod?.filename || '')}" title="Aktualizovat na novější verzi v${escapeHtml(latestVer)}">
+                            <span>⬆ AKTUALIZOVAT</span>
+                        </button>
+                        <button class="mc-btn btn-catalog-delete-mod" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
+                            <span>🗑️</span>
+                        </button>
+                    </div>
                 `;
             } else if (isInstalled) {
-                statusPill = `<span class="mod-status-pill mod-status-installed">✓ Staženo${currentVer ? ` (v${escapeHtml(currentVer)})` : ''}</span>`;
+                statusPill = `<span class="mod-status-pill mod-status-installed">✓ Nainstalováno${currentVer ? ` (v${escapeHtml(currentVer)})` : ''}</span>`;
                 btnHtml = `
-                    <button class="mc-btn btn-download-success btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="installed" title="Již staženo v profilu">
-                        <span>✓ STAŽENO</span>
-                    </button>
+                    <div class="mod-card-actions">
+                        <button class="mc-btn btn-download-success btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="installed" title="Již nainstalováno v profilu">
+                            <span>✓ NAINSTALOVÁNO</span>
+                        </button>
+                        <button class="mc-btn btn-catalog-delete-mod" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
+                            <span>🗑️</span>
+                        </button>
+                    </div>
                 `;
             } else {
                 btnHtml = `
@@ -2032,6 +2189,93 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
         }).join('');
 
+        // Tlačítko pro hromadnou aktualizaci všech zastaralých módů najednou
+        const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
+        const updateAllCountEl = document.getElementById('updateAllCount');
+        if (btnUpdateAll && updateAllCountEl) {
+            if (updateableMods.length > 0) {
+                updateAllCountEl.textContent = updateableMods.length;
+                btnUpdateAll.style.display = 'inline-flex';
+                btnUpdateAll.onclick = async () => {
+                    btnUpdateAll.disabled = true;
+                    const total = updateableMods.length;
+                    let successCount = 0;
+                    appendLog(`[UPDATE] Spouštím hromadnou aktualizaci ${total} módů...`);
+
+                    for (let idx = 0; idx < total; idx++) {
+                        const item = updateableMods[idx];
+                        btnUpdateAll.innerHTML = `<span class="spinner-inline">⏳</span> <span>Aktualizuji ${idx + 1}/${total}...</span>`;
+                        try {
+                            const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
+                            const prof = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
+                            const profVer = prof?.version || currentModFilter.version || '26.2';
+                            let chosenLoader = prof?.loader && prof.loader !== 'vanilla' ? prof.loader : (currentModFilter.loader || 'fabric');
+
+                            const res = await window.api.downloadModOrPack({
+                                id: item.mod.id,
+                                title: item.mod.title,
+                                projectType: currentModFilter.projectType || 'mod',
+                                version: profVer,
+                                loader: chosenLoader,
+                                profileId: targetProfileId,
+                                oldFilename: item.installedMod?.filename || null
+                            });
+
+                            if (res && res.success) {
+                                successCount++;
+                                appendLog(`[UPDATE] ${item.mod.title} byl aktualizován na novou verzi (${res.filename}).`);
+                            }
+                        } catch (err) {
+                            console.warn(`Selhala aktualizace módu ${item.mod.id}:`, err);
+                        }
+                    }
+
+                    showToast(`✓ Úspěšně aktualizováno ${successCount} z ${total} módů!`, 'success');
+                    btnUpdateAll.disabled = false;
+                    btnUpdateAll.style.display = 'none';
+
+                    const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
+                    await loadProfileMods(targetProfileId);
+                    await loadModrinthMods(true);
+                };
+            } else {
+                btnUpdateAll.style.display = 'none';
+            }
+        }
+
+        // Bind interactive delete buttons directly from catalog
+        modsCardsList.querySelectorAll('.btn-catalog-delete-mod').forEach(delBtn => {
+            delBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const filename = delBtn.dataset.filename;
+                const modTitle = delBtn.dataset.modTitle || 'mód';
+                const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
+                if (!filename) {
+                    showToast('Nelze dohledat soubor módu pro smazání.', 'error');
+                    return;
+                }
+                if (!confirm(`Opravdu chceš smazat "${modTitle}" (${filename}) z profilu?`)) return;
+                delBtn.disabled = true;
+                try {
+                    const res = await window.api.deleteProfileMod(targetProfileId, filename);
+                    if (res && res.success) {
+                        showToast(`✓ ${modTitle} byl smazán z profilu.`, 'success');
+                        const pRes = await window.api.getProfileMods(targetProfileId);
+                        if (pRes && pRes.success) {
+                            currentProfileModsList = pRes.mods || [];
+                        }
+                        renderModCards(lastLoadedCatalogMods);
+                    } else {
+                        showToast('Chyba při mazání módu: ' + (res?.error || 'Neznámá chyba'), 'error');
+                        delBtn.disabled = false;
+                    }
+                } catch (err) {
+                    showToast('Chyba: ' + err.message, 'error');
+                    delBtn.disabled = false;
+                }
+            });
+        });
+
         // Bind interactive download and update buttons
         modsCardsList.querySelectorAll('.btn-toggle-mod').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -2041,13 +2285,39 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const modItem = (mods || []).find(x => x.id === modId);
                 const title = modItem ? modItem.title : modId;
                 const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
+                const targetProfile = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
+                const profileLoader = targetProfile?.loader || 'vanilla';
+                const profileVersion = targetProfile?.version || currentModFilter.version || '26.2';
 
                 if (action === 'installed') {
-                    showToast(`Mód ${title} je již v profilu stažen.`, 'info');
+                    showToast(`Mód ${title} je již v profilu nainstalován.`, 'info');
                     return;
                 }
 
                 const isUpdate = action === 'update';
+
+                // Přísná ochrana proti stažení nesprávného loaderu (např. Forge na Fabric profil):
+                let chosenLoader = 'fabric';
+                if (profileLoader !== 'vanilla') {
+                    chosenLoader = profileLoader;
+                    if (modItem && Array.isArray(modItem.loaders) && modItem.loaders.length > 0 && !modItem.loaders.includes(profileLoader)) {
+                        showToast(`Mód "${title}" není dostupný pro zavaděč ${profileLoader.toUpperCase()}!`, 'error');
+                        return;
+                    }
+                } else {
+                    // Profil je Vanilla: zvolíme loader dle filtru nebo primární podpory módu
+                    if (currentModFilter.loader && modItem?.loaders?.includes(currentModFilter.loader)) {
+                        chosenLoader = currentModFilter.loader;
+                    } else if (modItem?.loaders?.includes('fabric')) {
+                        chosenLoader = 'fabric';
+                    } else if (modItem?.loaders?.includes('forge')) {
+                        chosenLoader = 'forge';
+                    } else if (modItem?.loaders?.includes('neoforge')) {
+                        chosenLoader = 'neoforge';
+                    } else {
+                        chosenLoader = 'fabric';
+                    }
+                }
 
                 // Micro-animation: Button spinner state
                 btn.disabled = true;
@@ -2059,8 +2329,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         id: modId,
                         title: title,
                         projectType: currentModFilter.projectType || 'mod',
-                        version: currentModFilter.version,
-                        loader: currentModFilter.loader,
+                        version: profileVersion,
+                        loader: chosenLoader,
                         profileId: targetProfileId,
                         oldFilename: oldFile || null
                     });
@@ -2078,11 +2348,37 @@ document.addEventListener('DOMContentLoaded', async () => {
                         showToast(toastMsg, 'success');
                         appendLog(`[DOWNLOAD] ${title} (${res.filename}) ${isUpdate ? 'aktualizován' : 'stažen'} do ${sub}/ v profilu ${targetProfileId}.`);
 
-                        const updatedList = await window.api.toggleMod(modId);
-                        currentConfig.installedMods = updatedList;
+                        // Automatické přepnutí loaderu profilu pouze pokud byl profil Vanilla
+                        if (res.loaderChanged) {
+                            const pObj = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
+                            if (pObj) {
+                                pObj.loader = res.newLoader;
+                            }
+                            if (currentConfig.activeProfileId === targetProfileId) {
+                                currentConfig.loader = res.newLoader;
+                            }
+                            const loaderLabels = {
+                                fabric: 'Fabric',
+                                forge: 'Forge',
+                                neoforge: 'NeoForge',
+                                vanilla: 'Vanilla'
+                            };
+                            const niceNew = loaderLabels[res.newLoader] || res.newLoader;
+                            const nicePrev = loaderLabels[res.prevLoader] || res.prevLoader || 'Vanilla';
+                            showToast(`⚡ Profil byl automaticky přepnut na ${niceNew} loader!`, 'info');
+                            appendLog(`[LOADER] Profil "${pObj ? pObj.name : targetProfileId}" byl automaticky přepnut z ${nicePrev} na ${niceNew} pro spuštění módů.`);
 
-                        // Synchronizujeme módy profilu
-                        await loadProfileMods(targetProfileId);
+                            renderModsProfileDropdown();
+                            refreshVersionStatuses();
+                            renderProfilesList();
+                        }
+
+                        // VŽDY synchronizujeme nainstalované módy z disku a překreslíme karty v katalogu
+                        const pRes = await window.api.getProfileMods(targetProfileId);
+                        if (pRes && pRes.success) {
+                            currentProfileModsList = pRes.mods || [];
+                        }
+                        renderModCards(lastLoadedCatalogMods);
                         await checkWardenProbe();
                     } else {
                         btn.classList.remove('btn-downloading');
@@ -2134,6 +2430,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             loadModrinthMods();
         });
     });
+
+    // Nekonečné scrollování (Infinite Scroll) v katalogu Modrinth
+    if (modsCardsList) {
+        modsCardsList.addEventListener('scroll', () => {
+            if (isCatalogLoading || !hasMoreCatalogMods) return;
+            const { scrollTop, scrollHeight, clientHeight } = modsCardsList;
+            if (scrollTop + clientHeight >= scrollHeight - 350) {
+                loadModrinthMods(false);
+            }
+        });
+    }
 
     // ── 3D Skin Viewer (skinview3d) Integration ────────────────────────────
     let skinViewer = null;
@@ -2274,12 +2581,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             return null; // Oficiální účet bez aktivního pláště nemá žádný plášť
         } else {
-            // Warez / offline: žádný defaultní plášť, POUZE pokud si hráč sám nahrál nebo vybral cape!
-            if (currentConfig.customCapePath && currentConfig.customCapePath !== 'none' && !currentConfig.customCapePath.startsWith('data:image')) {
-                return (currentConfig.customCapePath.startsWith('http') || currentConfig.customCapePath.startsWith('file://'))
-                    ? currentConfig.customCapePath
-                    : `file://${currentConfig.customCapePath}`;
-            }
+            // Warez / offline: žádné pláště se nepoužívají ani nezobrazují
             return null;
         }
     }
@@ -2549,7 +2851,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (isMicrosoft) {
             loadMojangCapes();
         } else {
-            loadOfflinePresetCapes();
+            const offCapeSec = document.getElementById('offlineCapesSection');
+            if (offCapeSec) offCapeSec.style.display = 'none';
+            const equippedBadge = document.getElementById('equippedCapeBadge');
+            if (equippedBadge) equippedBadge.style.display = 'none';
+            activeMojangCapeUrl = null;
         }
     }
 
@@ -2663,10 +2969,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // V Minecraft 64x32 texturách je vnější lícová strana pláště (back face) na souřadnicích (12, 1, 10, 16)
-            // (souřadnice 1, 1 je vnitřní rubová strana přivrácená k tělu hráče)
+            // V Minecraft 64x32 texturách je vnější lícová strana pláště (back face) na souřadnicích (1, 1, 10, 16)
+            // (souřadnice 12, 1 je vnitřní rubová strana přivrácená k tělu hráče)
             const scale = (img.naturalWidth || 64) / 64;
-            const sx = 12 * scale;
+            const sx = 1 * scale;
             const sy = 1 * scale;
             const sw = 10 * scale;
             const sh = 16 * scale;
@@ -2689,6 +2995,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const equippedBadge = document.getElementById('equippedCapeBadge');
         const equippedName = document.getElementById('equippedCapeName');
         if (!container) return;
+
+        if (currentConfig.authType !== 'microsoft') {
+            container.innerHTML = '';
+            if (equippedBadge) equippedBadge.style.display = 'none';
+            return;
+        }
 
         try {
             const res = await window.api.getMojangProfile();
@@ -2757,110 +3069,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // ── Offline Preset & Custom Capes ───────────────────────────────────────
+    // ── Offline Preset & Custom Capes (Skryto pro Warez) ────────────────────
     function loadOfflinePresetCapes() {
         const container = document.getElementById('offlineCapesList');
-        if (!container) return;
-
-        const currentCape = currentConfig.customCapePath;
-        const presets = [
-            { id: 'none', name: 'Žádný plášť', url: null },
-            { id: '15th', name: '15th Anniversary', url: 'https://textures.minecraft.net/texture/2330a5f037dd78696b99684c3116805d76d655f26194b308be73cb55ad48c9' },
-            { id: 'cherry', name: 'Cherry Blossom', url: 'https://textures.minecraft.net/texture/414f5ae33b4972e2c88f9a2cbfa7dcc2668b8b8ebf4b4f5352fa1d59baee27cb' },
-            { id: 'vanilla', name: 'Vanilla Cape', url: 'https://textures.minecraft.net/texture/42d20e7df5d46816ab9c6c5ea577907f9c894ad691d57e2a9b21f39185a6cf17' },
-            { id: 'migrator', name: 'Migrator Cape', url: 'https://textures.minecraft.net/texture/17912790d697449c40217c06eb6555cc5e7f1ba9a3934d402e6c525f0ad08819' },
-            { id: 'pancape', name: 'Pancape', url: 'https://textures.minecraft.net/texture/9f7e52292f7033ec09ad7f272a83e020d2c38cc01844ebc40228d488f57fae00' },
-            { id: 'twitch', name: 'Twitch Cape', url: 'https://textures.minecraft.net/texture/486242636c841bb2df6a096c4a631bf3cbe76ee64db5ec9bf78018cb14eb61eb' },
-            { id: 'tiktok', name: 'TikTok Cape', url: 'https://textures.minecraft.net/texture/3449e7b39886a8775080c3eec5ee4f6cb9607147dbfb56a42a59a72df9e8e4db' }
-        ];
-
-        let allItems = presets;
-        if (currentCape && currentCape !== 'none' && !presets.some(p => p.url === currentCape)) {
-            const formatted = (currentCape.startsWith('http') || currentCape.startsWith('file://'))
-                ? currentCape
-                : `file://${currentCape}`;
-            allItems = [
-                presets[0], // 'none' je vždy na prvním místě
-                { id: 'custom', name: 'Vlastní soubor', url: formatted },
-                ...presets.slice(1)
-            ];
-        }
-
-        container.innerHTML = allItems.map((c, idx) => {
-            const isNone = (c.url === null);
-            const isActive = isNone
-                ? (!currentCape || currentCape === 'none')
-                : (currentCape && (
-                    currentCape === c.url ||
-                    (c.url.startsWith('file://') && currentCape.includes(c.url.replace('file://', '')))
-                ));
-            return `
-                <div class="cape-item-card ${isActive ? 'active-cape' : ''}" data-cape-idx="${idx}" title="${escapeHtml(c.name)}">
-                    <div class="cape-item-preview-box">
-                        ${isNone
-                            ? `<div class="cape-none-box"><span class="cape-none-icon">🚫</span><span class="cape-none-txt">Žádný</span></div>`
-                            : `<canvas class="cape-canvas-render" id="offCapeCanvas_${idx}" width="40" height="64"></canvas>`
-                        }
-                    </div>
-                    ${isActive ? '<span class="cape-active-indicator">✓ Aktivní</span>' : ''}
-                    <span class="cape-item-name">${escapeHtml(c.name)}</span>
-                </div>
-            `;
-        }).join('');
-
-        allItems.forEach((c, idx) => {
-            if (c.url) {
-                const canvas = document.getElementById(`offCapeCanvas_${idx}`);
-                if (canvas) drawCapeModelThumb(c.url, canvas);
-            }
-        });
-
-        container.querySelectorAll('.cape-item-card').forEach(card => {
-            card.addEventListener('click', async () => {
-                const idx = parseInt(card.dataset.capeIdx, 10);
-                const item = allItems[idx];
-                if (!item) return;
-
-                if (item.url === null) {
-                    currentConfig.customCapePath = null;
-                    await window.api.saveOfflineSkin({ capePath: null });
-                    const isSlim = currentConfig.customSkinVariant === 'slim';
-                    const effectiveSkin = currentConfig.customSkinPath || (currentConfig.authType === 'microsoft' && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
-                    const skinSrc = effectiveSkin
-                        ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
-                        : `https://minotar.net/skin/${encodeURIComponent(currentConfig.offlineUsername || currentConfig.username || 'Hráč')}`;
-
-                    updateSkinViewer3D(skinSrc, null, isSlim);
-                    updateHeroSkinViewer3D(skinSrc, null, isSlim);
-                    loadOfflinePresetCapes();
-
-                    const capePathLabel = document.getElementById('offlineCapePathLabel');
-                    if (capePathLabel) {
-                        capePathLabel.textContent = 'Žádný plášť';
-                    }
-                    showToast('✓ Plášť byl odebrán (žádný plášť).', 'info');
-                    return;
-                }
-
-                currentConfig.customCapePath = item.url;
-                await window.api.saveOfflineSkin({ capePath: item.url });
-                const isSlim = currentConfig.customSkinVariant === 'slim';
-                const effectiveSkin = currentConfig.customSkinPath || (currentConfig.authType === 'microsoft' && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
-                const skinSrc = effectiveSkin
-                    ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
-                    : `https://minotar.net/skin/${encodeURIComponent(currentConfig.offlineUsername || currentConfig.username || 'Hráč')}`;
-
-                updateSkinViewer3D(skinSrc, item.url, isSlim);
-                updateHeroSkinViewer3D(skinSrc, item.url, isSlim);
-                loadOfflinePresetCapes();
-
-                const capePathLabel = document.getElementById('offlineCapePathLabel');
-                if (capePathLabel) {
-                    capePathLabel.textContent = item.name;
-                }
-                showToast(`✓ Plášť "${item.name}" byl vybrán pro tvůj profil!`, 'success');
-            });
-        });
+        const offCapeSec = document.getElementById('offlineCapesSection');
+        if (offCapeSec) offCapeSec.style.display = 'none';
+        if (container) container.innerHTML = '';
     }
 
     // ── Character & Skin Handlers ───────────────────────────────────────────

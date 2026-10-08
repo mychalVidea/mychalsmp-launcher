@@ -22,8 +22,8 @@ contextBridge.exposeInMainWorld('api', {
     getInstalledVersions: () => ipcRenderer.invoke('get-installed-versions'),
 
     // Modrinth Browsing
-    searchModrinth: (query, version, loader, category, projectType) => 
-        ipcRenderer.invoke('search-modrinth', query, version, loader, category, projectType),
+    searchModrinth: (query, version, loader, category, projectType, offset, limit) => 
+        ipcRenderer.invoke('search-modrinth', query, version, loader, category, projectType, offset, limit),
     downloadModOrPack: (options) => ipcRenderer.invoke('download-mod-or-pack', options),
     toggleMod: (modId) => ipcRenderer.invoke('toggle-mod', modId),
     getProfileMods: (profileId) => ipcRenderer.invoke('get-profile-mods', profileId),

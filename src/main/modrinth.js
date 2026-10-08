@@ -13,7 +13,7 @@ const CURATED_MODS = [
         description: 'Revoluční rendering engine pro Minecraft. Zvyšuje FPS až o 300 % a eliminuje propady snímků.',
         categories: ['optimization'],
         loaders: ['fabric', 'neoforge'],
-        installed: true
+        installed: false
     },
     {
         id: 'iris',
@@ -25,7 +25,7 @@ const CURATED_MODS = [
         description: 'Moderní podpora pro shadery plně kompatibilní se Sodium bez zbytečného propadu FPS.',
         categories: ['optimization', 'utility'],
         loaders: ['fabric', 'neoforge'],
-        installed: true
+        installed: false
     },
     {
         id: 'lithium',
@@ -37,7 +37,7 @@ const CURATED_MODS = [
         description: 'Optimalizace fyziky, chunk tickingu a chování mobů bez změny vanilla mechanik.',
         categories: ['optimization'],
         loaders: ['fabric', 'neoforge'],
-        installed: true
+        installed: false
     },
     {
         id: 'ferrite-core',
@@ -49,7 +49,7 @@ const CURATED_MODS = [
         description: 'Ušetří až 40 % RAM redukcí velikosti vnitřních stavových struktur Minecraftu.',
         categories: ['optimization'],
         loaders: ['fabric', 'forge', 'neoforge'],
-        installed: true
+        installed: false
     },
     {
         id: 'appleskin',
@@ -159,7 +159,7 @@ const CURATED_PACKS = [
     }
 ];
 
-async function searchModrinth(query = '', version = '26.2', loader = 'fabric', category = '', projectType = 'mod') {
+async function searchModrinth(query = '', version = '26.2', loader = 'fabric', category = '', projectType = 'mod', offset = 0, limit = 24) {
     const type = projectType || 'mod';
     try {
         const facets = [[`project_type:${type}`]];
@@ -172,7 +172,8 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
 
         const params = new URLSearchParams({
             query: query.trim(),
-            limit: '24',
+            limit: String(limit || 24),
+            offset: String(offset || 0),
             index: 'relevance'
         });
 
@@ -200,29 +201,37 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
                     if (vRes.ok) {
                         const vList = await vRes.json();
                         for (const v of vList) {
-                            if (v.id) versionMap.set(v.id, v.version_number);
-                            if (v.project_id) versionMap.set(v.project_id, v.version_number);
+                            const meta = {
+                                version_number: v.version_number,
+                                game_versions: v.game_versions || []
+                            };
+                            if (v.id) versionMap.set(v.id, meta);
+                            if (v.project_id) versionMap.set(v.project_id, meta);
                         }
                     }
                 } catch (_) {}
             }
 
-            return data.hits.map(h => ({
-                id: h.slug || h.project_id,
-                slug: h.slug || h.id,
-                project_id: h.project_id,
-                title: h.title,
-                author: h.author,
-                downloads: h.downloads,
-                follows: h.follows,
-                icon_url: h.icon_url || 'assets/server-icon.png',
-                description: h.description,
-                project_type: h.project_type || type,
-                categories: h.categories || [],
-                loaders: (h.categories || []).filter(c => ['fabric', 'forge', 'neoforge'].includes(c)),
-                latest_version_id: h.latest_version,
-                latest_version_number: versionMap.get(h.latest_version) || versionMap.get(h.project_id) || null
-            }));
+            return data.hits.map(h => {
+                const vMeta = versionMap.get(h.latest_version) || versionMap.get(h.project_id) || null;
+                return {
+                    id: h.slug || h.project_id,
+                    slug: h.slug || h.id,
+                    project_id: h.project_id,
+                    title: h.title,
+                    author: h.author,
+                    downloads: h.downloads,
+                    follows: h.follows,
+                    icon_url: h.icon_url || 'assets/server-icon.png',
+                    description: h.description,
+                    project_type: h.project_type || type,
+                    categories: h.categories || [],
+                    loaders: (h.categories || []).filter(c => ['fabric', 'forge', 'neoforge'].includes(c)),
+                    latest_version_id: h.latest_version,
+                    latest_version_number: vMeta ? vMeta.version_number : null,
+                    latest_game_versions: vMeta ? vMeta.game_versions : (h.game_versions || [])
+                };
+            });
         }
     } catch (err) {
         // Fallback to curated items
@@ -245,16 +254,64 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
  */
 async function downloadModOrPack(options, targetDir) {
     const { id, title, projectType = 'mod', version = '26.2', loader = 'fabric', oldFilename } = options;
-    const directUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(id)}/version`;
-    const res = await fetch(directUrl, {
-        headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
-    });
-    if (!res.ok) throw new Error(`Projekt ${id} nebyl nalezen na Modrinthu.`);
-    const versions = await res.json();
+    const normLoader = (loader && loader !== 'vanilla') ? loader.toLowerCase() : null;
+
+    let versions = [];
+
+    if (projectType === 'mod' && normLoader) {
+        // 1. Zkusíme načíst verze specificky pro požadovaný loader i verzi hry
+        try {
+            const verUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(id)}/version?loaders=${encodeURIComponent(JSON.stringify([normLoader]))}&game_versions=${encodeURIComponent(JSON.stringify([version]))}`;
+            const vRes = await fetch(verUrl, {
+                headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
+            });
+            if (vRes.ok) {
+                const list = await vRes.json();
+                if (Array.isArray(list) && list.length > 0) {
+                    versions = list;
+                }
+            }
+        } catch (_) {}
+
+        // 2. Pokud není verze pro přesný tag hry, načteme verze pro daný loader
+        if (versions.length === 0) {
+            try {
+                const ldrUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(id)}/version?loaders=${encodeURIComponent(JSON.stringify([normLoader]))}`;
+                const lRes = await fetch(ldrUrl, {
+                    headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
+                });
+                if (lRes.ok) {
+                    const list = await lRes.json();
+                    if (Array.isArray(list) && list.length > 0) {
+                        versions = list;
+                    }
+                }
+            } catch (_) {}
+        }
+
+        // Pokud pro požadovaný loader neexistuje ŽÁDNÁ verze, striktně odmítneme stažení!
+        // Nikdy nestahujeme Forge na Fabric profil a naopak!
+        if (versions.length === 0) {
+            throw new Error(`Mód "${title || id}" není dostupný pro zavaděč ${normLoader.toUpperCase()}.`);
+        }
+    } else {
+        // Resourcepacky, shadery nebo vanilla profily
+        const directUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(id)}/version`;
+        const res = await fetch(directUrl, {
+            headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
+        });
+        if (!res.ok) throw new Error(`Projekt ${id} nebyl nalezen na Modrinthu.`);
+        versions = await res.json();
+    }
+
     if (!versions || versions.length === 0) throw new Error(`Pro ${title || id} není k dispozici žádný soubor.`);
 
-    // Prefer version match
-    let picked = versions.find(v => v.game_versions && v.game_versions.includes(version)) || versions[0];
+    // Prefer match for game version if available in list
+    let picked = versions.find(v => Array.isArray(v.game_versions) && v.game_versions.includes(version));
+    if (!picked) {
+        picked = versions[0];
+    }
+
     const file = (picked.files && picked.files.find(f => f.primary)) || (picked.files && picked.files[0]);
     if (!file) throw new Error(`Soubor ke stažení nebyl nalezen.`);
 
@@ -281,12 +338,49 @@ async function downloadModOrPack(options, targetDir) {
     const buffer = await dlRes.arrayBuffer();
     fs.writeFileSync(destPath, Buffer.from(buffer));
 
+    // Zjistíme, pro jaký loader stažený soubor ve skutečnosti je
+    let resolvedLoader = normLoader || 'fabric';
+    if (projectType === 'mod' && picked && Array.isArray(picked.loaders) && picked.loaders.length > 0) {
+        const pLoaders = picked.loaders.map(l => l.toLowerCase());
+        if (normLoader && pLoaders.includes(normLoader)) {
+            resolvedLoader = normLoader;
+        } else if (pLoaders.includes('fabric')) {
+            resolvedLoader = 'fabric';
+        } else if (pLoaders.includes('forge')) {
+            resolvedLoader = 'forge';
+        } else if (pLoaders.includes('neoforge')) {
+            resolvedLoader = 'neoforge';
+        } else {
+            resolvedLoader = pLoaders[0];
+        }
+    }
+
+    // Uložíme metadata do .mod_meta.json pro 100% spolehlivou detekci nainstalovaného módu
+    try {
+        const metaPath = path.join(destDir, '.mod_meta.json');
+        let metaObj = {};
+        if (fs.existsSync(metaPath)) {
+            try { metaObj = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (_) {}
+        }
+        metaObj[file.filename] = {
+            id: id,
+            slug: options.slug || id,
+            title: title || id,
+            version: picked.version_number,
+            loader: resolvedLoader,
+            projectType: projectType,
+            downloadedAt: Date.now()
+        };
+        fs.writeFileSync(metaPath, JSON.stringify(metaObj, null, 2), 'utf8');
+    } catch (_) {}
+
     return {
         success: true,
         filename: file.filename,
         version_number: picked.version_number,
         subfolder,
-        destPath
+        destPath,
+        resolvedLoader: projectType === 'mod' ? resolvedLoader : null
     };
 }
 

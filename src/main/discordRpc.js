@@ -13,7 +13,7 @@ const fs = require('fs');
  * - Doladit chování při uspání/probuzení PC a startu bez běžícího Discord klienta
  */
 
-const DEFAULT_CLIENT_ID = '1415597133855326318'; // MYCHAL SMP Official Discord App
+const DEFAULT_CLIENT_ID = '1557874962956550154'; // SMPClient Official Discord App
 
 const OPCODES = {
     HANDSHAKE: 0,
@@ -41,11 +41,15 @@ class DiscordRpcClient {
         if (process.platform === 'win32') {
             for (let i = 0; i < 10; i++) {
                 const pipePath = `\\\\?\\pipe\\discord-ipc-${i}`;
-                return pipePath; // On Windows, named pipe can be connected directly
+                // On Windows, named pipe path can be tried directly
+                return pipePath;
             }
         } else {
+            const runtimeDir = process.env.XDG_RUNTIME_DIR;
             const searchDirs = [
-                process.env.XDG_RUNTIME_DIR,
+                runtimeDir,
+                runtimeDir ? path.join(runtimeDir, 'app', 'com.discordapp.Discord') : null,
+                runtimeDir ? path.join(runtimeDir, 'snap.discord') : null,
                 process.env.TMPDIR,
                 process.env.TMP,
                 process.env.TEMP,
@@ -55,9 +59,11 @@ class DiscordRpcClient {
             for (const dir of searchDirs) {
                 for (let i = 0; i < 10; i++) {
                     const socketPath = path.join(dir, `discord-ipc-${i}`);
-                    if (fs.existsSync(socketPath)) {
-                        return socketPath;
-                    }
+                    try {
+                        if (fs.existsSync(socketPath)) {
+                            return socketPath;
+                        }
+                    } catch (e) {}
                 }
             }
         }
@@ -177,6 +183,8 @@ class DiscordRpcClient {
                 if (this.currentActivity) {
                     this.sendActivity(this.currentActivity);
                 }
+            } else if (message.evt === 'ERROR') {
+                console.warn('[DISCORD RPC] Discord vrátil chybu aktivity:', message.data?.message || message);
             } else if (opcode === OPCODES.PING) {
                 this.sendPacket(OPCODES.PONG, message.data || {});
             }
@@ -219,26 +227,37 @@ class DiscordRpcClient {
             const serverLabel = isMychal ? 'mychalsmp.xyz' : server;
 
             activity = {
-                details: isMychal ? 'Hraje na síti mychalsmp.xyz' : `Hraje na ${serverLabel}`,
-                state: `Nick: ${username} | ${profileName}`,
+                details: `Hraje na: ${serverLabel}`,
+                state: `Hráč: ${username} • ${profileName}`,
                 timestamps: {
                     start: startTime || Date.now()
                 },
                 assets: {
-                    large_image: 'mychalsmp_logo',
-                    large_text: 'MYCHAL SMP (mychalsmp.xyz)',
-                    small_image: 'minecraft',
-                    small_text: profileName
-                }
+                    large_image: 'https://join.mychalsmp.xyz/imgs/smpclient-logo2.png',
+                    large_text: `Server: ${serverLabel}`,
+                    small_image: 'https://join.mychalsmp.xyz/imgs/icons/beacon.jpg',
+                    small_text: `SMPClient (${profileName})`
+                },
+                buttons: [
+                    { label: '🎮 Připojit se na SMP', url: 'https://join.mychalsmp.xyz' },
+                    { label: '🌐 Oficiální web', url: 'https://mychalsmp.xyz' }
+                ]
             };
         } else {
+            const isMychal = !server || server.toLowerCase().includes('mychalsmp');
+            const serverLabel = isMychal ? 'mychalsmp.xyz' : server;
+
             activity = {
-                details: 'V launcheru MYCHAL SMP',
-                state: `Nick: ${username} | Profil: ${profileName}`,
+                details: 'V launcheru SMPClient',
+                state: `Vybraný server: ${serverLabel}`,
                 assets: {
-                    large_image: 'mychalsmp_logo',
-                    large_text: 'MYCHAL SMP (mychalsmp.xyz)'
-                }
+                    large_image: 'https://join.mychalsmp.xyz/imgs/smpclient-logo2.png',
+                    large_text: `Server: ${serverLabel}`
+                },
+                buttons: [
+                    { label: '🌐 Web: mychalsmp.xyz', url: 'https://mychalsmp.xyz' },
+                    { label: '🎮 Jak se připojit', url: 'https://join.mychalsmp.xyz' }
+                ]
             };
         }
 
