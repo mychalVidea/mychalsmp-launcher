@@ -140,3 +140,23 @@ jobs:
             release-assets/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup Old Releases (Keep only latest)
+        run: |
+          CURRENT_TAG="v${{ steps.pkg_version.outputs.version }}"
+          echo "🌟 Nejnovější vydaná verze: $CURRENT_TAG"
+          echo "🧹 Kontroluji a mažu všechny starší releases..."
+
+          ALL_TAGS=$(gh release list --limit 100 --json tagName | jq -r '.[].tagName' || true)
+
+          for tag in $ALL_TAGS; do
+            if [ "$tag" != "$CURRENT_TAG" ] && [ -n "$tag" ]; then
+              echo "🗑️ Odstraňuji starý release $tag..."
+              gh release delete "$tag" --yes --cleanup-tag || gh release delete "$tag" --yes || true
+            fi
+          done
+
+          echo "✅ Ponechán pouze 1 nejnovější release: $CURRENT_TAG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

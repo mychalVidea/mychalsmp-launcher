@@ -786,9 +786,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (modal) modal.style.display = 'none';
     }
 
+    const updateChip = document.getElementById('updateChip');
+    if (updateChip) {
+        updateChip.addEventListener('click', () => {
+            if (pendingUpdateData) {
+                openUpdateModal(pendingUpdateData);
+            }
+        });
+    }
+
     const btnUpdateChip = document.getElementById('btnUpdateChip');
     if (btnUpdateChip) {
-        btnUpdateChip.addEventListener('click', () => {
+        btnUpdateChip.addEventListener('click', (e) => {
+            e.stopPropagation();
             if (pendingUpdateData) {
                 openUpdateModal(pendingUpdateData);
             }
