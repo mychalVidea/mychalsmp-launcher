@@ -100,6 +100,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── Tab Navigation ──────────────────────────────────────────────────────
     function switchTab(tabId) {
+        if (typeof autoSaveSettings === 'function') {
+            autoSaveSettings(true);
+        }
         navButtons.forEach(btn => {
             if (btn.dataset.tab === tabId) {
                 btn.classList.add('active');
@@ -1083,6 +1086,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnConfirmUpdate) {
         btnConfirmUpdate.addEventListener('click', async () => {
             if (!pendingUpdateData || isUpdatingCurrently) return;
+            if (typeof autoSaveSettings === 'function') {
+                await autoSaveSettings(true);
+            }
             isUpdatingCurrently = true;
             btnConfirmUpdate.disabled = true;
             btnConfirmUpdate.innerHTML = pendingUpdateData.isDelta
@@ -1327,6 +1333,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── Launch Minecraft ────────────────────────────────────────────────────
     async function startLaunch(profileId, serverIp) {
+        if (typeof autoSaveSettings === 'function') {
+            await autoSaveSettings(true);
+        }
         if (isRunning) {
             if (confirm('Chceš ukončit běžící Minecraft proces?')) {
                 await window.api.killGame();
@@ -1348,7 +1357,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             progressContainer.style.display = 'flex';
             if (progressBar) progressBar.style.width = '10%';
             if (progressPercent) progressPercent.textContent = '10%';
-            if (progressText) progressText.textContent = isAlreadyInstalled ? 'Příprava herních dat a knihoven...' : 'Stahuji verzi a herní data...';
+            if (progressText) progressText.textContent = isAlreadyInstalled ? 'Načítání hry...' : 'Stahuji verzi a herní data...';
         }
 
         appendLog(isAlreadyInstalled
@@ -2432,7 +2441,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     javaDetectedList.querySelectorAll('.java-pill').forEach(pill => {
                         pill.addEventListener('click', () => {
-                            if (javaPathInput) javaPathInput.value = pill.dataset.path;
+                            if (javaPathInput) {
+                                javaPathInput.value = pill.dataset.path;
+                                autoSaveSettings(true);
+                            }
                         });
                     });
 
@@ -2451,15 +2463,85 @@ document.addEventListener('DOMContentLoaded', async () => {
             const detected = await window.api.detectJava();
             if (javaPathInput) {
                 javaPathInput.value = detected || '';
+                autoSaveSettings(true);
                 appendLog(`[JAVA] Detekováno: ${detected}`);
                 temporaryButtonText(btnDetectJava, '✓ Detekováno');
             }
         });
     }
 
+    // ── Settings Auto-Save & Collection ─────────────────────────────────────
+    function collectCurrentSettings() {
+        const selectedRes = document.querySelector('input[name="res"]:checked')?.value || '1280x720';
+        let resObj = { width: 1280, height: 720, fullscreen: false };
+
+        if (selectedRes === 'fullscreen') {
+            resObj.fullscreen = true;
+        } else {
+            const parts = selectedRes.split('x');
+            resObj.width = parseInt(parts[0], 10) || 1280;
+            resObj.height = parseInt(parts[1], 10) || 720;
+        }
+
+        const checkGameMode = document.getElementById('checkGameMode');
+        const checkDiscreteGpu = document.getElementById('checkDiscreteGpu');
+        const checkMangoHud = document.getElementById('checkMangoHud');
+        const checkZink = document.getElementById('checkZink');
+        const checkDisableVsync = document.getElementById('checkDisableVsync');
+        const checkNativeWayland = document.getElementById('checkNativeWayland');
+        const checkDiscordRpc = document.getElementById('checkDiscordRpc');
+        const jvmArgsInput = document.getElementById('jvmArgsInput');
+        const customEnvVarsInput = document.getElementById('customEnvVarsInput');
+
+        return {
+            ramMax: parseInt(ramSlider?.value || '4', 10),
+            javaPath: javaPathInput?.value.trim() || null,
+            autoConnectServer: autoConnectCheck?.checked ?? false,
+            resolution: resObj,
+            enableGameMode: checkGameMode ? checkGameMode.checked : true,
+            enableDiscreteGpu: checkDiscreteGpu ? checkDiscreteGpu.checked : true,
+            enableMangoHud: checkMangoHud ? checkMangoHud.checked : false,
+            enableZink: checkZink ? checkZink.checked : false,
+            disableVsync: checkDisableVsync ? checkDisableVsync.checked : false,
+            enableNativeWayland: checkNativeWayland ? checkNativeWayland.checked : false,
+            enableDiscordRpc: checkDiscordRpc ? checkDiscordRpc.checked : true,
+            enableAudioDlc: checkAudioDlc ? checkAudioDlc.checked : true,
+            customJvmArgs: jvmArgsInput ? jvmArgsInput.value.trim() : null,
+            customEnvVars: customEnvVarsInput ? customEnvVarsInput.value.trim() : ''
+        };
+    }
+
+    let autoSaveSettingsTimer = null;
+    async function autoSaveSettings(instant = false) {
+        if (autoSaveSettingsTimer) {
+            clearTimeout(autoSaveSettingsTimer);
+            autoSaveSettingsTimer = null;
+        }
+
+        const doSave = async () => {
+            try {
+                const updated = collectCurrentSettings();
+                currentConfig = { ...currentConfig, ...updated };
+                await window.api.saveConfig(updated);
+            } catch (err) {
+                console.error('[CONFIG] Chyba automatického ukládání nastavení:', err);
+            }
+        };
+
+        if (instant) {
+            await doSave();
+        } else {
+            autoSaveSettingsTimer = setTimeout(doSave, 300);
+        }
+    }
+
     if (ramSlider && ramValueBadge) {
         ramSlider.addEventListener('input', (e) => {
             ramValueBadge.textContent = `${e.target.value} GB`;
+            autoSaveSettings(false);
+        });
+        ramSlider.addEventListener('change', () => {
+            autoSaveSettings(true);
         });
     }
 
@@ -2467,50 +2549,59 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnOpenGameDir.addEventListener('click', () => window.api.openGameDir());
     }
 
+    // Auto-save listeners on all checkboxes & controls
+    const checkGameModeEl = document.getElementById('checkGameMode');
+    if (checkGameModeEl) checkGameModeEl.addEventListener('change', () => autoSaveSettings(true));
+
+    const checkDiscreteGpuEl = document.getElementById('checkDiscreteGpu');
+    if (checkDiscreteGpuEl) checkDiscreteGpuEl.addEventListener('change', () => autoSaveSettings(true));
+
+    const checkMangoHudEl = document.getElementById('checkMangoHud');
+    if (checkMangoHudEl) checkMangoHudEl.addEventListener('change', () => autoSaveSettings(true));
+
+    const checkZinkEl = document.getElementById('checkZink');
+    if (checkZinkEl) checkZinkEl.addEventListener('change', () => autoSaveSettings(true));
+
+    const checkDisableVsyncEl = document.getElementById('checkDisableVsync');
+    if (checkDisableVsyncEl) checkDisableVsyncEl.addEventListener('change', () => autoSaveSettings(true));
+
+    const checkNativeWaylandEl = document.getElementById('checkNativeWayland');
+    if (checkNativeWaylandEl) checkNativeWaylandEl.addEventListener('change', () => autoSaveSettings(true));
+
+    const checkDiscordRpcEl = document.getElementById('checkDiscordRpc');
+    if (checkDiscordRpcEl) checkDiscordRpcEl.addEventListener('change', () => autoSaveSettings(true));
+
+    if (autoConnectCheck) {
+        autoConnectCheck.addEventListener('change', () => autoSaveSettings(true));
+    }
+
+    document.querySelectorAll('input[name="res"]').forEach(radio => {
+        radio.addEventListener('change', () => autoSaveSettings(true));
+    });
+
+    if (javaPathInput) {
+        javaPathInput.addEventListener('input', () => autoSaveSettings(false));
+        javaPathInput.addEventListener('change', () => autoSaveSettings(true));
+    }
+
+    const jvmArgsEl = document.getElementById('jvmArgsInput');
+    if (jvmArgsEl) {
+        jvmArgsEl.addEventListener('input', () => autoSaveSettings(false));
+        jvmArgsEl.addEventListener('change', () => autoSaveSettings(true));
+    }
+
+    const customEnvVarsEl = document.getElementById('customEnvVarsInput');
+    if (customEnvVarsEl) {
+        customEnvVarsEl.addEventListener('input', () => autoSaveSettings(false));
+        customEnvVarsEl.addEventListener('change', () => autoSaveSettings(true));
+    }
+
     if (btnSaveSettings) {
         btnSaveSettings.addEventListener('click', async () => {
-            const selectedRes = document.querySelector('input[name="res"]:checked')?.value || '1280x720';
-            let resObj = { width: 1280, height: 720, fullscreen: false };
-
-            if (selectedRes === 'fullscreen') {
-                resObj.fullscreen = true;
-            } else {
-                const parts = selectedRes.split('x');
-                resObj.width = parseInt(parts[0], 10) || 1280;
-                resObj.height = parseInt(parts[1], 10) || 720;
-            }
-
-            const checkGameMode = document.getElementById('checkGameMode');
-            const checkDiscreteGpu = document.getElementById('checkDiscreteGpu');
-            const checkMangoHud = document.getElementById('checkMangoHud');
-            const checkZink = document.getElementById('checkZink');
-            const checkDisableVsync = document.getElementById('checkDisableVsync');
-            const checkNativeWayland = document.getElementById('checkNativeWayland');
-            const checkDiscordRpc = document.getElementById('checkDiscordRpc');
-            const jvmArgsInput = document.getElementById('jvmArgsInput');
-            const customEnvVarsInput = document.getElementById('customEnvVarsInput');
-
-            const updated = {
-                ramMax: parseInt(ramSlider?.value || '4', 10),
-                javaPath: javaPathInput?.value.trim() || null,
-                autoConnectServer: autoConnectCheck?.checked ?? false,
-                resolution: resObj,
-                enableGameMode: checkGameMode ? checkGameMode.checked : true,
-                enableDiscreteGpu: checkDiscreteGpu ? checkDiscreteGpu.checked : true,
-                enableMangoHud: checkMangoHud ? checkMangoHud.checked : false,
-                enableZink: checkZink ? checkZink.checked : false,
-                disableVsync: checkDisableVsync ? checkDisableVsync.checked : false,
-                enableNativeWayland: checkNativeWayland ? checkNativeWayland.checked : false,
-                enableDiscordRpc: checkDiscordRpc ? checkDiscordRpc.checked : true,
-                enableAudioDlc: checkAudioDlc ? checkAudioDlc.checked : true,
-                customJvmArgs: jvmArgsInput ? jvmArgsInput.value.trim() : null,
-                customEnvVars: customEnvVarsInput ? customEnvVarsInput.value.trim() : ''
-            };
-
-            await window.api.saveConfig(updated);
-            currentConfig = { ...currentConfig, ...updated };
+            await autoSaveSettings(true);
             appendLog('[CONFIG] Nastavení bylo uloženo.');
             temporaryButtonText(btnSaveSettings, '✓ Nastavení uloženo!');
+            showToast('✓ Nastavení klienta bylo uloženo!', 'success');
         });
     }
 
@@ -2520,6 +2611,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const jvmInput = document.getElementById('jvmArgsInput');
             if (jvmInput) {
                 jvmInput.value = '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC';
+                autoSaveSettings(true);
                 showToast('⚡ Nastaveny doporučené parametry Generational ZGC (Java 21/25)!', 'info');
             }
         });
@@ -2531,10 +2623,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             const jvmInput = document.getElementById('jvmArgsInput');
             if (jvmInput) {
                 jvmInput.value = '-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch';
+                autoSaveSettings(true);
                 showToast('Nastaveny standardní parametry G1GC.', 'info');
             }
         });
     }
+
+    window.addEventListener('beforeunload', () => {
+        if (typeof autoSaveSettings === 'function') {
+            autoSaveSettings(true);
+        }
+    });
 
     // ── Minecraft Hudba & Zvuky (DLC) UI Logic ──────────────────────────────
     function updateAudioDlcBadge(enabled) {
@@ -2671,7 +2770,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const percent = Math.min(Math.max(data.percent || 0, 0), 100);
         if (progressBar) progressBar.style.width = `${percent}%`;
         if (progressPercent) progressPercent.textContent = `${percent}%`;
-        if (progressText) progressText.textContent = data.text || 'Stahuji herní data...';
+        if (progressText) progressText.textContent = data.text || 'Načítání hry...';
     });
 
     window.api.onLog((line) => appendLog(line));

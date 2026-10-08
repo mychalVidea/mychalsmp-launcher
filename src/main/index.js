@@ -14,7 +14,8 @@ const {
     getInstalledVersions,
     checkAudioDlcStatus,
     downloadAudioDlc,
-    cancelAudioDlcDownload
+    cancelAudioDlcDownload,
+    setupOfflineCustomSkinAndCape
 } = require('./launcher');
 const { searchModrinth, downloadModOrPack } = require('./modrinth');
 const {
@@ -664,6 +665,9 @@ ipcMain.handle('save-offline-skin', async (event, skinData) => {
     if (skinData.variant !== undefined) updates.customSkinVariant = skinData.variant;
     if (skinData.capePath !== undefined) updates.customCapePath = skinData.capePath;
     const cfg = saveConfig(updates);
+    try {
+        setupOfflineCustomSkinAndCape(BASE_DIR, cfg, (m) => console.log(m));
+    } catch (e) {}
     return { success: true, config: cfg };
 });
 

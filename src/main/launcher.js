@@ -567,6 +567,126 @@ function getInstalledVersions(baseDir) {
 }
 
 /**
+ * 🎭 Nastavení vlastního offline skinu a pláště pro warez / offline hráče.
+ * Automaticky vytvoří/aktualizuje vestavěný resource pack v ~/.mychalsmp/resourcepacks/mychalsmp-character
+ * a aktivuje jej v options.txt, takže Minecraft okamžitě vykreslí nastavený skin i plášť (elytru).
+ */
+function setupOfflineCustomSkinAndCape(baseDir, config, onLog = console.log) {
+    if (config.authType === 'microsoft') {
+        return; // Pro oficiální účty se skin spravuje přes Mojang API
+    }
+
+    const skinCandidates = [
+        config.customSkinPath,
+        path.join(baseDir, 'custom_skin.png'),
+        path.join(baseDir, 'skins', 'skin.png')
+    ].filter(Boolean);
+
+    const capeCandidates = [
+        config.customCapePath,
+        path.join(baseDir, 'custom_cape.png'),
+        path.join(baseDir, 'capes', 'cape.png')
+    ].filter(Boolean);
+
+    const activeSkin = skinCandidates.find(p => fs.existsSync(p));
+    const activeCape = capeCandidates.find(p => fs.existsSync(p));
+
+    if (!activeSkin && !activeCape) {
+        return;
+    }
+
+    try {
+        const packDir = path.join(baseDir, 'resourcepacks', 'mychalsmp-character');
+        const wideDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player', 'wide');
+        const slimDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player', 'slim');
+        const entityDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity');
+        const capeDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'cape');
+        const playerRoot = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player');
+
+        fs.mkdirSync(wideDir, { recursive: true });
+        fs.mkdirSync(slimDir, { recursive: true });
+        fs.mkdirSync(capeDir, { recursive: true });
+        fs.mkdirSync(playerRoot, { recursive: true });
+
+        // 1. pack.mcmeta (podpora všech verzí Minecraftu)
+        const mcmeta = {
+            pack: {
+                pack_format: 46,
+                supported_formats: { min_inclusive: 1, max_inclusive: 999 },
+                description: "MYCHAL SMP Vlastní Offline Postava"
+            }
+        };
+        fs.writeFileSync(path.join(packDir, 'pack.mcmeta'), JSON.stringify(mcmeta, null, 2), 'utf8');
+
+        // 2. Aplikace vlastního skinu
+        if (activeSkin) {
+            const playerModels = ['alex', 'ari', 'efe', 'kai', 'makena', 'noor', 'steve', 'sunny', 'zuri'];
+            for (const name of playerModels) {
+                fs.copyFileSync(activeSkin, path.join(wideDir, `${name}.png`));
+                fs.copyFileSync(activeSkin, path.join(slimDir, `${name}.png`));
+            }
+            fs.copyFileSync(activeSkin, path.join(playerRoot, 'steve.png'));
+            fs.copyFileSync(activeSkin, path.join(playerRoot, 'alex.png'));
+            onLog(`[POSTAVA] 🎨 Vlastní offline skin aplikován (${path.basename(activeSkin)}) pro všechny modely.`);
+        }
+
+        // 3. Aplikace vlastního pláště
+        if (activeCape) {
+            fs.copyFileSync(activeCape, path.join(entityDir, 'elytra.png'));
+            const capeTypes = ['mojang', 'migrator', 'vanilla', 'cherry', 'follower', 'cape'];
+            for (const c of capeTypes) {
+                fs.copyFileSync(activeCape, path.join(capeDir, `${c}.png`));
+            }
+            fs.copyFileSync(activeCape, path.join(playerRoot, 'cape.png'));
+            onLog(`[POSTAVA] 🧥 Vlastní offline plášť aplikován (${path.basename(activeCape)}) pro plášť i elytru.`);
+        }
+
+        // 4. Automatická aktivace v options.txt
+        const optionsFile = path.join(baseDir, 'options.txt');
+        const packIdentifier = 'file/mychalsmp-character';
+        if (fs.existsSync(optionsFile)) {
+            let content = fs.readFileSync(optionsFile, 'utf8');
+            if (content.includes('resourcePacks:')) {
+                content = content.replace(/resourcePacks:\[(.*?)\]/, (match, inner) => {
+                    let packs = [];
+                    try {
+                        packs = JSON.parse(`[${inner}]`);
+                    } catch (e) {
+                        packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+                    }
+                    if (!packs.includes(packIdentifier)) {
+                        packs.push(packIdentifier);
+                    }
+                    return `resourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
+                });
+            } else {
+                content += `\nresourcePacks:[${JSON.stringify('vanilla')},${JSON.stringify(packIdentifier)}]\n`;
+            }
+
+            if (content.includes('incompatibleResourcePacks:')) {
+                content = content.replace(/incompatibleResourcePacks:\[(.*?)\]/, (match, inner) => {
+                    let packs = [];
+                    try {
+                        packs = JSON.parse(`[${inner}]`);
+                    } catch (e) {
+                        packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+                    }
+                    packs = packs.filter(p => p !== packIdentifier);
+                    return `incompatibleResourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
+                });
+            }
+            fs.writeFileSync(optionsFile, content, 'utf8');
+            onLog(`[POSTAVA] ✓ Resource pack postavy aktivován v options.txt.`);
+        } else {
+            fs.writeFileSync(optionsFile, `resourcePacks:["vanilla","${packIdentifier}"]\nincompatibleResourcePacks:[]\n`, 'utf8');
+            onLog(`[POSTAVA] ✓ Vytvořen options.txt s aktivovaným resource packem postavy.`);
+        }
+    } catch (err) {
+        onLog(`[POSTAVA] ⚠ Chyba při přípravě offline skinu/pláště: ${err.message}`);
+    }
+}
+
+/**
  * Launches Minecraft with the specified profile & configuration.
  */
 async function launchGame(config, authData, customServer, onProgress, onLog, onExit) {
@@ -600,6 +720,9 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
 
     // ⚡ Bleskové převzetí existujících assetů a knihoven ze systému (.minecraft)
     linkOrShareExistingMinecraftData(rootDir, onLog);
+
+    // 🎭 Aplikace vlastního offline skinu a pláště pro warez / offline režim
+    setupOfflineCustomSkinAndCape(rootDir, config, onLog);
 
     // If running in an instance subfolder, share central assets and libraries
     try {
@@ -824,12 +947,20 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
 
     launcher.on('progress', (e) => {
         const percent = Math.round((e.task / e.total) * 100) || 0;
+        let text;
+        if (e.type === 'assets') {
+            text = percent >= 100 ? 'Herní data připravena' : `Načítání hry... ${percent}%`;
+        } else if (e.type === 'classes') {
+            text = percent >= 100 ? 'Knihovny připraveny' : `Příprava herních knihoven... ${percent}%`;
+        } else {
+            text = `Načítání hry... ${percent}%`;
+        }
         onProgress({
             type: e.type,
             task: e.task,
             total: e.total,
             percent: percent,
-            text: `Stahuji ${e.type}: ${percent}% (${e.task}/${e.total})`
+            text: text
         });
     });
 
@@ -840,7 +971,7 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             task: e.current,
             total: e.total,
             percent: percent,
-            text: `Stahuji: ${e.name} (${percent}%)`
+            text: `Načítání souborů: ${e.name} (${percent}%)`
         });
     });
 
@@ -1186,5 +1317,6 @@ module.exports = {
     cancelLaunch,
     checkAudioDlcStatus,
     downloadAudioDlc,
-    cancelAudioDlcDownload
+    cancelAudioDlcDownload,
+    setupOfflineCustomSkinAndCape
 };

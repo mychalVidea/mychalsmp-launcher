@@ -84,7 +84,7 @@ const DEFAULT_CONFIG = {
     customJvmArgs: '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC',
     enableGameMode: true,
     enableMangoHud: false,
-    enableDiscreteGpu: false,
+    enableDiscreteGpu: true,
     enableZink: false,
     disableVsync: false,
     customEnvVars: '',
@@ -106,10 +106,39 @@ function ensureDirSync(dir) {
 function loadConfig() {
     try {
         ensureDirSync(BASE_DIR);
+        let parsed = null;
         if (fs.existsSync(CONFIG_FILE)) {
-            const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
-            const parsed = JSON.parse(raw);
-            const merged = { ...DEFAULT_CONFIG, ...parsed, baseDir: BASE_DIR };
+            try {
+                const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
+                if (raw && raw.trim().length > 0) {
+                    parsed = JSON.parse(raw);
+                }
+            } catch (parseErr) {
+                console.error('[CONFIG] Chyba parsování CONFIG_FILE, zkouším zálohu .bak:', parseErr);
+                const bakFile = `${CONFIG_FILE}.bak`;
+                if (fs.existsSync(bakFile)) {
+                    try {
+                        const rawBak = fs.readFileSync(bakFile, 'utf-8');
+                        if (rawBak && rawBak.trim().length > 0) {
+                            parsed = JSON.parse(rawBak);
+                        }
+                    } catch (bakErr) {
+                        console.error('[CONFIG] Selhalo i načtení .bak:', bakErr);
+                    }
+                }
+            }
+        }
+
+        if (parsed) {
+            const merged = {
+                ...DEFAULT_CONFIG,
+                ...parsed,
+                resolution: {
+                    ...DEFAULT_CONFIG.resolution,
+                    ...(parsed.resolution || {})
+                },
+                baseDir: BASE_DIR
+            };
             // Ensure profiles exist
             if (!merged.profiles || merged.profiles.length === 0) {
                 merged.profiles = DEFAULT_PROFILES;
@@ -150,9 +179,26 @@ function saveConfig(newConfig) {
     try {
         ensureDirSync(BASE_DIR);
         const current = loadConfig();
-        const merged = { ...current, ...newConfig };
+        const cleanedNewConfig = {};
+        for (const [k, v] of Object.entries(newConfig || {})) {
+            if (v !== undefined) {
+                cleanedNewConfig[k] = v;
+            }
+        }
+        const merged = {
+            ...current,
+            ...cleanedNewConfig,
+            resolution: (cleanedNewConfig && cleanedNewConfig.resolution)
+                ? { ...(current.resolution || {}), ...cleanedNewConfig.resolution }
+                : current.resolution
+        };
         delete merged.baseDir;
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+        const tmpFile = `${CONFIG_FILE}.tmp`;
+        fs.writeFileSync(tmpFile, JSON.stringify(merged, null, 2), 'utf-8');
+        fs.renameSync(tmpFile, CONFIG_FILE);
+        try {
+            fs.copyFileSync(CONFIG_FILE, `${CONFIG_FILE}.bak`);
+        } catch (e) {}
         return { ...merged, baseDir: BASE_DIR };
     } catch (err) {
         console.error('Chyba při ukládání konfigurace launcheru:', err);
