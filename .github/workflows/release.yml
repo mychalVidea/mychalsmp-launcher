@@ -5,8 +5,12 @@ on:
     branches:
       - main
     tags:
-      - 'v*'
   workflow_dispatch:
+    inputs:
+      custom_version:
+        description: 'Vlastní verze k vydání (např. 1.0.1 nebo 1.2.0, prázdné = verze z package.json)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -26,6 +30,11 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Apply Custom Version If Provided
+        if: "${{ github.event.inputs.custom_version != '' }}"
+        run: |
+          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('./package.json')); pkg.version = '${{ github.event.inputs.custom_version }}'.replace(/^v/, ''); fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');"
 
       - name: Build Windows Packages
         run: npx electron-builder --win nsis portable --publish never
@@ -53,6 +62,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Apply Custom Version If Provided
+        if: "${{ github.event.inputs.custom_version != '' }}"
+        run: |
+          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('./package.json')); pkg.version = '${{ github.event.inputs.custom_version }}'.replace(/^v/, ''); fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');"
+
       - name: Build Linux Packages
         run: npx electron-builder --linux deb rpm tar.gz --publish never
 
@@ -74,10 +88,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get Version from package.json
+      - name: Get Version for Release
         id: pkg_version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          if [ -n "${{ github.event.inputs.custom_version }}" ]; then
+            VERSION="${{ github.event.inputs.custom_version }}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          VERSION=$(echo "$VERSION" | sed 's/^v//')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
 

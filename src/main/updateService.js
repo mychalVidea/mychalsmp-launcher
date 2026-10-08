@@ -12,10 +12,12 @@ const CURRENT_VERSION = packageJson.version || '1.0.0';
  */
 async function checkForUpdates() {
     try {
-        const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest?t=${Date.now()}`, {
             headers: {
                 'User-Agent': 'mychalsmp-launcher-updater',
-                'Accept': 'application/vnd.github.v3+json'
+                'Accept': 'application/vnd.github.v3+json',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache'
             }
         });
 
