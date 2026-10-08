@@ -78,7 +78,7 @@ const DEFAULT_CONFIG = {
     activeProfileId: 'minecraft-26.2',
     profiles: DEFAULT_PROFILES,
     servers: DEFAULT_SERVERS,
-    autoConnectServer: true,
+    autoConnectServer: false,
     serverIp: 'mychalsmp.xyz',
     serverPort: 25565,
     customJvmArgs: '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC',

@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Auto connect
             if (autoConnectCheck) {
-                autoConnectCheck.checked = currentConfig.autoConnectServer !== false;
+                autoConnectCheck.checked = currentConfig.autoConnectServer === true;
             }
 
             // Resolution
@@ -1244,7 +1244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 e.stopPropagation();
                 const pid = btn.dataset.profileId;
                 selectActiveProfile(pid);
-                startLaunch(pid, currentConfig.autoConnectServer ? 'mychalsmp.xyz' : null);
+                startLaunch(pid, null);
             });
         });
 
@@ -1294,7 +1294,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (sidebarPlayBtn) {
         sidebarPlayBtn.addEventListener('click', () => {
-            startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', currentConfig.autoConnectServer ? 'mychalsmp.xyz' : null);
+            startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', null);
         });
     }
 
@@ -1306,7 +1306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const pid = matchedProfile ? matchedProfile.id : (currentConfig.activeProfileId || 'minecraft-26.2');
             selectActiveProfile(pid);
             appendLog(`[PROFIL] Spouštím instalaci / hraní verze ${ver}...`);
-            startLaunch(pid, currentConfig.autoConnectServer ? 'mychalsmp.xyz' : null);
+            startLaunch(pid, null);
         });
     });
 
@@ -2493,7 +2493,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const updated = {
                 ramMax: parseInt(ramSlider?.value || '4', 10),
                 javaPath: javaPathInput?.value.trim() || null,
-                autoConnectServer: autoConnectCheck?.checked ?? true,
+                autoConnectServer: autoConnectCheck?.checked ?? false,
                 resolution: resObj,
                 enableGameMode: checkGameMode ? checkGameMode.checked : true,
                 enableDiscreteGpu: checkDiscreteGpu ? checkDiscreteGpu.checked : true,

@@ -639,7 +639,7 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
 
     // Direct Quick Play multiplayer connection (with automatic fallback to backup IP 130.61.89.37)
     let quickPlay = null;
-    let serverToJoin = customServer || (config.autoConnectServer ? config.serverIp || 'mychalsmp.xyz' : null);
+    let serverToJoin = customServer || (config.autoConnectServer ? config.serverIp : null);
     if (serverToJoin) {
         if (serverToJoin.toLowerCase().includes('mychalsmp')) {
             try {
