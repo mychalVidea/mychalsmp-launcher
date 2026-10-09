@@ -21,13 +21,6 @@
                 <img src="assets/logo.png" alt="SMPClient Logo" class="server-pixel-icon"
                     style="image-rendering: auto; object-fit: contain;">
                 <span class="brand-title">SMP<span>Client</span></span>
-                <span class="brand-badge">26.x</span>
-            </div>
-
-            <!-- Greeting Banner -->
-            <div class="user-greeting-chip" id="userGreetingChip">
-                <img src="https://minotar.net/avatar/Steve/24" alt="Head" class="greeting-avatar" id="greetingAvatar">
-                <span class="greeting-text">Welcome back, <strong id="greetingNick">Steve</strong>!</span>
             </div>
 
             <!-- Network Status Chip -->
@@ -334,46 +327,38 @@
                             <!-- Bottom Action Buttons -->
                             <div class="dash-bottom-actions">
                                 <button class="mc-btn mc-btn-primary" id="btnManageProfiles">
-                                    <span>
-                                        <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
-                                            <path
-                                                d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
-                                            </path>
-                                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                                        </svg>
-                                        Spravovat verze 26.x
-                                    </span>
+                                    <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                        <path
+                                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                                        </path>
+                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                    </svg>
+                                    <span class="action-btn-label">Verze hry</span>
                                 </button>
                                 <button class="mc-btn mc-btn-secondary" id="btnImportProfileModalOpen">
-                                    <span>
-                                        <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                            <polyline points="7 10 12 15 17 10"></polyline>
-                                            <line x1="12" y1="15" x2="12" y2="1"></line>
-                                        </svg>
-                                        Importovat profil
-                                    </span>
+                                    <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="1"></line>
+                                    </svg>
+                                    <span class="action-btn-label">Import profilu</span>
                                 </button>
                                 <button class="mc-btn mc-btn-secondary" id="btnAddModsShortcut">
-                                    <span>
-                                        <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
-                                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                                        </svg>
-                                        Procházet mody (Modrinth)
-                                    </span>
+                                    <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                    <span class="action-btn-label">Katalog módů</span>
                                 </button>
                                 <button class="mc-btn mc-btn-secondary" id="btnOpenScreenshotsModal"
                                     title="Snímky obrazovky pořízené klávesou F2">
-                                    <span>
-                                        <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
-                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                                            <circle cx="8.5" cy="8.5" r="1.5" />
-                                            <polyline points="21 15 16 10 5 21" />
-                                        </svg>
-                                        Screenshoty
-                                    </span>
+                                    <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                        <circle cx="8.5" cy="8.5" r="1.5" />
+                                        <polyline points="21 15 16 10 5 21" />
+                                    </svg>
+                                    <span class="action-btn-label">Screenshoty</span>
                                 </button>
                             </div>
 
@@ -505,8 +490,8 @@
                                 Složka módů
                             </span>
                         </button>
-                        <button type="button" class="mc-btn mc-btn-secondary btn-sm"
-                            id="btnOpenProfileSeedModal" title="Vlastní balíček">
+                        <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnOpenProfileSeedModal"
+                            title="Vlastní balíček">
                             <span>
                                 <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                     <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
@@ -1033,8 +1018,10 @@
                         <input type="range" id="ramSlider" min="2" max="16" step="1" value="4" class="slider">
                         <div class="slider-marks" id="ramSliderMarks"></div>
                         <div class="ram-assistant-box" id="ramAssistantBox">
-                            <span class="ram-detected-text" id="ramDetectedText">V počítači: <strong id="ramTotalText">-- GB RAM</strong></span>
-                            <button type="button" class="btn-ram-apply-recommended" id="btnApplyRecommendedRam" style="display: none;">
+                            <span class="ram-detected-text" id="ramDetectedText">V počítači: <strong
+                                    id="ramTotalText">-- GB RAM</strong></span>
+                            <button type="button" class="btn-ram-apply-recommended" id="btnApplyRecommendedRam"
+                                style="display: none;">
                                 <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24">
                                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                                 </svg>
@@ -1067,8 +1054,10 @@
                         <div class="form-group">
                             <label for="javaPathInput" class="setting-section-label">Java Runtime</label>
                             <div class="input-with-button">
-                                <input type="text" id="javaPathInput" class="input-text" placeholder="Automaticky: Java 25 (LTS)...">
-                                <button type="button" class="mc-btn mc-btn-secondary" id="btnDetectJava">Detekovat</button>
+                                <input type="text" id="javaPathInput" class="input-text"
+                                    placeholder="Automaticky: Java 25 (LTS)...">
+                                <button type="button" class="mc-btn mc-btn-secondary"
+                                    id="btnDetectJava">Detekovat</button>
                             </div>
                             <div class="java-detected-pills" id="javaDetectedList"></div>
                         </div>
@@ -1082,7 +1071,8 @@
                                     </svg>
                                     <span class="gpu-name-text" id="gpuNameText">Detekuji grafickou kartu...</span>
                                 </div>
-                                <span class="badge-status badge-success" id="gpuDedicatedBadge" style="display: none;">Diskrétní GPU</span>
+                                <span class="badge-status badge-success" id="gpuDedicatedBadge"
+                                    style="display: none;">Diskrétní GPU</span>
                             </div>
                         </div>
                     </div>
@@ -1095,7 +1085,8 @@
                                 <input type="checkbox" id="checkDiscordRpc" checked>
                                 <div class="perf-toggle-info">
                                     <span class="perf-toggle-title">Discord Rich Presence</span>
-                                    <span class="perf-toggle-desc">Zobrazovat herní status a nick na profilu Discordu.</span>
+                                    <span class="perf-toggle-desc">Zobrazovat herní status a nick na profilu
+                                        Discordu.</span>
                                 </div>
                             </label>
 
@@ -1103,7 +1094,8 @@
                                 <input type="checkbox" id="autoConnectCheck">
                                 <div class="perf-toggle-info">
                                     <span class="perf-toggle-title">Automatické připojení</span>
-                                    <span class="perf-toggle-desc">Při kliknutí na Hrát se připojit rovnou na server.</span>
+                                    <span class="perf-toggle-desc">Při kliknutí na Hrát se připojit rovnou na
+                                        server.</span>
                                 </div>
                             </label>
 
@@ -1111,7 +1103,8 @@
                                 <input type="checkbox" id="checkGameMode" checked>
                                 <div class="perf-toggle-info">
                                     <span class="perf-toggle-title">Herní režim (GameMode)</span>
-                                    <span class="perf-toggle-desc">Aktivuje herní prioritu jader CPU a GPU pro maximální FPS.</span>
+                                    <span class="perf-toggle-desc">Aktivuje herní prioritu jader CPU a GPU pro maximální
+                                        FPS.</span>
                                 </div>
                             </label>
 
@@ -1156,14 +1149,16 @@
                                     <input type="checkbox" id="checkZink">
                                     <div class="perf-toggle-info">
                                         <span class="perf-toggle-title">Zink (OpenGL přes Vulkan)</span>
-                                        <span class="perf-toggle-desc">Mesa ovladač převádějící OpenGL do Vulkan API.</span>
+                                        <span class="perf-toggle-desc">Mesa ovladač převádějící OpenGL do Vulkan
+                                            API.</span>
                                     </div>
                                 </label>
                             </div>
 
                             <div class="form-group">
                                 <label for="jvmArgsInput" class="setting-section-label">Argumenty Javy (JVM)</label>
-                                <input type="text" id="jvmArgsInput" class="input-text" placeholder="-XX:+UseZGC -XX:+ZGenerational...">
+                                <input type="text" id="jvmArgsInput" class="input-text"
+                                    placeholder="-XX:+UseZGC -XX:+ZGenerational...">
                                 <div class="jvm-args-actions">
                                     <button type="button" class="btn-pill-small" id="btnPresetZgc">
                                         <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
@@ -1171,12 +1166,14 @@
                                         </svg>
                                         Generational ZGC
                                     </button>
-                                    <button type="button" class="btn-pill-small" id="btnPresetG1gc">Standardní G1GC</button>
+                                    <button type="button" class="btn-pill-small" id="btnPresetG1gc">Standardní
+                                        G1GC</button>
                                 </div>
                             </div>
 
                             <div class="form-group" style="margin-top: 12px;">
-                                <label for="customEnvVarsInput" class="setting-section-label">Vlastní proměnné prostředí</label>
+                                <label for="customEnvVarsInput" class="setting-section-label">Vlastní proměnné
+                                    prostředí</label>
                                 <textarea id="customEnvVarsInput" class="input-text" rows="2"
                                     style="font-family: var(--font-mono); font-size: 11px; resize: vertical;"
                                     placeholder="KEY=VALUE (jeden záznam na řádek)"></textarea>
@@ -1874,13 +1871,54 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Mod Loader</label>
-                    <select class="text-input select-input" id="profileSettingsLoaderSelect">
-                        <option value="vanilla">Vanilla</option>
-                        <option value="fabric">Fabric</option>
-                        <option value="forge">Forge</option>
-                        <option value="neoforge">NeoForge</option>
-                    </select>
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="margin-bottom: 0;">Herní zavaděč</label>
+                        <span style="font-size: 11px; color: #21DE00; font-weight: 700;">Fabric = Doporučeno pro MYCHAL
+                            SMP</span>
+                    </div>
+                    <input type="hidden" id="profileSettingsLoaderSelect" value="fabric">
+                    <div class="loader-cards-grid" id="loaderCardsContainer">
+                        <div class="loader-card active" data-loader="fabric">
+                            <div class="loader-card-badge">DOPORUČENO</div>
+                            <div class="loader-card-icon">⚡</div>
+                            <div class="loader-card-title">Fabric</div>
+                            <div class="loader-card-desc">Nejvyšší FPS, Sodium, Iris shadery a plynulost.</div>
+                        </div>
+                        <div class="loader-card" data-loader="vanilla">
+                            <div class="loader-card-icon">🧊</div>
+                            <div class="loader-card-title">Vanilla</div>
+                            <div class="loader-card-desc">Čistý Minecraft bez módů a vylepšení.</div>
+                        </div>
+                        <div class="loader-card" data-loader="neoforge">
+                            <div class="loader-card-icon">⚙️</div>
+                            <div class="loader-card-title">NeoForge</div>
+                            <div class="loader-card-desc">Moderní Forge odnož pro velké modpacky.</div>
+                        </div>
+                        <div class="loader-card" data-loader="forge">
+                            <div class="loader-card-icon">🔨</div>
+                            <div class="loader-card-title">Forge</div>
+                            <div class="loader-card-desc">Tradiční modloader pro starší modpacky.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1-Click Optimizer Action Banner -->
+                <div class="profile-quick-opt-banner" id="profileQuickOptBanner">
+                    <div class="profile-quick-opt-info">
+                        <div class="profile-quick-opt-title">
+                            <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                            <span>Doporučená optimalizace pro MYCHAL SMP</span>
+                        </div>
+                        <div class="profile-quick-opt-desc">Automaticky zapne Fabric, stáhne Sodium, Lithium, Iris,
+                            shadery Complementary Reimagined a nastaví GUI Scale: 2.</div>
+                    </div>
+                    <button type="button" class="mc-btn mc-btn-green" id="btnApplyProfileOptimization"
+                        style="padding: 7px 14px; font-size: 11.5px; white-space: nowrap;">
+                        <span>⚡ Optimalizovat</span>
+                    </button>
                 </div>
 
                 <div class="form-group">
@@ -1970,6 +2008,82 @@
                         Uložit změny
                     </span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Výběr při prvním spuštění (Vanilla vs. Optimalizovaný) -->
+    <div class="launcher-modal-overlay" id="modalFirstLaunchOptimizer" style="display: none;">
+        <div class="launcher-modal-card first-launch-modal-card">
+            <div class="modal-header">
+                <div class="modal-title-box">
+                    <span class="modal-icon"
+                        style="background: rgba(33, 222, 0, 0.15); border: 1px solid rgba(33, 222, 0, 0.35);">
+                        <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                    </span>
+                    <div>
+                        <h3 id="firstLaunchModalTitle" style="font-size: 16px;">Jak chceš spustit Minecraft?</h3>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Zvol výchozí nastavení pro tento
+                            herní profil.</div>
+                    </div>
+                </div>
+                <button class="modal-close-btn" id="btnCloseFirstLaunchModal">
+                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 16px 20px;">
+                <div class="first-launch-options-grid">
+                    <!-- Option 1: Optimalizovaný (Doporučeno) -->
+                    <div class="first-launch-card recommended" id="cardChooseOptimized">
+                        <div class="first-launch-badge">DOPORUČENO (AŽ +300 % FPS)</div>
+                        <div class="first-launch-card-header">
+                            <div class="first-launch-icon">⚡</div>
+                            <div>
+                                <div class="first-launch-name">Optimalizovaný</div>
+                                <div class="first-launch-sub">Pro nejlepší zážitek na MYCHAL SMP</div>
+                            </div>
+                        </div>
+                        <ul class="first-launch-features">
+                            <li><span class="feat-check">✓</span> <strong>Fabric + Sodium & Lithium</strong> (plynulost
+                                bez lagů)</li>
+                            <li><span class="feat-check">✓</span> <strong>Iris Shaders</strong> + shadery
+                                <em>Complementary</em></li>
+                            <li><span class="feat-check">✓</span> <strong>GUI Scale: 2</strong> (optimální měřítko pro
+                                monitory)</li>
+                            <li><span class="feat-check">✓</span> <strong>Uložený server MYCHAL SMP</strong> i tvé
+                                servery</li>
+                        </ul>
+                        <button type="button" class="mc-btn mc-btn-green" id="btnConfirmChooseOptimized"
+                            style="width: 100%; margin-top: 14px; justify-content: center;">
+                            <span>⚡ Spustit s optimalizací</span>
+                        </button>
+                    </div>
+
+                    <!-- Option 2: Čistá Vanilla -->
+                    <div class="first-launch-card" id="cardChooseVanilla">
+                        <div class="first-launch-card-header">
+                            <div class="first-launch-icon">🧊</div>
+                            <div>
+                                <div class="first-launch-name">Čistá Vanilla</div>
+                                <div class="first-launch-sub">Originální Minecraft</div>
+                            </div>
+                        </div>
+                        <ul class="first-launch-features">
+                            <li><span class="feat-check">•</span> Bez modifikací a shaderů</li>
+                            <li><span class="feat-check">•</span> Tovární nastavení hry</li>
+                            <li><span class="feat-check">•</span> Vhodné pro čisté testování</li>
+                        </ul>
+                        <button type="button" class="mc-btn mc-btn-secondary" id="btnConfirmChooseVanilla"
+                            style="width: 100%; margin-top: 14px; justify-content: center;">
+                            <span>Spustit čistou Vanillu</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -2330,13 +2444,17 @@
             </div>
             <div class="modal-body" style="display: flex; flex-direction: column; gap: 12px;">
                 <!-- Export section -->
-                <div style="background: rgba(10, 103, 229, 0.06); border: 1px solid rgba(10, 103, 229, 0.2); border-radius: 8px; padding: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div
+                    style="background: rgba(10, 103, 229, 0.06); border: 1px solid rgba(10, 103, 229, 0.2); border-radius: 8px; padding: 12px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <span style="font-size: 13px; font-weight: 600; color: #fff;">Kód balíčku</span>
                         <span id="profileSeedSummary" style="font-size: 11px; color: #94a3b8;"></span>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" id="profileSeedExportInput" readonly style="flex: 1; background: #0c0e17; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #60a5fa; font-family: monospace; outline: none;" value="Generuji..." />
+                        <input type="text" id="profileSeedExportInput" readonly
+                            style="flex: 1; background: #0c0e17; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #60a5fa; font-family: monospace; outline: none;"
+                            value="Generuji..." />
                         <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnCopyProfileSeed">
                             <span>Kopírovat</span>
                         </button>
@@ -2344,26 +2462,33 @@
                 </div>
 
                 <!-- Import section -->
-                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px;">
+                <div
+                    style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px;">
                     <div style="margin-bottom: 8px;">
                         <span style="font-size: 13px; font-weight: 600; color: #fff;">Importovat balíček</span>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" id="profileSeedImportInput" placeholder="Vlož kód balíčku..." style="flex: 1; background: #0c0e17; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #fff; font-family: monospace; outline: none;" />
+                        <input type="text" id="profileSeedImportInput" placeholder="Vlož kód balíčku..."
+                            style="flex: 1; background: #0c0e17; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #fff; font-family: monospace; outline: none;" />
                         <button type="button" class="mc-btn mc-btn-green btn-sm" id="btnApplyProfileSeed">
                             <span>Stáhnout</span>
                         </button>
                     </div>
                     <div id="profileSeedProgressBox" style="display: none; margin-top: 10px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 5px;">
+                        <div
+                            style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 5px;">
                             <span id="profileSeedProgressText" style="color: #94a3b8;">Stahování...</span>
                             <span id="profileSeedProgressPercent" style="color: #60a5fa; font-weight: 600;">0%</span>
                         </div>
-                        <div style="height: 5px; background: rgba(255, 255, 255, 0.08); border-radius: 999px; overflow: hidden;">
-                            <div id="profileSeedProgressBarFill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #0a67e5, #21DE00); border-radius: 999px; transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);"></div>
+                        <div
+                            style="height: 5px; background: rgba(255, 255, 255, 0.08); border-radius: 999px; overflow: hidden;">
+                            <div id="profileSeedProgressBarFill"
+                                style="width: 0%; height: 100%; background: linear-gradient(90deg, #0a67e5, #21DE00); border-radius: 999px; transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+                            </div>
                         </div>
                     </div>
-                    <div id="profileSeedImportStatus" style="font-size: 11px; color: #94a3b8; margin-top: 6px; min-height: 16px;"></div>
+                    <div id="profileSeedImportStatus"
+                        style="font-size: 11px; color: #94a3b8; margin-top: 6px; min-height: 16px;"></div>
                 </div>
             </div>
             <div class="modal-foot" style="justify-content: flex-end;">

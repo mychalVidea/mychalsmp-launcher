@@ -35,6 +35,12 @@ const {
     disableIllegalMod,
     disableAllIllegalMods
 } = require('./wardenProbeChecker');
+const {
+    ensureOptionsGuiScale,
+    syncServersDat,
+    checkInstalledOptimizationMods,
+    installOptimizationPack
+} = require('./optimizer');
 const { checkForUpdates, applyUpdate, getResourcesDir } = require('./updateService');
 const { analyzeCrash, executeCrashFix } = require('./crashAnalyzer');
 const { scanLauncherCache, cleanLauncherCache } = require('./cleaner');
@@ -851,6 +857,13 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
         baseDir: profile.gameDir || config.baseDir
     };
 
+    // Automatická synchronizace servers.dat (MYCHAL SMP + připnuté) a nastavení guiScale:2
+    try {
+        const targetDir = launchConfig.baseDir || BASE_DIR;
+        ensureOptionsGuiScale(targetDir, 2);
+        syncServersDat(targetDir, config.servers || []);
+    } catch (_) {}
+
     if (serverIp && (serverIp.includes('mychalsmp.xyz') || serverIp.includes('mychalsmp'))) {
         const probeScan = scanProfileForBlacklistedMods(launchConfig.baseDir);
         if (!probeScan.clean) {
@@ -1317,6 +1330,46 @@ ipcMain.handle('download-audio-dlc', async () => {
 
 ipcMain.handle('cancel-audio-dlc', () => {
     return cancelAudioDlcDownload();
+});
+
+ipcMain.handle('apply-profile-optimization', async (event, profileId) => {
+    const config = loadConfig();
+    const activeId = profileId || config.activeProfileId || 'minecraft-26.2';
+    const profile = (config.profiles || []).find(p => p.id === activeId);
+    if (!profile) return { success: false, error: 'Profil nebyl nalezen.' };
+
+    const targetDir = profile.gameDir || config.baseDir || BASE_DIR;
+    const targetVer = profile.version || '26.2';
+
+    // 1. Nastavíme loader na Fabric
+    const updatedProfiles = (config.profiles || []).map(p => {
+        if (p.id === activeId) {
+            return { ...p, loader: 'fabric', optimizedChosen: 'optimized' };
+        }
+        return p;
+    });
+    saveConfig({ profiles: updatedProfiles, loader: 'fabric' });
+
+    // 2. Nastavíme options.txt guiScale: 2 a synchronizujeme servers.dat
+    ensureOptionsGuiScale(targetDir, 2);
+    syncServersDat(targetDir, config.servers || []);
+
+    // 3. Stáhneme základní optimalizační módy
+    const dlRes = await installOptimizationPack(targetDir, targetVer, (p) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('optimization-progress', p);
+        }
+    });
+
+    return { success: true, installedCount: dlRes.installedCount };
+});
+
+ipcMain.handle('check-optimization-status', async (event, profileId) => {
+    const config = loadConfig();
+    const activeId = profileId || config.activeProfileId || 'minecraft-26.2';
+    const profile = (config.profiles || []).find(p => p.id === activeId);
+    const targetDir = (profile && profile.gameDir) ? profile.gameDir : (config.baseDir || BASE_DIR);
+    return checkInstalledOptimizationMods(targetDir);
 });
 
 ipcMain.handle('select-skin-file', async () => {

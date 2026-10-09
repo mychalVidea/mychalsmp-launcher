@@ -50,6 +50,13 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.on('upgrade-progress', (event, data) => callback(data));
     },
 
+    // Profile & Performance Optimization
+    applyProfileOptimization: (profileId) => ipcRenderer.invoke('apply-profile-optimization', profileId),
+    checkOptimizationStatus: (profileId) => ipcRenderer.invoke('check-optimization-status', profileId),
+    onOptimizationProgress: (callback) => {
+        ipcRenderer.on('optimization-progress', (event, data) => callback(data));
+    },
+
     // Event Listeners
     onProgress: (callback) => {
         ipcRenderer.on('launch-progress', (event, data) => callback(data));

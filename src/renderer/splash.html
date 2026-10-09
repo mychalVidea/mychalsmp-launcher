@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="cs">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -43,8 +44,15 @@
         }
 
         @keyframes splashAppear {
-            0% { opacity: 0; transform: scale(0.95); }
-            100% { opacity: 1; transform: scale(1); }
+            0% {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
         }
 
         .splash-glow {
@@ -59,8 +67,15 @@
         }
 
         @keyframes pulseGlow {
-            0% { transform: scale(0.9); opacity: 0.6; }
-            100% { transform: scale(1.15); opacity: 1; }
+            0% {
+                transform: scale(0.9);
+                opacity: 0.6;
+            }
+
+            100% {
+                transform: scale(1.15);
+                opacity: 1;
+            }
         }
 
         .logo-box {
@@ -81,8 +96,15 @@
         }
 
         @keyframes floatLogo {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-4px); }
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-4px);
+            }
         }
 
         .splash-title {
@@ -131,12 +153,23 @@
         }
 
         @keyframes indeterminate {
-            0% { left: -35%; width: 30%; }
-            50% { width: 45%; }
-            100% { left: 100%; width: 20%; }
+            0% {
+                left: -35%;
+                width: 30%;
+            }
+
+            50% {
+                width: 45%;
+            }
+
+            100% {
+                left: 100%;
+                width: 20%;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="splash-card">
         <div class="splash-glow"></div>
@@ -149,5 +182,62 @@
             <div class="progress-line"></div>
         </div>
     </div>
+    <script>
+        const SPLASH_QUOTES = [
+            "Nikdy nekopej přímo pod sebe. Fakt nikdy.",
+            "Herobrine byl z bezpečnostních důvodů odstraněn. Snad.",
+            "Dneska je ideální počasí na hledání netheritu v lávě.",
+            "Tvoji vlci doma čekají. Už tři měsíce sedí na stejném bloku.",
+            "Připoj se na mychalsmp.xyz a ukaž jim svůj nejlepší build.",
+            "Pozor na creepery za zády... tsssss.",
+            "Slyšíš ten divný zvuk? To tě právě obklíčil Warden ve tmě.",
+            "Máš dost jídla? Zlatá mrkev ti v boji zachrání život.",
+            "Legenda praví, že na souřadnicích 0, 0 někdo nechal plný shulker box.",
+            "Beacon zapnut, síla II a regenerace připraveny k akci.",
+            "Když spadneš do lávy, nezapomeň vypít fire resistance.",
+            "Enderman se na tebe dívá. Radši zklop zrak a dívej se do země.",
+            "PVPConnect hlásí: v aréně to právě vře.",
+            "Stavíš základnu? Nezapomeň na tajnou podzemní skrýš.",
+            "Lektvary navařeny, netheritové meče nabroušeny.",
+            "Nether fortress je vždycky přesně na opačné straně, než se vydáš.",
+            "Žádný ping, žádný lag. Jen čistá radost z kostiček.",
+            "Diamanty těží jen ti trpěliví. Nebo ti s Fortune III.",
+            "Dneska neponocuj... počkat, v Minecraftu se noce nepočítají.",
+            "Elytra natankována raketami, letíme nad oblaky!",
+            "Věděl jsi, že vesničané nikdy nespí, když je v okolí zombie?",
+            "Jeden blok sem, jeden blok tam a za hodinu je z toho hrad.",
+            "Kdo neclaimuje, ten pláče. Zabezpeč si své území!",
+            "Generational ZGC čistí paměť rychleji než voda lávu.",
+            "Mychal SMP: Místo, kde i obyčejný dirtový domek má styl.",
+            "Ztracený v jeskyni bez loučí? Klasický páteční večer.",
+            "Netheritový armor ti dodá respekt. A odolnost proti odhození.",
+            "Nepřátelé vidí tvůj ping, ale nevidí tvoje komba.",
+            "Totem nesmrtelnosti v levé ruce je nejlepší pojištění.",
+            "Vesničan nabízí 1 smaragd za 32 emeraldů... chci říct pšenice.",
+            "Optifine je minulost, Sodium a Iris vládnou modernímu světu.",
+            "Postav automatickou farmu dřív, než tě předběhnou sousedi.",
+            "Redstone obvody: 10 % logika, 90 % zkoušení proč to nefunguje.",
+            "Každý správný horník nosí v kapse alespoň jeden kyblík vody.",
+            "Nezapomeň si nastavit spawn v posteli, než skočíš do Endu.",
+            "Když tě honí baby zombie, je čas začít sprintovat.",
+            "Dneska padne drak v Endu. Připrav si luk a šípy.",
+            "Maringotka u řeky nebo megazákladna v horách? Volba je na tobě.",
+            "Wither se právě spawnuje... vezmi nohy na ramena!",
+            "Základní pravidlo přežití: Nikdy nepodceňuj kostlivce s lukem.",
+            "Complementary shadery zapnuty, voda se třpytí a slunce hřeje.",
+            "V inventáři máš plno hlíny a zapomněl jsi doma krumpáč. Klasika.",
+            "Hráč vedle tebe právě vycraftil první netherite meč.",
+            "Zlato v Netheru nesbírej bez zlaté boty, piglini tě sledují.",
+            "Přežít první noc je jen začátek tvého impéria.",
+            "Když dojdou torche, uhlí je vždycky na stropě, kam nedosáhneš.",
+            "Na serveru tě čekají noví přátelé i staří rivalové.",
+            "Klikni na HRÁT a uvidíme se na mychalsmp.xyz!"
+        ];
+        const statusEl = document.getElementById('splashStatus');
+        if (statusEl) {
+            statusEl.textContent = SPLASH_QUOTES[Math.floor(Math.random() * SPLASH_QUOTES.length)];
+        }
+    </script>
 </body>
+
 </html>

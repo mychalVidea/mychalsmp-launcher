@@ -48,6 +48,78 @@ document.addEventListener('DOMContentLoaded', async () => {
         return Math.min(99, Math.max(1, result));
     }
 
+    // ── 50 Unikátních uvítacích & Lore hlášek (MYCHAL SMP & Minecraft) ──────
+    const SERVER_LORE_QUOTES = [
+        "Nikdy nekopej přímo pod sebe. Fakt nikdy.",
+        "Herobrine byl z bezpečnostních důvodů odstraněn. Snad.",
+        "Dneska je ideální počasí na hledání netheritu v lávě.",
+        "Tvoji vlci doma čekají. Už tři měsíce sedí na stejném bloku.",
+        "Připoj se na mychalsmp.xyz a ukaž jim svůj nejlepší build.",
+        "Pozor na creepery za zády... tsssss.",
+        "Slyšíš ten divný zvuk? To tě právě obklíčil Warden ve tmě.",
+        "Máš dost jídla? Zlatá mrkev ti v boji zachrání život.",
+        "Legenda praví, že na souřadnicích 0, 0 někdo nechal plný shulker box.",
+        "Beacon zapnut, síla II a regenerace připraveny k akci.",
+        "Když spadneš do lávy, nezapomeň vypít fire resistance. Pokud ho máš...",
+        "Enderman se na tebe dívá. Radši zklop zrak a dívej se do země.",
+        "PVPConnect hlásí: v aréně to právě vře.",
+        "Stavíš základnu? Nezapomeň na tajnou podzemní skrýš.",
+        "Lektvary navařeny, netheritové meče nabroušeny.",
+        "Nether fortress je vždycky přesně na opačné straně, než se vydáš.",
+        "Žádný ping, žádný lag. Jen čistá radost z kostiček.",
+        "Diamanty těží jen ti trpěliví. Nebo ti s Fortune III.",
+        "Dneska neponocuj... počkat, v Minecraftu se noce nepočítají.",
+        "Elytra natankována raketami, letíme nad oblaky!",
+        "Věděl jsi, že vesničané nikdy nespí, když je v okolí zombie?",
+        "Jeden blok sem, jeden blok tam a za hodinu je z toho hrad.",
+        "Kdo neclaimuje, ten pláče. Zabezpeč si své území!",
+        "Generational ZGC čistí paměť rychleji než voda lávu.",
+        "Mychal SMP: Místo, kde i obyčejný dirtový domek má styl.",
+        "Ztracený v jeskyni bez loučí? Klasický páteční večer.",
+        "Netheritový armor ti dodá respekt. A odolnost proti odhození.",
+        "Nepřátelé vidí tvůj ping, ale nevidí tvoje komba.",
+        "Totem nesmrtelnosti v levé ruce je nejlepší pojištění.",
+        "Vesničan nabízí 1 smaragd za 32 emeraldů... chci říct pšenice.",
+        "Optifine je minulost, Sodium a Iris vládnou modernímu světu.",
+        "Postav automatickou farmu dřív, než tě předběhnou sousedi.",
+        "Redstone obvody: 10 % logika, 90 % zkoušení proč to nefunguje.",
+        "Každý správný horník nosí v kapse alespoň jeden kyblík vody.",
+        "Nezapomeň si nastavit spawn v posteli, než skočíš do Endu.",
+        "Když tě honí baby zombie, je čas začít sprintovat.",
+        "Dneska padne drak v Endu. Připrav si luk a šípy.",
+        "Maringotka u řeky nebo megazákladna v horách? Volba je na tobě.",
+        "Wither se právě spawnuje... vezmi nohy na ramena!",
+        "Základní pravidlo přežití: Nikdy nepodceňuj kostlivce s lukem.",
+        "Complementary shadery zapnuty, voda se třpytí a slunce hřeje.",
+        "V inventáři máš plno hlíny a zapomněl jsi doma krumpáč. Klasika.",
+        "Hráč vedle tebe právě vycraftil první netherite meč.",
+        "Zlato v Netheru nesbírej bez zlaté boty, piglini tě sledují.",
+        "Přežít první noc je jen začátek tvého impéria.",
+        "Když dojdou torche, uhlí je vždycky na stropě, kam nedosáhneš.",
+        "Na serveru tě čekají noví přátelé i staří rivalové.",
+        "Klikni na HRÁT a uvidíme se na mychalsmp.xyz!"
+    ];
+
+    function getRandomHeroQuote() {
+        return SERVER_LORE_QUOTES[Math.floor(Math.random() * SERVER_LORE_QUOTES.length)];
+    }
+
+    function rotateHeroQuote(animate = false) {
+        const subtitleEl = document.getElementById('heroPlayerSubtitle');
+        if (!subtitleEl) return;
+        const quote = getRandomHeroQuote();
+        if (animate) {
+            subtitleEl.style.transition = 'opacity 0.15s ease';
+            subtitleEl.style.opacity = '0';
+            setTimeout(() => {
+                subtitleEl.textContent = quote;
+                subtitleEl.style.opacity = '1';
+            }, 150);
+        } else {
+            subtitleEl.textContent = quote;
+        }
+    }
+
     // Right Column: Server Banner & Tracker
     const serverPlayersCount = document.getElementById('serverPlayersCount');
     const serverPingVal = document.getElementById('serverPingVal');
@@ -176,6 +248,98 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnAddModsShortcut.addEventListener('click', () => switchTab('mods'));
     }
 
+    // Kliknutí na podtitul protočí další náhodnou hlášku
+    const heroSubtitleEl = document.getElementById('heroPlayerSubtitle');
+    if (heroSubtitleEl) {
+        heroSubtitleEl.style.cursor = 'pointer';
+        heroSubtitleEl.title = 'Kliknutím protočíš další hlášku ze serveru';
+        heroSubtitleEl.addEventListener('click', () => rotateHeroQuote(true));
+    }
+
+    // ── Easter Egg: 5x rychlé kliknutí na postavičku na home screenu ─────────
+    let avatarClickCount = 0;
+    let avatarClickTimer = null;
+    const heroAvatarArea = document.querySelector('.stage-avatar-area') || heroSkinCanvas3D;
+
+    function triggerEasterEggCelebration() {
+        showToast('🎉 360° Easter Egg odemčen! (No-scope spin)', 'success');
+
+        // 1. 3D otočka panáčka
+        if (skinViewer && skinViewer.playerObject) {
+            let startRot = skinViewer.playerObject.rotation.y;
+            let startTime = performance.now();
+            let duration = 650;
+            function animateSpin(now) {
+                let p = Math.min(1, (now - startTime) / duration);
+                let ease = 1 - Math.pow(1 - p, 3);
+                skinViewer.playerObject.rotation.y = startRot + (Math.PI * 2 * ease);
+                if (p < 1) requestAnimationFrame(animateSpin);
+            }
+            requestAnimationFrame(animateSpin);
+        }
+
+        // CSS fallback spin
+        if (heroSkinCanvas3D) {
+            heroSkinCanvas3D.classList.remove('spin-easteregg');
+            void heroSkinCanvas3D.offsetWidth;
+            heroSkinCanvas3D.classList.add('spin-easteregg');
+            setTimeout(() => heroSkinCanvas3D.classList.remove('spin-easteregg'), 800);
+        }
+        if (heroSkinImg) {
+            heroSkinImg.classList.remove('spin-easteregg');
+            void heroSkinImg.offsetWidth;
+            heroSkinImg.classList.add('spin-easteregg');
+            setTimeout(() => heroSkinImg.classList.remove('spin-easteregg'), 800);
+        }
+
+        // 2. Částicový efekt (jiskry a hvězdičky)
+        const stageArea = document.querySelector('.stage-avatar-area');
+        if (stageArea) {
+            const colors = ['#0a67e5', '#21DE00', '#ffffff', '#38bdf8'];
+            for (let i = 0; i < 24; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'easteregg-particle';
+                const size = Math.floor(Math.random() * 7) + 5;
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.floor(Math.random() * 80) + 40;
+                const tx = Math.cos(angle) * dist;
+                const ty = Math.sin(angle) * dist;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.background = color;
+                particle.style.boxShadow = `0 0 8px ${color}`;
+                particle.style.top = '50%';
+                particle.style.left = '50%';
+                particle.style.setProperty('--tx', `${tx}px`);
+                particle.style.setProperty('--ty', `${ty}px`);
+
+                stageArea.appendChild(particle);
+                setTimeout(() => particle.remove(), 850);
+            }
+        }
+
+        // 3. Protočí novou vtipnou hlášku
+        rotateHeroQuote(true);
+    }
+
+    if (heroAvatarArea) {
+        heroAvatarArea.style.cursor = 'pointer';
+        heroAvatarArea.addEventListener('click', () => {
+            avatarClickCount++;
+            clearTimeout(avatarClickTimer);
+            avatarClickTimer = setTimeout(() => {
+                avatarClickCount = 0;
+            }, 1600);
+
+            if (avatarClickCount >= 5) {
+                avatarClickCount = 0;
+                triggerEasterEggCelebration();
+            }
+        });
+    }
+
     // ── Server Status & Telemetry ───────────────────────────────────────────
     async function updateNetworkStatus() {
         try {
@@ -208,6 +372,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             currentConfig = await window.api.getConfig();
             installedVersions = await window.api.getInstalledVersions();
+            rotateHeroQuote(false);
 
             // Automatické pročištění starého defaultního canvas pláště z konfigurace
             if (currentConfig && currentConfig.customCapePath && (
@@ -216,7 +381,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentConfig.customCapePath === 'none'
             )) {
                 currentConfig.customCapePath = null;
-                window.api.saveOfflineSkin({ capePath: null }).catch(() => {});
+                window.api.saveOfflineSkin({ capePath: null }).catch(() => { });
             }
 
             // Profile info
@@ -1484,7 +1649,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             appendLog('[LAUNCHER] Zastavuji herní proces na přání uživatele...');
             try {
                 await window.api.killGame();
-            } catch (e) {}
+            } catch (e) { }
             resetPlayState();
             refreshVersionStatuses();
         });
@@ -1557,6 +1722,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const targetPid = profileId || currentConfig.activeProfileId || 'minecraft-26.2';
         const targetProf = (currentConfig.profiles || []).find(x => x.id === targetPid);
+
+        // Pokud pro tento profil ještě nebyla vybrána varianta (Vanilla vs Optimalizovaný), zeptáme se:
+        if (targetProf && !targetProf.optimizedChosen) {
+            isLaunching = false;
+            if (sidebarPlayBtn) sidebarPlayBtn.style.opacity = '1';
+            promptFirstLaunchOptimizer(targetProf, () => {
+                startLaunch(targetPid, serverIp);
+            });
+            return;
+        }
+
         const isAlreadyInstalled = targetProf && Array.isArray(installedVersions) && installedVersions.includes(targetProf.version);
 
         if (progressContainer) {
@@ -1632,6 +1808,61 @@ document.addEventListener('DOMContentLoaded', async () => {
             appendLog(`[CHYBA SPOUŠTĚNÍ] ${err.message}`);
             alert(`Nepodařilo se spustit Minecraft:\n${err.message}`);
             resetPlayState();
+        }
+    }
+
+    // ── First Launch Modal Handler ───────────────────────────────────────────
+    function promptFirstLaunchOptimizer(profile, onComplete) {
+        const modal = document.getElementById('modalFirstLaunchOptimizer');
+        const title = document.getElementById('firstLaunchModalTitle');
+        const btnClose = document.getElementById('btnCloseFirstLaunchModal');
+        const btnOpt = document.getElementById('btnConfirmChooseOptimized');
+        const btnVan = document.getElementById('btnConfirmChooseVanilla');
+        if (!modal) {
+            if (onComplete) onComplete();
+            return;
+        }
+
+        if (title) title.textContent = `Jak chceš spustit ${profile.name || 'Minecraft'}?`;
+        modal.style.display = 'flex';
+
+        function cleanup() {
+            modal.style.display = 'none';
+            if (btnOpt) btnOpt.onclick = null;
+            if (btnVan) btnVan.onclick = null;
+            if (btnClose) btnClose.onclick = null;
+        }
+
+        if (btnClose) {
+            btnClose.onclick = () => cleanup();
+        }
+
+        if (btnOpt) {
+            btnOpt.onclick = async () => {
+                btnOpt.disabled = true;
+                btnOpt.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Optimalizuji...</span>';
+                profile.optimizedChosen = 'optimized';
+                profile.loader = 'fabric';
+                try {
+                    await window.api.applyProfileOptimization(profile.id);
+                } catch (_) { }
+                await window.api.saveConfig({ profiles: currentConfig.profiles, loader: 'fabric' });
+                showToast('Aplikována doporučená optimalizace pro MYCHAL SMP!', 'success');
+                btnOpt.disabled = false;
+                btnOpt.innerHTML = '<span>⚡ Spustit s optimalizací</span>';
+                cleanup();
+                if (onComplete) onComplete();
+            };
+        }
+
+        if (btnVan) {
+            btnVan.onclick = async () => {
+                profile.optimizedChosen = 'vanilla';
+                profile.loader = 'vanilla';
+                await window.api.saveConfig({ profiles: currentConfig.profiles, loader: 'vanilla' });
+                cleanup();
+                if (onComplete) onComplete();
+            };
         }
     }
 
@@ -1856,8 +2087,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (res.failedCount > 0) {
                             profileSeedImportStatus.innerHTML = `<span style="color: #f59e0b;">Staženo: ${res.installedCount}, selhalo: ${res.failedCount}</span>`;
                         } else {
-                            profileSeedImportStatus.innerHTML = '<span style="color: #21DE00;">Všechny položky byly nainstalovány</span>';
+                            profileSeedImportStatus.innerHTML = '<span style="color: #21DE00;">Všechny mody byly nainstalovány</span>';
+                            setTimeout(() => {
+                                closeProfileSeedModal();
+                            }, 3000);
                         }
+                    } else if (!res.failedCount) {
+                        setTimeout(() => {
+                            closeProfileSeedModal();
+                        }, 3000);
                     }
                     // Refresh mods & packs list in UI
                     loadProfileMods(profId);
@@ -1916,7 +2154,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (pRes && pRes.success) {
                         currentProfileModsList = pRes.mods || [];
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
             if (lastLoadedCatalogMods && lastLoadedCatalogMods.length > 0) {
                 renderModCards(lastLoadedCatalogMods);
@@ -2081,10 +2319,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <div class="mod-row-left">
                     <div class="mod-avatar-wrapper">
                         ${m.iconDataUrl
-                            ? `<img src="${m.iconDataUrl}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                    ? `<img src="${m.iconDataUrl}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
                                <div class="mod-avatar-fallback" style="display:none;">${escapeHtml(initial)}</div>`
-                            : `<div class="mod-avatar-fallback">${escapeHtml(initial)}</div>`
-                        }
+                    : `<div class="mod-avatar-fallback">${escapeHtml(initial)}</div>`
+                }
                     </div>
                     <div class="mod-row-info">
                         <div class="mod-row-title-line">
@@ -2468,7 +2706,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (pRes && pRes.success) {
                         currentProfileModsList = pRes.mods || [];
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
 
             const mods = await window.api.searchModrinth(
@@ -4929,7 +5167,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (titleEl) titleEl.textContent = `Nastavení profilu: ${profile.name}`;
         if (nameInput) nameInput.value = profile.name;
-        if (loaderSelect) loaderSelect.value = profile.loader || 'vanilla';
+
+        const curLoader = profile.loader || 'fabric';
+        if (loaderSelect) loaderSelect.value = curLoader;
+
+        // Synchronizace vizuálních karet loaderů
+        document.querySelectorAll('#loaderCardsContainer .loader-card').forEach(card => {
+            if (card.dataset.loader === curLoader) {
+                card.classList.add('active');
+            } else {
+                card.classList.remove('active');
+            }
+        });
+
         if (profileRamSlider && profileRamValueBadge) {
             profileRamSlider.value = profile.ramMax || currentConfig.ramMax || 4;
             profileRamValueBadge.textContent = `${profileRamSlider.value} GB`;
@@ -4940,6 +5190,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         if (modalProfileSettings) modalProfileSettings.style.display = 'flex';
+    }
+
+    // Interaktivní klikání na karty loaderu v nastavení profilu
+    document.querySelectorAll('#loaderCardsContainer .loader-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const ldr = card.dataset.loader;
+            document.querySelectorAll('#loaderCardsContainer .loader-card').forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+            const loaderSelect = document.getElementById('profileSettingsLoaderSelect');
+            if (loaderSelect) loaderSelect.value = ldr;
+        });
+    });
+
+    // Tlačítko pro aplikaci doporučené optimalizace v nastavení profilu
+    const btnApplyOpt = document.getElementById('btnApplyProfileOptimization');
+    if (btnApplyOpt) {
+        btnApplyOpt.addEventListener('click', async () => {
+            if (!activeSettingsProfileId) return;
+            btnApplyOpt.disabled = true;
+            btnApplyOpt.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Optimalizuji...</span>';
+            try {
+                const res = await window.api.applyProfileOptimization(activeSettingsProfileId);
+                if (res && res.success) {
+                    showToast('Profil byl optimalizován (Fabric, Sodium, Iris, GUI scale 2)!', 'success');
+                    const loaderSelect = document.getElementById('profileSettingsLoaderSelect');
+                    if (loaderSelect) loaderSelect.value = 'fabric';
+                    document.querySelectorAll('#loaderCardsContainer .loader-card').forEach(c => {
+                        if (c.dataset.loader === 'fabric') c.classList.add('active');
+                        else c.classList.remove('active');
+                    });
+                } else {
+                    showToast(res?.error || 'Optimalizace selhala.', 'error');
+                }
+            } catch (e) {
+                showToast('Chyba: ' + e.message, 'error');
+            } finally {
+                btnApplyOpt.disabled = false;
+                btnApplyOpt.innerHTML = '<span>⚡ Optimalizovat</span>';
+                await loadConfiguration();
+                renderProfilesList();
+            }
+        });
     }
 
     function closeProfileSettingsModal() {
@@ -4966,7 +5258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const loaderSelect = document.getElementById('profileSettingsLoaderSelect');
             const newName = nameInput ? nameInput.value.trim() : '';
             const newRam = profileRamSlider ? parseInt(profileRamSlider.value, 10) : 4;
-            const newLoader = loaderSelect ? loaderSelect.value : 'vanilla';
+            const newLoader = loaderSelect ? loaderSelect.value : 'fabric';
 
             await window.api.updateProfileSettings(activeSettingsProfileId, {
                 name: newName || 'Profil',
@@ -5042,7 +5334,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!container) return;
         const toast = document.createElement('div');
         toast.className = `toast-message ${type === 'error' ? 'toast-error' : type === 'info' ? 'toast-info' : ''}`;
-        
+
         let iconSvg = '';
         if (type === 'error') {
             iconSvg = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';

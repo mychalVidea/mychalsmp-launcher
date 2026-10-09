@@ -905,6 +905,35 @@ body {
     margin-top: 14px;
 }
 
+.dash-bottom-actions .mc-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 6px;
+    gap: 6px;
+    white-space: nowrap;
+    text-align: center;
+    min-height: 58px;
+}
+
+.dash-bottom-actions .mc-btn svg {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    vertical-align: unset;
+    flex-shrink: 0;
+}
+
+.dash-bottom-actions .mc-btn .action-btn-label {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    line-height: 1.2;
+    letter-spacing: 0.2px;
+}
+
 /* ── Right Column: Servers & Tracker ──────────────────────────────────── */
 .dash-right {
     display: flex;
@@ -1100,15 +1129,18 @@ body {
     color: var(--brand-green);
     font-size: 13px;
     font-weight: 700;
-    padding: 8px 16px;
+    padding: 0 16px;
+    height: 32px;
     border-radius: 6px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     transition: var(--transition);
     user-select: none;
     line-height: 1;
+    box-sizing: border-box;
 }
 
 .btn-quick-join:hover {
@@ -1124,7 +1156,8 @@ body {
 }
 
 .btn-quick-join--lg {
-    padding: 10px 22px;
+    padding: 0 22px;
+    height: 38px;
     font-size: 14px;
 }
 
@@ -1132,22 +1165,35 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .btn-del-server {
     background: rgba(239, 68, 68, 0.08);
     border: 1px solid rgba(239, 68, 68, 0.2);
     color: #ef4444;
-    font-size: 14px;
     cursor: pointer;
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    opacity: 0.8;
+    padding: 0;
+    margin: 0;
+    line-height: 0;
+    box-sizing: border-box;
     transition: var(--transition);
+}
+
+.btn-del-server svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+    margin: auto;
+    stroke-width: 2.2;
 }
 
 .btn-del-server:hover {
@@ -1161,6 +1207,24 @@ body {
 .btn-del-server--lg {
     width: 38px;
     height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+}
+
+/* Sidebar tracked server item: show delete button only on hover */
+.tracked-server-item .btn-del-server {
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.tracked-server-item:hover .btn-del-server {
+    display: inline-flex;
+    opacity: 0.9;
+}
+
+.tracked-server-item:hover .btn-del-server:hover {
+    opacity: 1;
 }
 
 .server-offline-cross-badge {
@@ -1283,6 +1347,49 @@ body {
     border-radius: 3px;
     box-shadow: 0 0 10px rgba(33, 222, 0, 0.4);
     transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+/* ── Forward Motion Optical Shimmer (Illusion of Velocity) ────────── */
+.progress-bar,
+.update-progress-fill,
+.v-progress-fill,
+.boot-progress-fill,
+#profileSeedProgressBarFill {
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar::after,
+.update-progress-fill::after,
+.v-progress-fill::after,
+.boot-progress-fill::after,
+#profileSeedProgressBarFill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 80%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.45) 50%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    border-radius: inherit;
+    animation: forwardShimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    pointer-events: none;
+}
+
+@keyframes forwardShimmer {
+    0% {
+        transform: translateX(0%);
+    }
+    100% {
+        transform: translateX(300%);
+    }
 }
 
 /* ── TAB: VERSIONS & INSTALLERS ───────────────────────────────────────── */
@@ -5042,4 +5149,253 @@ input[type="radio"]:checked::after {
     color: #fff;
     margin-bottom: 6px;
 }
+
+/* ── Modern Profile Settings Loader Cards ────────────────────────────── */
+.loader-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.loader-card {
+    background: #12141f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 12px 10px;
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+}
+
+.loader-card:hover {
+    background: #181b2a;
+    border-color: rgba(10, 103, 229, 0.45);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.loader-card.active {
+    background: rgba(33, 222, 0, 0.07);
+    border-color: #21DE00;
+    box-shadow: 0 0 16px rgba(33, 222, 0, 0.22);
+}
+
+.loader-card-badge {
+    position: absolute;
+    top: -8px;
+    right: 8px;
+    background: #21DE00;
+    color: #000;
+    font-size: 8.5px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 999px;
+    letter-spacing: 0.4px;
+}
+
+.loader-card-icon {
+    font-size: 18px;
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+.loader-card-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+}
+
+.loader-card.active .loader-card-title {
+    color: #21DE00;
+}
+
+.loader-card-desc {
+    font-size: 10px;
+    color: #94a3b8;
+    line-height: 1.3;
+}
+
+/* ── 1-Click Optimizer Action Banner ─────────────────────────────────── */
+.profile-quick-opt-banner {
+    background: rgba(33, 222, 0, 0.06);
+    border: 1px solid rgba(33, 222, 0, 0.25);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.profile-quick-opt-info {
+    flex: 1;
+}
+
+.profile-quick-opt-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    color: #21DE00;
+    font-size: 12px;
+    margin-bottom: 3px;
+}
+
+.profile-quick-opt-desc {
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.35;
+}
+
+/* ── First Launch Modal & Cards ──────────────────────────────────────── */
+.first-launch-modal-card {
+    max-width: 560px;
+}
+
+.first-launch-options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 4px;
+}
+
+.first-launch-card {
+    background: #12141f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.first-launch-card:hover {
+    background: #181b2a;
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+.first-launch-card.recommended {
+    background: linear-gradient(180deg, rgba(33, 222, 0, 0.08) 0%, rgba(18, 20, 31, 0.95) 100%);
+    border: 1px solid rgba(33, 222, 0, 0.45);
+    box-shadow: 0 0 24px rgba(33, 222, 0, 0.15);
+}
+
+.first-launch-card.recommended:hover {
+    box-shadow: 0 0 30px rgba(33, 222, 0, 0.28);
+    border-color: #21DE00;
+}
+
+.first-launch-badge {
+    position: absolute;
+    top: -10px;
+    right: 12px;
+    background: #21DE00;
+    color: #000;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(33, 222, 0, 0.4);
+}
+
+.first-launch-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.first-launch-icon {
+    font-size: 22px;
+    line-height: 1;
+}
+
+.first-launch-name {
+    font-size: 15px;
+    font-weight: 800;
+    color: #fff;
+}
+
+.first-launch-card.recommended .first-launch-name {
+    color: #21DE00;
+}
+
+.first-launch-sub {
+    font-size: 10.5px;
+    color: #94a3b8;
+}
+
+.first-launch-features {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    font-size: 11px;
+    color: #cbd5e1;
+    line-height: 1.35;
+}
+
+.first-launch-features li {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.feat-check {
+    color: #21DE00;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+
+/* ── Easter Egg Animation & Particles ─────────────────────────────────── */
+@keyframes heroSpinEasterEgg {
+    0% {
+        transform: scale(1) rotate(0deg);
+    }
+    30% {
+        transform: scale(1.18) rotate(140deg);
+    }
+    70% {
+        transform: scale(1.18) rotate(260deg);
+    }
+    100% {
+        transform: scale(1) rotate(360deg);
+    }
+}
+
+.spin-easteregg {
+    animation: heroSpinEasterEgg 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.easteregg-particle {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 50%;
+    z-index: 10;
+    animation: particleFly 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes particleFly {
+    0% {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(var(--tx), var(--ty)) scale(0);
+    }
+}
+
 
