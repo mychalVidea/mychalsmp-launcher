@@ -237,20 +237,23 @@ Handler.prototype.getJar = async function() {
     const targetJsonPath = path.join(this.options.directory, `${this.options.version.number}.json`);
     const expectedSha1 = this.version && this.version.downloads && this.version.downloads.client ? this.version.downloads.client.sha1 : null;
 
-    // 1. Zkontrolovat, zda cílový client jar již existuje a je aktuální (ověření SHA-1 hashe od Microsoftu/Mojangu)
+    // 1. Zkontrolovat, zda cílový client jar již existuje a je 100% platný (ověření SHA-1 hashe a ZIP hlavičky)
     if (fs.existsSync(targetJarPath)) {
-        let isUpToDate = true;
-        if (expectedSha1) {
+        let isUpToDate = isJarFileValid(targetJarPath);
+        if (isUpToDate && expectedSha1) {
             const actualSha1 = getFileSha1(targetJarPath);
             if (actualSha1 && actualSha1 !== expectedSha1) {
                 isUpToDate = false;
-                this.client.emit('debug', `[AKTUALIZACE]: Detekován nový patch / revize verze ${versionNumber} od Microsoftu/Mojangu (lokální SHA-1 ${actualSha1} neodpovídá ${expectedSha1}). Stahuji aktualizovaný klient jar...`);
+                this.client.emit('debug', `[AKTUALIZACE]: Lokální hash ${actualSha1} neodpovídá ${expectedSha1}. Stahuji aktualizovaný klient jar...`);
             }
         }
         if (isUpToDate) {
             try { fs.writeFileSync(targetJsonPath, JSON.stringify(this.version, null, 4)); } catch (e) {}
-            this.client.emit('debug', `[OPTIMALIZACE]: Verze ${jarName} již existuje na disku a je aktuální, stahování přeskočeno.`);
+            this.client.emit('debug', `[OPTIMALIZACE]: Verze ${jarName} již existuje na disku a je platná.`);
             return;
+        } else {
+            this.client.emit('debug', `[OPRAVA]: Soubor ${jarName} je poškozený nebo neúplný. Mažu a stahuji znovu...`);
+            try { fs.unlinkSync(targetJarPath); } catch (e) {}
         }
     }
 
@@ -258,30 +261,56 @@ Handler.prototype.getJar = async function() {
     const candidates = getExistingMinecraftBaseDirs();
     let copied = false;
     for (const cand of candidates) {
-        const candJar = path.join(cand, 'versions', versionNumber, `${versionNumber}.jar`);
-        if (fs.existsSync(candJar)) {
-            // Ověříme, zda i kandidát odpovídá novému Mojang hashi
-            if (expectedSha1) {
-                const candSha1 = getFileSha1(candJar);
-                if (candSha1 !== expectedSha1) continue;
+        const candJars = [
+            path.join(cand, 'versions', versionNumber, `${versionNumber}.jar`),
+            path.join(cand, 'versions', this.options.version.number, `${this.options.version.number}.jar`)
+        ];
+        for (const candJar of candJars) {
+            if (fs.existsSync(candJar) && isJarFileValid(candJar)) {
+                if (expectedSha1) {
+                    const candSha1 = getFileSha1(candJar);
+                    if (candSha1 && candSha1 !== expectedSha1) continue;
+                }
+                try {
+                    fs.mkdirSync(this.options.directory, { recursive: true });
+                    fs.copyFileSync(candJar, targetJarPath);
+                    if (isJarFileValid(targetJarPath)) {
+                        copied = true;
+                        this.client.emit('debug', `[OPTIMALIZACE]: ⚡ Bleskově převzat platný herní klient ${jarName} z "${candJar}"!`);
+                        break;
+                    } else {
+                        try { fs.unlinkSync(targetJarPath); } catch (e) {}
+                    }
+                } catch (e) {}
             }
-            try {
-                fs.mkdirSync(this.options.directory, { recursive: true });
-                fs.copyFileSync(candJar, targetJarPath);
-                copied = true;
-                this.client.emit('debug', `[OPTIMALIZACE]: ⚡ Bleskově převzat existující herní klient ${jarName} z "${candJar}"!`);
-                break;
-            } catch (e) {}
         }
+        if (copied) break;
     }
 
     // 3. Pokud není na disku nebo neodpovídá novému patchi, stáhnout z oficiálního Mojang serveru
     if (!copied) {
-        if (this.version && this.version.downloads && this.version.downloads.client && this.version.downloads.client.url) {
-            await this.downloadAsync(this.version.downloads.client.url, this.options.directory, jarName, true, 'version-jar');
+        let clientUrl = this.version?.downloads?.client?.url;
+        if (!clientUrl && this.options.version.number) {
+            try {
+                const vJson = await getOrFetchVanillaVersionJson(this.options.root, this.options.version.number);
+                clientUrl = vJson?.downloads?.client?.url;
+            } catch (e) {}
+        }
+
+        if (clientUrl) {
+            await this.downloadAsync(clientUrl, this.options.directory, jarName, true, 'version-jar');
         } else {
             const baseJar = path.join(this.options.root, 'versions', this.options.version.number, `${this.options.version.number}.jar`);
-            if (fs.existsSync(baseJar)) {
+            if (fs.existsSync(baseJar) && isJarFileValid(baseJar)) {
+                fs.mkdirSync(this.options.directory, { recursive: true });
+                try { fs.copyFileSync(baseJar, targetJarPath); } catch (e) {}
+            }
+        }
+
+        // Pokud ani po stažení není platný a máme vanilla base jar
+        if (!isJarFileValid(targetJarPath)) {
+            const baseJar = path.join(this.options.root, 'versions', this.options.version.number, `${this.options.version.number}.jar`);
+            if (fs.existsSync(baseJar) && isJarFileValid(baseJar)) {
                 fs.mkdirSync(this.options.directory, { recursive: true });
                 try { fs.copyFileSync(baseJar, targetJarPath); } catch (e) {}
             }
@@ -1410,10 +1439,13 @@ async function ensureFabricProfile(centralRootDir, targetVersion, onLog = consol
         fs.writeFileSync(path.join(targetDir, `${fabricId}.json`), JSON.stringify(mergedProfile, null, 2), 'utf8');
         fs.writeFileSync(path.join(targetDir, `${targetVersion}.json`), JSON.stringify(mergedProfile, null, 2), 'utf8');
 
-        // Zkopírovat vanilla client.jar do složky fabric profilu
+        // Zkopírovat vanilla client.jar do složky fabric profilu (pouze pokud je vanilkový jar 100% platný)
         const vanillaJar = path.join(versionsDir, targetVersion, `${targetVersion}.jar`);
         const fabricJar = path.join(targetDir, `${fabricId}.jar`);
-        if (fs.existsSync(vanillaJar) && !fs.existsSync(fabricJar)) {
+        if (fs.existsSync(fabricJar) && !isJarFileValid(fabricJar)) {
+            try { fs.unlinkSync(fabricJar); } catch (e) {}
+        }
+        if (fs.existsSync(vanillaJar) && isJarFileValid(vanillaJar) && !fs.existsSync(fabricJar)) {
             try { fs.copyFileSync(vanillaJar, fabricJar); } catch (e) {}
         }
 
@@ -1561,6 +1593,19 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
                 }
             } catch (e) {}
         }
+    }
+
+    // Automatická kontrola a oprava integrity version JAR před spuštěním
+    const activeVersionFolder = versionOpts.custom || versionOpts.number;
+    const clientJarPath = path.join(BASE_DIR, 'versions', activeVersionFolder, `${activeVersionFolder}.jar`);
+    if (fs.existsSync(clientJarPath) && !isJarFileValid(clientJarPath)) {
+        onLog(`[OPRAVA]: Detekován poškozený soubor klienta ${clientJarPath}. Odstraňuji pro čisté znovustažení...`);
+        try { fs.unlinkSync(clientJarPath); } catch (e) {}
+    }
+    const vanillaClientJar = path.join(BASE_DIR, 'versions', versionOpts.number, `${versionOpts.number}.jar`);
+    if (fs.existsSync(vanillaClientJar) && !isJarFileValid(vanillaClientJar)) {
+        onLog(`[OPRAVA]: Detekován poškozený soubor jádra ${vanillaClientJar}. Odstraňuji pro čisté znovustažení...`);
+        try { fs.unlinkSync(vanillaClientJar); } catch (e) {}
     }
 
     const opts = {
