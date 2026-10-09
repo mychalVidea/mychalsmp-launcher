@@ -323,6 +323,79 @@ body {
     -webkit-app-region: no-drag;
 }
 
+/* ── Global Download / Launch Status Chip (Titlebar) ──────────────────── */
+.download-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(10, 103, 229, 0.16);
+    border: 1px solid rgba(10, 103, 229, 0.38);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    color: #e2e8f0;
+    animation: fadeIn 0.3s ease;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.download-status-chip:hover {
+    background: rgba(10, 103, 229, 0.26);
+    border-color: rgba(10, 103, 229, 0.55);
+}
+
+.download-chip-spinner {
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+}
+
+.download-chip-label {
+    font-weight: 600;
+    color: #f1f5f9;
+    font-size: 11.5px;
+    white-space: nowrap;
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.download-chip-track {
+    width: 52px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.download-chip-fill {
+    height: 100%;
+    width: 0%;
+    background: #0a67e5;
+    border-radius: 999px;
+    transition: width 0.2s ease;
+}
+
+.btn-cancel-chip {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 2px;
+    margin-left: 2px;
+    display: flex;
+    align-items: center;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.btn-cancel-chip:hover {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.2);
+}
+
 .btn-update-chip:hover {
     background: #0852b8;
     transform: translateY(-1px);
@@ -735,35 +808,64 @@ body {
 .stage-subtitle {
     font-size: 12px;
     color: var(--brand-gray);
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     line-height: 1.4;
 }
 
-.version-pills-row {
+.hero-live-stats {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
 }
 
-.v-pill {
+.hero-stat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    background: rgba(18, 20, 31, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
+    font-size: 11.5px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.hero-stat-chip:hover {
+    background: rgba(24, 27, 42, 0.9);
+    border-color: rgba(255, 255, 255, 0.16);
+    transform: translateY(-1px);
+}
+
+.hero-stat-label {
+    color: #94a3b8;
+    font-weight: 500;
     font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 6px;
-    background: var(--surface2);
-    border: 1px solid var(--surface-border);
-    color: var(--brand-gray);
 }
 
-.v-pill.active {
-    background: rgba(10, 103, 229, 0.2);
-    border-color: var(--brand-blue);
-    color: #fff;
+.hero-stat-val {
+    color: #f1f5f9;
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.2px;
 }
 
-.v-pill-future {
-    opacity: 0.6;
-    border-style: dashed;
+.hero-stat-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #21DE00;
+    box-shadow: 0 0 6px rgba(33, 222, 0, 0.7);
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.hero-stat-dot.offline {
+    background: #94a3b8;
+    box-shadow: none;
 }
 
 /* ── Profiles Section ─────────────────────────────────────────────────── */
@@ -865,10 +967,7 @@ body {
 }
 
 .p-badge {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
+    display: none !important;
 }
 
 .p-recommended {
@@ -1285,12 +1384,14 @@ body {
 .progress-container {
     display: none;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 14px;
-    background: #141724;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: var(--radius-md);
-    padding: 12px 16px;
+    gap: 10px;
+    margin: 12px 0 16px 0;
+    background: #12141f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px 18px;
+    animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .progress-info {
@@ -5255,110 +5356,187 @@ input[type="radio"]:checked::after {
     line-height: 1.35;
 }
 
-/* ── First Launch Modal & Cards ──────────────────────────────────────── */
+/* ── First Launch Modal & Cards (Minimalist & Clean) ──────────────────── */
 .first-launch-modal-card {
-    max-width: 560px;
+    max-width: 660px;
+    width: 92%;
+}
+
+.first-launch-modal-subtitle {
+    font-size: 11.5px;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+.first-launch-modal-body {
+    padding: 20px 24px 24px;
 }
 
 .first-launch-options-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 14px;
-    margin-top: 4px;
+    gap: 16px;
 }
 
 .first-launch-card {
     background: #12141f;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
-    padding: 16px;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    position: relative;
+    min-height: 250px;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .first-launch-card:hover {
     background: #181b2a;
-    border-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.16);
     transform: translateY(-2px);
 }
 
 .first-launch-card.recommended {
-    background: linear-gradient(180deg, rgba(33, 222, 0, 0.08) 0%, rgba(18, 20, 31, 0.95) 100%);
-    border: 1px solid rgba(33, 222, 0, 0.45);
-    box-shadow: 0 0 24px rgba(33, 222, 0, 0.15);
+    background: #12141f;
+    border: 1px solid rgba(33, 222, 0, 0.28);
 }
 
 .first-launch-card.recommended:hover {
-    box-shadow: 0 0 30px rgba(33, 222, 0, 0.28);
-    border-color: #21DE00;
+    background: #181b2a;
+    border-color: rgba(33, 222, 0, 0.45);
 }
 
-.first-launch-badge {
-    position: absolute;
-    top: -10px;
-    right: 12px;
-    background: #21DE00;
-    color: #000;
-    font-size: 9px;
-    font-weight: 800;
-    padding: 2px 8px;
-    border-radius: 999px;
-    letter-spacing: 0.5px;
-    box-shadow: 0 2px 8px rgba(33, 222, 0, 0.4);
+.first-launch-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
 }
 
 .first-launch-card-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 12px;
 }
 
-.first-launch-icon {
-    font-size: 22px;
-    line-height: 1;
+.first-launch-icon-box {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.first-launch-card.recommended .first-launch-icon-box {
+    background: rgba(33, 222, 0, 0.08);
+    border-color: rgba(33, 222, 0, 0.2);
+}
+
+.first-launch-chip {
+    background: rgba(33, 222, 0, 0.12);
+    border: 1px solid rgba(33, 222, 0, 0.25);
+    color: #21DE00;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+    line-height: 1.4;
 }
 
 .first-launch-name {
-    font-size: 15px;
-    font-weight: 800;
+    font-size: 14.5px;
+    font-weight: 700;
     color: #fff;
-}
-
-.first-launch-card.recommended .first-launch-name {
-    color: #21DE00;
+    line-height: 1.25;
 }
 
 .first-launch-sub {
-    font-size: 10.5px;
+    font-size: 11px;
     color: #94a3b8;
+    margin-top: 2px;
 }
 
 .first-launch-features {
     list-style: none;
     padding: 0;
-    margin: 0;
+    margin: 0 0 20px 0;
     display: flex;
     flex-direction: column;
-    gap: 7px;
-    font-size: 11px;
-    color: #cbd5e1;
-    line-height: 1.35;
+    gap: 9px;
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.45;
 }
 
 .first-launch-features li {
     display: flex;
-    align-items: flex-start;
-    gap: 6px;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.first-launch-features strong {
+    color: #e2e8f0;
+    font-weight: 600;
 }
 
 .feat-check {
     color: #21DE00;
-    font-weight: 800;
+    font-weight: 700;
+    font-size: 11px;
     flex-shrink: 0;
+}
+
+.feat-dot {
+    color: #64748b;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.first-launch-card-bottom {
+    margin-top: auto;
+}
+
+.first-launch-card-bottom .mc-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 9px 14px;
+    font-size: 12.5px;
+}
+
+.first-launch-progress-box {
+    margin-top: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.first-launch-progress-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10.5px;
+    margin-bottom: 5px;
+}
+
+#firstLaunchOptStatusText {
+    color: #94a3b8;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    margin-right: 8px;
+}
+
+#firstLaunchOptPercentText {
+    color: #21DE00;
+    font-weight: 700;
 }
 
 /* ── Easter Egg Animation & Particles ─────────────────────────────────── */

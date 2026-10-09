@@ -22,6 +22,7 @@ const DEFAULT_PROFILES = [
         name: 'Minecraft 26.3',
         version: '26.3',
         loader: 'fabric',
+        optimizedChosen: 'optimized',
         desc: 'Minecraft 26.3',
         icon: 'latest',
         lastPlayed: null,
@@ -32,6 +33,7 @@ const DEFAULT_PROFILES = [
         name: 'Minecraft 26.2',
         version: '26.2',
         loader: 'fabric',
+        optimizedChosen: 'optimized',
         desc: 'Minecraft 26.2',
         icon: 'sword',
         lastPlayed: null,
@@ -42,6 +44,7 @@ const DEFAULT_PROFILES = [
         name: 'Minecraft 26.1.2',
         version: '26.1.2',
         loader: 'fabric',
+        optimizedChosen: 'optimized',
         desc: 'Minecraft 26.1.2',
         icon: 'chest',
         lastPlayed: null,
@@ -152,6 +155,9 @@ function loadConfig() {
                     }
                     if (!p.loader) {
                         p.loader = 'vanilla';
+                    }
+                    if (!p.optimizedChosen) {
+                        p.optimizedChosen = p.loader === 'fabric' ? 'optimized' : 'vanilla';
                     }
                     if (p.name && (p.name.includes('Beacon') || p.name.includes('MYCHAL SMP') || p.name.startsWith('Vanilla ') || p.name.toLowerCase().includes('vanilla'))) {
                         p.name = `Minecraft ${p.version}`;

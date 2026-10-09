@@ -1743,34 +1743,74 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     launcher.on('debug', (e) => onLog(`[DEBUG] ${e}`));
     launcher.on('data', (e) => onLog(`[GAME] ${e}`));
 
-    launcher.on('progress', (e) => {
-        const percent = Math.round((e.task / e.total) * 100) || 0;
-        let text;
-        if (e.type === 'assets') {
-            text = percent >= 100 ? 'Herní data připravena' : `Načítání hry... ${percent}%`;
-        } else if (e.type === 'classes' || e.type === 'classes-custom' || e.type === 'classes-maven-custom') {
-            text = percent >= 100 ? 'Knihovny připraveny' : `Příprava herních knihoven... ${percent}%`;
-        } else {
-            text = `Načítání hry... ${percent}%`;
+    // ── Unified Launch & Download Progress Aggregator ───────────────────────
+    // Spojuje všechny fáze (stahování jádra, knihoven, assetů a start) do jednoho
+    // plynulého celku 0 % -> 100 %. Zamezuje trhání a skákání procent zpět při stahování tisíců mini-souborů.
+    let unifiedProgress = 8;
+    let currentPhase = 'init'; // 'init' | 'classes' | 'assets' | 'natives'
+
+    function emitUnifiedProgress(targetPercent, statusText) {
+        if (targetPercent > unifiedProgress) {
+            unifiedProgress = Math.min(99, targetPercent);
         }
         onProgress({
-            type: e.type,
-            task: e.task,
-            total: e.total,
-            percent: percent,
-            text: text
+            percent: unifiedProgress,
+            text: statusText
         });
+    }
+
+    launcher.on('progress', (e) => {
+        const taskFraction = (e.total && e.total > 0) ? Math.min(1, Math.max(0, e.task / e.total)) : 0;
+
+        if (e.type === 'classes' || e.type === 'classes-custom' || e.type === 'classes-maven-custom') {
+            currentPhase = 'classes';
+            // Fáze knihoven: 10 % -> 55 % (rozpětí 45 %)
+            const phasePercent = Math.round(10 + (taskFraction * 45));
+            const text = (e.task >= e.total)
+                ? 'Herní knihovny připraveny'
+                : `Stahuji herní knihovny (${e.task} z ${e.total})...`;
+            emitUnifiedProgress(phasePercent, text);
+        } else if (e.type === 'assets') {
+            currentPhase = 'assets';
+            // Fáze assetů (zvuky, textury): 55 % -> 92 % (rozpětí 37 %)
+            const phasePercent = Math.round(55 + (taskFraction * 37));
+            const text = (e.task >= e.total)
+                ? 'Herní data a textury připraveny'
+                : `Stahuji herní data a textury (${Math.round(taskFraction * 100)} %)...`;
+            emitUnifiedProgress(phasePercent, text);
+        } else if (e.type === 'natives') {
+            currentPhase = 'natives';
+            // Fáze nativních knihoven: 92 % -> 97 %
+            const phasePercent = Math.round(92 + (taskFraction * 5));
+            emitUnifiedProgress(phasePercent, 'Příprava nativních knihoven...');
+        } else {
+            const phasePercent = Math.round(10 + (taskFraction * 80));
+            emitUnifiedProgress(phasePercent, 'Příprava herních souborů...');
+        }
     });
 
     launcher.on('download-status', (e) => {
-        const percent = Math.round((e.current / e.total) * 100) || 0;
-        onProgress({
-            type: e.type,
-            task: e.current,
-            total: e.total,
-            percent: percent,
-            text: `Načítání souborů: ${e.name} (${percent}%)`
-        });
+        // Jednotlivé mini-soubory NIKDY neresetují celková procenta na 0 %!
+        // Bereme je jako součást jednoho plynulého celku.
+        const fileFraction = (e.total && e.total > 0) ? Math.min(1, Math.max(0, e.current / e.total)) : 0;
+
+        if (currentPhase === 'init') {
+            // Úvodní stahování jádra (např. client.jar)
+            const phasePercent = Math.round(8 + (fileFraction * 6));
+            emitUnifiedProgress(phasePercent, `Stahuji jádro hry (${e.name || 'Minecraft'})...`);
+        } else if (currentPhase === 'classes') {
+            // Uvnitř fáze knihoven: informativní text, procenta řídí celkový task counter
+            onProgress({
+                percent: unifiedProgress,
+                text: `Stahuji herní knihovny (${e.name || 'soubor'})...`
+            });
+        } else if (currentPhase === 'assets') {
+            // Uvnitř fáze tisíců mini-assetů: nezahlcovat UI každým jednotlivým souborem
+            onProgress({
+                percent: unifiedProgress,
+                text: `Stahuji herní data a textury...`
+            });
+        }
     });
 
     launcher.on('close', (code) => {
@@ -1785,6 +1825,12 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             return null;
         }
         activeMinecraftProcess = proc;
+        if (onProgress) {
+            onProgress({
+                percent: 100,
+                text: 'Spouštím Minecraft...'
+            });
+        }
     } catch (e) {
         if (launcher._isCancelled) {
             activeMinecraftProcess = null;

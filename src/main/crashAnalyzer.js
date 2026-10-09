@@ -151,15 +151,15 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
             hasCrash: true,
             exitCode,
             reportPath,
-            title: 'Chybí základní knihovna Fabric API',
+            title: 'Chybí Fabric API',
             severity: 'critical',
-            description: 'V profilu máš nainstalované Fabric modifikace, které ke svému chodu vyžadují oficiální knihovnu Fabric API. Ta v aktuální složce mods chybí.',
-            recommendation: 'Nainstaluj Fabric API pro aktuální verzi hry. Launcher ji může stáhnout automaticky jedním kliknutím.',
+            description: 'Módy v tomto profilu vyžadují Fabric API.',
+            recommendation: 'Nainstaluj Fabric API pro tuto verzi hry.',
             logExcerpt,
             autoFix: {
                 id: 'INSTALL_FABRIC_API',
-                label: '⬇️ Automaticky stáhnout a nainstalovat Fabric API',
-                description: 'Stáhne kompatibilní balíček Fabric API přímo do složky mods tohoto profilu.'
+                label: 'Stáhnout Fabric API',
+                description: 'Stáhne balíček Fabric API do složky mods.'
             }
         };
     }
@@ -187,15 +187,15 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
             hasCrash: true,
             exitCode,
             reportPath,
-            title: `Nekompatibilní nebo zastaralá Java (Vyžadována Java ${reqMajor})`,
+            title: `Vyžadována Java ${reqMajor}`,
             severity: 'critical',
-            description: `Minecraft 26.x byl zkompilován pro Java ${reqMajor} (verze tříd ${reqMajor + 44}.0), avšak spuštěný proces běží pod starší Java ${currMajor}.`,
-            recommendation: `Launcher automaticky stáhne a nastaví oficiální 64-bitové běhové prostředí Java ${reqMajor} (Adoptium Temurin JRE).`,
+            description: `Hra vyžaduje Java ${reqMajor}, proces běží pod Java ${currMajor}.`,
+            recommendation: `Nastav prostředí Java ${reqMajor}.`,
             logExcerpt,
             autoFix: {
                 id: 'AUTO_DETECT_JAVA',
-                label: `☕ Automaticky nastavit nebo stáhnout Javu ${reqMajor}`,
-                description: `Zkontroluje systém a nastaví nebo stáhne kompatibilní 64-bitovou Javu ${reqMajor}.`,
+                label: `Nastavit Javu ${reqMajor}`,
+                description: `Nastaví nebo stáhne kompatibilní Javu ${reqMajor}.`,
                 targetJavaVersion: reqMajor
             }
         };
@@ -210,15 +210,15 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
             hasCrash: true,
             exitCode,
             reportPath,
-            title: 'Chybějící nebo neúplný soubor klienta hry',
+            title: 'Poškozený soubor verze',
             severity: 'critical',
-            description: 'Minecraft nebyl spuštěn, protože v systémové složce verze chybí nebo je poškozen hlavní soubor klienta (client jar).',
-            recommendation: 'Launcher automaticky odstraní poškozená data verze pro čisté znovustažení.',
+            description: 'Hlavní soubor klienta hry chybí nebo je neúplný.',
+            recommendation: 'Stáhni soubor verze znovu.',
             logExcerpt,
             autoFix: {
                 id: 'REDOWNLOAD_VERSION_JAR',
-                label: '🔄 Znovu čistě stáhnout soubor verze',
-                description: 'Odstraní stávající soubor verze, aby jej launcher při příštím spuštění v pořádku stáhl.'
+                label: 'Znovu stáhnout verzi',
+                description: 'Odstraní stávající soubor verze pro čisté stažení.'
             }
         };
     }

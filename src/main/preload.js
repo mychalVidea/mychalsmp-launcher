@@ -70,6 +70,9 @@ contextBridge.exposeInMainWorld('api', {
     onCrash: (callback) => {
         ipcRenderer.on('launch-crash', (event, crashData) => callback(crashData));
     },
+    onPlaytimeUpdated: (callback) => {
+        ipcRenderer.on('playtime-updated', (event, data) => callback(data));
+    },
 
     // Window controls
     minimizeWindow: () => ipcRenderer.send('window-minimize'),

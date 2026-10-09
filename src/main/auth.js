@@ -30,7 +30,9 @@ function createOfflineAuth(username) {
             type: 'mojang',
             demo: false
         },
-        skinUrl: `https://minotar.net/skin/${cleanName}`
+        skinUrl: (cleanName.toLowerCase() === 'steve' || cleanName.toLowerCase() === 'alex')
+            ? 'assets/default_steve.png'
+            : `https://minotar.net/skin/${cleanName}`
     };
 }
 
@@ -218,18 +220,28 @@ async function loginMicrosoft(parentWindow) {
                                 throw new Error("Tento Microsoft účet nemá zakoupenou licenci hry Minecraft Java Edition (demo účet).");
                             }
 
-                            const mclcAuth = token.mclc();
-                            const profile = token.profile;
+                            const mclcAuth = token.mclc(true);
+                            const profile = token.profile || {};
+                            const fullToken = token.getToken ? token.getToken(true) : null;
+                            const refreshToken = fullToken?.refresh || token.refreshTkn || mclcAuth.meta?.refresh || null;
+                            const activeSkin = (profile.skins && profile.skins.length > 0)
+                                ? (profile.skins.find(s => s.state === 'ACTIVE') || profile.skins[0])
+                                : null;
 
                             resolve({
                                 success: true,
-                                auth: mclcAuth,
+                                auth: {
+                                    ...mclcAuth,
+                                    name: profile.name,
+                                    username: profile.name,
+                                    uuid: profile.id,
+                                    refreshToken: refreshToken
+                                },
                                 profile: {
                                     name: profile.name,
                                     id: profile.id,
-                                    skinUrl: profile.skins && profile.skins.length > 0
-                                        ? profile.skins[0].url
-                                        : `https://minotar.net/skin/${profile.name}`,
+                                    skinUrl: activeSkin ? activeSkin.url : null,
+                                    skinVariant: activeSkin?.variant || 'classic',
                                     skins: profile.skins || [],
                                     capes: profile.capes || []
                                 }
@@ -307,8 +319,59 @@ async function loginMicrosoft(parentWindow) {
     });
 }
 
+/**
+ * Automatically refreshes an expired Microsoft / Minecraft session
+ * using the persistent OAuth refresh_token.
+ */
+async function refreshMicrosoftSession(refreshToken) {
+    if (!refreshToken) {
+        return { success: false, error: 'Chybí obnovovací token Microsoft účtu.' };
+    }
+    try {
+        const authManager = new msmc.Auth("none");
+        const xbox = await authManager.refresh(refreshToken);
+        const token = await xbox.getMinecraft();
+        if (!token) {
+            return { success: false, error: 'Nepodařilo se získat obnovený Minecraft token.' };
+        }
+        const mclcAuth = token.mclc(true);
+        const profile = token.profile || {};
+        const fullToken = token.getToken ? token.getToken(true) : null;
+        const newRefreshToken = fullToken?.refresh || token.refreshTkn || mclcAuth.meta?.refresh || refreshToken;
+        const activeSkin = (profile.skins && profile.skins.length > 0)
+            ? (profile.skins.find(s => s.state === 'ACTIVE') || profile.skins[0])
+            : null;
+
+        return {
+            success: true,
+            auth: {
+                ...mclcAuth,
+                name: profile.name,
+                username: profile.name,
+                uuid: profile.id,
+                refreshToken: newRefreshToken
+            },
+            profile: {
+                name: profile.name,
+                id: profile.id,
+                skinUrl: activeSkin ? activeSkin.url : null,
+                skinVariant: activeSkin?.variant || 'classic',
+                skins: profile.skins || [],
+                capes: profile.capes || []
+            }
+        };
+    } catch (err) {
+        console.error('[AUTH] Chyba při obnovování Microsoft session:', err);
+        return {
+            success: false,
+            error: (err && (err.message || err.ts)) || 'Automatické obnovení Microsoft účtu selhalo.'
+        };
+    }
+}
+
 module.exports = {
     getOfflineUUID,
     createOfflineAuth,
-    loginMicrosoft
+    loginMicrosoft,
+    refreshMicrosoftSession
 };

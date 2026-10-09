@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { loadConfig, saveConfig, BASE_DIR } = require('./config');
 const { pingServer } = require('./serverPing');
-const { createOfflineAuth, loginMicrosoft } = require('./auth');
+const { createOfflineAuth, loginMicrosoft, refreshMicrosoftSession } = require('./auth');
 const {
     launchGame,
     isGameRunning,
@@ -161,6 +161,13 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
+    mainWindow.webContents.once('did-finish-load', () => {
+        const isLive = checkAndResumeActiveSession();
+        if (isLive) {
+            mainWindow.webContents.send('game-started');
+        }
+    });
+
     mainWindow.once('ready-to-show', () => {
         if (splashWindow && !splashWindow.isDestroyed()) {
             splashWindow.destroy();
@@ -273,6 +280,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+    if (activeSessionData) {
+        saveSessionTick(activeSessionData);
+    }
     try {
         discordRpc.shutdown();
     } catch (e) { }
@@ -793,6 +803,10 @@ ipcMain.handle('login-microsoft', async () => {
             authType: 'microsoft',
             microsoftAccount: {
                 ...res.auth,
+                username: res.profile.name,
+                name: res.profile.name,
+                uuid: res.profile.id,
+                refreshToken: res.auth.refreshToken,
                 skinUrl: res.profile.skinUrl,
                 skins: res.profile.skins || [],
                 capes: res.profile.capes || []
@@ -802,12 +816,256 @@ ipcMain.handle('login-microsoft', async () => {
     return res;
 });
 
+/**
+ * Validates and optionally refreshes Microsoft OAuth tokens before Mojang API calls or launch.
+ */
+async function getValidMicrosoftSession(forceRefresh = false) {
+    const config = loadConfig();
+    if (config.authType !== 'microsoft' || !config.microsoftAccount) {
+        return { success: false, error: 'Nejsi přihlášen k Microsoft účtu.' };
+    }
+
+    const msAcc = config.microsoftAccount;
+    const refreshToken = msAcc.refreshToken || msAcc.meta?.refresh;
+    const exp = msAcc.meta?.exp;
+    const isExpired = exp ? (Date.now() >= (exp - 60000)) : false;
+
+    if ((isExpired || forceRefresh) && refreshToken) {
+        console.log('[AUTH] Obnovuji Microsoft token...');
+        const refreshRes = await refreshMicrosoftSession(refreshToken);
+        if (refreshRes.success) {
+            const updatedAccount = {
+                ...config.microsoftAccount,
+                ...refreshRes.auth,
+                username: refreshRes.profile.name,
+                name: refreshRes.profile.name,
+                uuid: refreshRes.profile.id,
+                refreshToken: refreshRes.auth.refreshToken,
+                skinUrl: refreshRes.profile.skinUrl || config.microsoftAccount.skinUrl,
+                skins: refreshRes.profile.skins?.length ? refreshRes.profile.skins : (config.microsoftAccount.skins || []),
+                capes: refreshRes.profile.capes?.length ? refreshRes.profile.capes : (config.microsoftAccount.capes || [])
+            };
+            saveConfig({
+                username: refreshRes.profile.name,
+                microsoftAccount: updatedAccount
+            });
+            return { success: true, token: updatedAccount.access_token, account: updatedAccount };
+        } else {
+            console.warn('[AUTH] Automatické obnovení selhalo:', refreshRes.error);
+        }
+    }
+
+    if (!msAcc.access_token) {
+        return { success: false, error: 'Chybí přístupový token Microsoft účtu.' };
+    }
+
+    return { success: true, token: msAcc.access_token, account: msAcc };
+}
+
+// ── Persistent Playtime & Session Tracker (PID-locked, anti-bypass) ───────────
+const SESSION_FILE = path.join(BASE_DIR, 'active-game-session.json');
+let activeHeartbeatInterval = null;
+let activeSessionData = null;
+
+function isProcessAlive(pid) {
+    if (!pid || typeof pid !== 'number' || pid <= 0) return false;
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (e) {
+        return e.code === 'EPERM';
+    }
+}
+
+function saveSessionTick(session) {
+    if (!session || !session.profileId) return;
+    const now = Date.now();
+    const elapsedSec = Math.max(0, Math.floor((now - (session.lastTickTime || session.startTime || now)) / 1000));
+    if (elapsedSec > 0) {
+        session.lastTickTime = now;
+        try {
+            fs.writeFileSync(SESSION_FILE, JSON.stringify(session, null, 2), 'utf-8');
+        } catch (_) {}
+
+        try {
+            const freshConfig = loadConfig();
+            let totalPlaytime = 0;
+            const updated = (freshConfig.profiles || []).map(p => {
+                if (p.id === session.profileId) {
+                    const newTotal = (p.playtimeSeconds || 0) + elapsedSec;
+                    totalPlaytime = newTotal;
+                    return { ...p, playtimeSeconds: newTotal, lastPlayed: now };
+                }
+                return p;
+            });
+            saveConfig({ profiles: updated });
+
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('playtime-updated', {
+                    profileId: session.profileId,
+                    addedSeconds: elapsedSec,
+                    totalPlaytime
+                });
+            }
+        } catch (e) {
+            console.error('[PLAYTIME] Chyba při průběžném ukládání:', e);
+        }
+    }
+}
+
+function startSessionTracking(pid, profileId, profileName, instanceDir) {
+    if (activeHeartbeatInterval) {
+        clearInterval(activeHeartbeatInterval);
+        activeHeartbeatInterval = null;
+    }
+
+    const now = Date.now();
+    activeSessionData = {
+        pid,
+        profileId,
+        profileName: profileName || 'Minecraft',
+        instanceDir: instanceDir || BASE_DIR,
+        startTime: now,
+        lastTickTime: now
+    };
+
+    try {
+        fs.writeFileSync(SESSION_FILE, JSON.stringify(activeSessionData, null, 2), 'utf-8');
+    } catch (e) {
+        console.error('[PLAYTIME] Nelze zapsat active-game-session.json:', e);
+    }
+
+    activeHeartbeatInterval = setInterval(() => {
+        if (!activeSessionData) return;
+        if (!isProcessAlive(activeSessionData.pid)) {
+            console.log(`[PLAYTIME] Minecraft proces ${activeSessionData.pid} byl ukončen.`);
+            endSessionTracking(0);
+            return;
+        }
+        saveSessionTick(activeSessionData);
+    }, 5000);
+}
+
+function endSessionTracking(exitCode = 0) {
+    if (activeHeartbeatInterval) {
+        clearInterval(activeHeartbeatInterval);
+        activeHeartbeatInterval = null;
+    }
+    if (activeSessionData) {
+        saveSessionTick(activeSessionData);
+        const finishedProfileId = activeSessionData.profileId;
+        activeSessionData = null;
+
+        try {
+            if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE);
+        } catch (_) {}
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('game-stopped');
+            mainWindow.webContents.send('launch-exit', {
+                exitCode,
+                profileId: finishedProfileId
+            });
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    }
+}
+
+function checkAndResumeActiveSession() {
+    try {
+        if (!fs.existsSync(SESSION_FILE)) return false;
+        const raw = fs.readFileSync(SESSION_FILE, 'utf-8');
+        if (!raw || !raw.trim()) return false;
+        const session = JSON.parse(raw);
+        if (!session.pid || !session.profileId) {
+            try { fs.unlinkSync(SESSION_FILE); } catch (_) {}
+            return false;
+        }
+
+        if (isProcessAlive(session.pid)) {
+            console.log(`[PLAYTIME] Obnovena běžící relace hry (PID: ${session.pid}, Profil: ${session.profileId}). Pokračuji v měření času.`);
+            activeSessionData = session;
+            saveSessionTick(activeSessionData);
+
+            activeHeartbeatInterval = setInterval(() => {
+                if (!activeSessionData) return;
+                if (!isProcessAlive(activeSessionData.pid)) {
+                    console.log(`[PLAYTIME] Obnovený proces ${activeSessionData.pid} byl ukončen.`);
+                    endSessionTracking(0);
+                    return;
+                }
+                saveSessionTick(activeSessionData);
+            }, 5000);
+
+            try {
+                const cfg = loadConfig();
+                if (cfg.enableDiscordRpc !== false) {
+                    discordRpc.updateActivity({
+                        username: cfg.username || 'Hráč',
+                        server: cfg.serverIp || 'mychalsmp.xyz',
+                        profileName: session.profileName || 'Minecraft',
+                        isPlaying: true,
+                        startTime: session.startTime || Date.now()
+                    });
+                }
+            } catch (_) {}
+
+            return true;
+        } else {
+            console.log(`[PLAYTIME] Uložená relace PID ${session.pid} již neběží.`);
+            let exitTime = Date.now();
+            try {
+                const logPath = path.join(session.instanceDir || BASE_DIR, 'logs', 'latest.log');
+                if (fs.existsSync(logPath)) {
+                    const stat = fs.statSync(logPath);
+                    if (stat.mtimeMs > (session.lastTickTime || 0)) {
+                        exitTime = stat.mtimeMs;
+                    }
+                }
+            } catch (_) {}
+
+            const unrecordedSec = Math.max(0, Math.floor((exitTime - (session.lastTickTime || session.startTime)) / 1000));
+            const actualUnrecorded = Math.min(unrecordedSec, Math.floor((Date.now() - (session.lastTickTime || session.startTime)) / 1000));
+            if (actualUnrecorded > 0) {
+                try {
+                    const freshConfig = loadConfig();
+                    const updated = (freshConfig.profiles || []).map(p => {
+                        if (p.id === session.profileId) {
+                            return {
+                                ...p,
+                                playtimeSeconds: (p.playtimeSeconds || 0) + actualUnrecorded,
+                                lastPlayed: exitTime
+                            };
+                        }
+                        return p;
+                    });
+                    saveConfig({ profiles: updated });
+                    console.log(`[PLAYTIME] Připsán nezaznamenaný čas z offline běhu hry: +${actualUnrecorded}s.`);
+                } catch (_) {}
+            }
+            try { fs.unlinkSync(SESSION_FILE); } catch (_) {}
+            return false;
+        }
+    } catch (e) {
+        console.error('[PLAYTIME] Chyba při obnovování relace:', e);
+        try { if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE); } catch (_) {}
+        return false;
+    }
+}
+
 ipcMain.handle('is-game-running', () => {
-    return isGameRunning();
+    return isGameRunning() || (activeSessionData !== null && isProcessAlive(activeSessionData.pid));
 });
 
 ipcMain.handle('kill-game', () => {
+    if (activeSessionData && isProcessAlive(activeSessionData.pid)) {
+        try {
+            process.kill(activeSessionData.pid);
+        } catch (_) {}
+    }
     killGame();
+    endSessionTracking(0);
     return true;
 });
 
@@ -821,7 +1079,8 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
     let authData;
 
     if (config.authType === 'microsoft' && config.microsoftAccount) {
-        authData = config.microsoftAccount;
+        const validMs = await getValidMicrosoftSession(false);
+        authData = validMs.success ? validMs.account : config.microsoftAccount;
     } else {
         authData = createOfflineAuth(config.username);
     }
@@ -922,24 +1181,7 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
                 }
             },
             (exitCode) => {
-                const durationSec = Math.max(0, Math.floor((Date.now() - gameSessionStart) / 1000));
-                let totalPlaytime = 0;
-                if (durationSec > 0) {
-                    try {
-                        const freshConfig = loadConfig();
-                        const updated = (freshConfig.profiles || []).map(p => {
-                            if (p.id === activeId) {
-                                const newTotal = (p.playtimeSeconds || 0) + durationSec;
-                                totalPlaytime = newTotal;
-                                return { ...p, playtimeSeconds: newTotal, lastPlayed: Date.now() };
-                            }
-                            return p;
-                        });
-                        saveConfig({ profiles: updated });
-                    } catch (e) {
-                        console.error('Chyba při ukládání odehraného času:', e);
-                    }
-                }
+                endSessionTracking(exitCode);
 
                 // Reset Discord RPC back to Launcher status
                 try {
@@ -954,18 +1196,6 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
                         });
                     }
                 } catch (e) { }
-
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('game-stopped');
-                    mainWindow.webContents.send('launch-exit', {
-                        exitCode,
-                        profileId: activeId,
-                        sessionSeconds: durationSec,
-                        totalPlaytime
-                    });
-                    mainWindow.show();
-                    mainWindow.focus();
-                }
 
                 // Trigger Intelligent Crash Analyzer on non-zero exit code
                 if (exitCode !== 0) {
@@ -982,6 +1212,10 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
         );
         if (!proc) {
             return { success: false, cancelled: true };
+        }
+
+        if (proc && proc.pid) {
+            startSessionTracking(proc.pid, activeId, profile ? profile.name : 'Minecraft', launchConfig.baseDir);
         }
 
         // Skrytí launcheru do systémové lišty (Tray) pro nulovou zátěž při běhu hry
@@ -1059,7 +1293,11 @@ ipcMain.handle('update-profile-settings', async (event, profileId, updates) => {
     const config = loadConfig();
     const profiles = (config.profiles || []).map(p => {
         if (p.id === profileId) {
-            return { ...p, ...updates };
+            const next = { ...p, ...updates };
+            if (updates.loader) {
+                next.optimizedChosen = updates.loader === 'fabric' ? 'optimized' : 'vanilla';
+            }
+            return next;
         }
         return p;
     });
@@ -1427,18 +1665,65 @@ ipcMain.handle('save-offline-skin', async (event, skinData) => {
 });
 
 ipcMain.handle('get-mojang-profile', async () => {
-    const config = loadConfig();
-    const token = config.microsoftAccount?.access_token;
-    if (!token) return { success: false, error: 'Nejsi přihlášen k Microsoft účtu.' };
-    return await getMojangProfile(token);
+    const authRes = await getValidMicrosoftSession(false);
+    if (!authRes.success) return { success: false, error: authRes.error };
+
+    let res = await getMojangProfile(authRes.token);
+    // If 401 Unauthorized, token expired on Mojang side - force refresh and retry once!
+    if (!res.success && res.error && res.error.includes('401')) {
+        const refreshAuth = await getValidMicrosoftSession(true);
+        if (refreshAuth.success && refreshAuth.token !== authRes.token) {
+            res = await getMojangProfile(refreshAuth.token);
+        }
+    }
+
+    if (!res.success && res.error && res.error.includes('401')) {
+        return {
+            success: false,
+            expired: true,
+            error: 'Platnost Microsoft přihlášení vypršela. Klikni pro rychlé obnovení.'
+        };
+    }
+
+    // Save active skin and capes into config if fetched successfully
+    if (res.success && res.profile) {
+        const currentCfg = loadConfig();
+        if (currentCfg.microsoftAccount) {
+            const activeSkin = (res.profile.skins || []).find(s => s.state === 'ACTIVE') || (res.profile.skins || [])[0];
+            const updates = {
+                ...currentCfg.microsoftAccount,
+                name: res.profile.name,
+                username: res.profile.name,
+                uuid: res.profile.id,
+                skins: res.profile.skins || [],
+                capes: res.profile.capes || []
+            };
+            if (activeSkin && activeSkin.url) {
+                updates.skinUrl = activeSkin.url;
+            }
+            saveConfig({
+                username: res.profile.name,
+                microsoftAccount: updates
+            });
+        }
+    }
+
+    return res;
 });
 
 ipcMain.handle('upload-mojang-skin', async (event, filePath, variant) => {
-    const config = loadConfig();
-    const token = config.microsoftAccount?.access_token;
-    if (!token) return { success: false, error: 'Nejsi přihlášen k Microsoft účtu.' };
-    const res = await uploadMojangSkin(token, filePath, variant);
+    let authRes = await getValidMicrosoftSession(false);
+    if (!authRes.success) return { success: false, error: authRes.error };
+
+    let res = await uploadMojangSkin(authRes.token, filePath, variant);
+    if (!res.success && res.error && res.error.includes('401')) {
+        authRes = await getValidMicrosoftSession(true);
+        if (authRes.success) {
+            res = await uploadMojangSkin(authRes.token, filePath, variant);
+        }
+    }
     if (res.success && res.skin) {
+        const config = loadConfig();
         if (config.microsoftAccount) {
             config.microsoftAccount.skinUrl = res.skin.url;
             saveConfig({ microsoftAccount: config.microsoftAccount });
@@ -1448,17 +1733,31 @@ ipcMain.handle('upload-mojang-skin', async (event, filePath, variant) => {
 });
 
 ipcMain.handle('reset-mojang-skin', async () => {
-    const config = loadConfig();
-    const token = config.microsoftAccount?.access_token;
-    if (!token) return { success: false, error: 'Nejsi přihlášen k Microsoft účtu.' };
-    return await resetMojangSkin(token);
+    let authRes = await getValidMicrosoftSession(false);
+    if (!authRes.success) return { success: false, error: authRes.error };
+
+    let res = await resetMojangSkin(authRes.token);
+    if (!res.success && res.error && res.error.includes('401')) {
+        authRes = await getValidMicrosoftSession(true);
+        if (authRes.success) {
+            res = await resetMojangSkin(authRes.token);
+        }
+    }
+    return res;
 });
 
 ipcMain.handle('set-mojang-cape', async (event, capeId) => {
-    const config = loadConfig();
-    const token = config.microsoftAccount?.access_token;
-    if (!token) return { success: false, error: 'Nejsi přihlášen k Microsoft účtu.' };
-    return await setMojangCape(token, capeId);
+    let authRes = await getValidMicrosoftSession(false);
+    if (!authRes.success) return { success: false, error: authRes.error };
+
+    let res = await setMojangCape(authRes.token, capeId);
+    if (!res.success && res.error && res.error.includes('401')) {
+        authRes = await getValidMicrosoftSession(true);
+        if (authRes.success) {
+            res = await setMojangCape(authRes.token, capeId);
+        }
+    }
+    return res;
 });
 
 ipcMain.on('open-game-dir', () => {

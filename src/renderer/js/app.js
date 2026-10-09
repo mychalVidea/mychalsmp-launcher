@@ -29,11 +29,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnManageProfiles = document.getElementById('btnManageProfiles');
     const btnAddModsShortcut = document.getElementById('btnAddModsShortcut');
 
-    // Progress Bar
+    // Progress Bar & Global Titlebar Download Chip
     const progressContainer = document.getElementById('progressContainer');
     const progressBar = document.getElementById('progressBar');
     const progressPercent = document.getElementById('progressPercent');
     const progressText = document.getElementById('progressText');
+    const globalDownloadChip = document.getElementById('globalDownloadChip');
+    const globalDownloadText = document.getElementById('globalDownloadText');
+    const globalDownloadBar = document.getElementById('globalDownloadBar');
+    const btnCancelGlobalDownload = document.getElementById('btnCancelGlobalDownload');
+    let lastProgressData = null;
+    let maxRenderedProgress = 0;
 
     // Stevens' Perceptual Speed Curve (Power law with gamma ~ 0.42):
     // Sub-linear response gives high initial velocity (5% -> 28%, 10% -> 38%, 50% -> 75%),
@@ -153,6 +159,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                 skinViewer.setSize(220, 310);
             }
         }
+
+        // Pokud právě probíhá stahování / spouštění verze, zajistit zobrazení indikátorů
+        if (isLaunching) {
+            if (globalDownloadChip) {
+                globalDownloadChip.style.display = 'inline-flex';
+            }
+            if (tabId === 'play' && progressContainer) {
+                progressContainer.style.display = 'flex';
+                if (lastProgressData) {
+                    const rawPct = Math.min(Math.max(lastProgressData.percent || 0, 0), 100);
+                    const pct = calculatePerceptualProgress(rawPct);
+                    if (progressBar) progressBar.style.width = `${pct}%`;
+                    if (progressPercent) progressPercent.textContent = `${pct}%`;
+                    if (progressText) progressText.textContent = lastProgressData.text || 'Načítání hry...';
+                }
+            }
+        }
     }
 
     navButtons.forEach(btn => {
@@ -177,6 +200,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnAddModsShortcut) {
         btnAddModsShortcut.addEventListener('click', () => switchTab('mods'));
     }
+    const heroStatActiveProfile = document.getElementById('heroStatActiveProfile');
+    if (heroStatActiveProfile) {
+        heroStatActiveProfile.style.cursor = 'pointer';
+        heroStatActiveProfile.addEventListener('click', () => {
+            const el = document.getElementById('profileCardsList');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+    }
 
 
     // ── Easter Egg: 5x rychlé kliknutí na postavičku na home screenu ─────────
@@ -185,7 +216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const heroAvatarArea = document.querySelector('.stage-avatar-area') || heroSkinCanvas3D;
 
     function triggerEasterEggCelebration() {
-        showToast('🎉 360° Easter Egg odemčen! (No-scope spin)', 'success');
+        showToast('360° otočení aktivováno.', 'info');
 
         // 1. 3D otočka panáčka
         if (skinViewer && skinViewer.playerObject) {
@@ -270,6 +301,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (networkText) networkText.textContent = `mychalsmp.xyz • ${status.players.online} online`;
                 if (serverPlayersCount) serverPlayersCount.textContent = `${status.players.online} / ${status.players.max}`;
                 if (serverPingVal) serverPingVal.textContent = `${status.latency} ms`;
+
+                const heroServerStatusVal = document.getElementById('heroServerStatusVal');
+                const heroServerDot = document.getElementById('heroServerDot');
+                if (heroServerStatusVal) heroServerStatusVal.textContent = `Online (${status.players.online} hráčů)`;
+                if (heroServerDot) heroServerDot.classList.remove('offline');
             } else {
                 markOfflineStatus();
             }
@@ -283,6 +319,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (networkText) networkText.textContent = `Offline mód (Lokální verze)`;
         if (serverPlayersCount) serverPlayersCount.textContent = `Offline`;
         if (serverPingVal) serverPingVal.textContent = `-- ms`;
+
+        const heroServerStatusVal = document.getElementById('heroServerStatusVal');
+        const heroServerDot = document.getElementById('heroServerDot');
+        if (heroServerStatusVal) heroServerStatusVal.textContent = `Offline`;
+        if (heroServerDot) heroServerDot.classList.add('offline');
     }
 
     updateNetworkStatus();
@@ -306,8 +347,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Profile info
             const isMs = currentConfig.authType === 'microsoft';
+            const msName = currentConfig.microsoftAccount?.name || currentConfig.microsoftAccount?.username;
             const name = isMs
-                ? (currentConfig.microsoftAccount?.username || currentConfig.username || 'Steve')
+                ? (msName || currentConfig.username || 'Hráč')
                 : (currentConfig.offlineUsername || currentConfig.username || 'Hráč');
             updateUserUI(name, currentConfig.authType || 'offline', currentConfig.customSkinPath);
 
@@ -426,6 +468,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             detectAvailableJavas();
             checkWardenProbe();
             checkLauncherUpdates(true);
+
+            // Check if Minecraft session is active / resumed from previous launch
+            try {
+                const gameRunning = await window.api.isGameRunning();
+                if (gameRunning) {
+                    isRunning = true;
+                    if (sidebarPlayBtn) {
+                        sidebarPlayBtn.style.opacity = '1';
+                        sidebarPlayBtn.style.background = '#ef4444';
+                        sidebarPlayBtn.querySelector('span').innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg> Stop';
+                    }
+                    renderProfilesList();
+                }
+            } catch (_) {}
         } catch (e) {
             console.error('Chyba při načítání konfigurace:', e);
         }
@@ -470,7 +526,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 extraClass = 'recommended';
             }
 
-            return `<span class="slider-mark ${extraClass}" style="left: ${pct.toFixed(2)}%;" data-ram-val="${val}" title="${isRec ? 'Doporučeno pro většinu modpacků' : `Nastavit ${val} GB`}">${label}</span>`;
+            return `<span class="slider-mark ${extraClass}" style="left: ${pct.toFixed(2)}%;" data-ram-val="${val}" title="Nastavit ${val} GB">${label}</span>`;
         }).join('');
 
         marksContainer.querySelectorAll('.slider-mark').forEach(mark => {
@@ -487,8 +543,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function updateUserUI(name, type, customSkin) {
         const isMicrosoft = type === 'microsoft';
+        const msName = currentConfig.microsoftAccount?.name || currentConfig.microsoftAccount?.username;
         const displayName = isMicrosoft
-            ? (currentConfig.microsoftAccount?.username || name || 'Steve')
+            ? (msName || name || 'Hráč')
             : (currentConfig.offlineUsername || name || 'Hráč');
 
         if (greetingNick) greetingNick.textContent = displayName;
@@ -565,16 +622,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Effective skin resolution
         const effectiveSkin = customSkin || currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
-        const avatarUrl = `https://minotar.net/avatar/${encodeURIComponent(displayName)}/24.png`;
+        const avatarUrl = (displayName.toLowerCase() === 'steve' || displayName.toLowerCase() === 'alex' || displayName === 'Hráč')
+            ? (isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png')
+            : `https://minotar.net/avatar/${encodeURIComponent(displayName)}/24.png`;
 
         if (greetingAvatar) greetingAvatar.src = avatarUrl;
         if (skinCaption) skinCaption.textContent = `3D Náhled: ${displayName}`;
 
         const effectiveCape = getEffectiveCape();
 
-        const skinSrc = effectiveSkin
-            ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
-            : `https://minotar.net/skin/${encodeURIComponent(displayName)}`;
+        let skinSrc;
+        if (effectiveSkin) {
+            skinSrc = (effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://') || effectiveSkin.startsWith('assets/'))
+                ? effectiveSkin
+                : `file://${effectiveSkin}`;
+        } else if (displayName.toLowerCase() === 'steve' || displayName.toLowerCase() === 'alex' || displayName === 'Hráč') {
+            skinSrc = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
+        } else {
+            skinSrc = `https://minotar.net/skin/${encodeURIComponent(displayName)}`;
+        }
 
         drawSkinToCanvas(skinSrc, isSlim);
         updateSkinViewer3D(skinSrc, effectiveCape, isSlim);
@@ -1379,6 +1445,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         const profiles = currentConfig.profiles || [];
         const activeId = currentConfig.activeProfileId || (profiles[0] ? profiles[0].id : 'minecraft-26.2');
 
+        const activeProfile = profiles.find(p => p.id === activeId);
+        const heroActiveProfileEl = document.getElementById('heroActiveProfileName');
+        if (heroActiveProfileEl && activeProfile) {
+            const loaderTag = (activeProfile.loader && activeProfile.loader !== 'vanilla') ? ` (${activeProfile.loader})` : '';
+            heroActiveProfileEl.textContent = `${activeProfile.name}${loaderTag}`;
+        }
+
+        const totalSec = profiles.reduce((acc, p) => acc + (p.playtimeSeconds || 0), 0);
+        const heroPlaytimeEl = document.getElementById('heroTotalPlaytimeVal');
+        if (heroPlaytimeEl) {
+            heroPlaytimeEl.textContent = totalSec >= 60 ? formatPlaytime(totalSec) : 'Zatím nehráno';
+        }
+
         const hasAnyPlayed = profiles.some(p => p.lastPlayed);
         const headingTitle = document.getElementById('profilesSectionTitle');
         const headingIcon = document.getElementById('profilesSectionIcon');
@@ -1415,16 +1494,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
             const iconSymbol = getIconSvg(p.icon);
 
-            const badgeClass = (p.id === 'minecraft-26.2' || p.id === 'mychalsmp-26.2') ? 'p-recommended' :
-                p.version === '26.3' ? 'p-latest' :
-                    p.icon === 'upgrade' ? 'p-upgrade' :
-                        p.icon === 'import' ? 'p-imported' : 'p-vanilla';
-
-            const badgeText = (p.id === 'minecraft-26.2' || p.id === 'mychalsmp-26.2') ? 'Doporučeno 26.2' :
-                p.version === '26.3' ? 'Nejnovější 26.3' :
-                    p.icon === 'upgrade' ? `Upgrade (${p.version})` :
-                        p.icon === 'import' ? `Import (${p.version})` : `Verze ${p.version}`;
-
             const playtimeStr = (p.playtimeSeconds && p.playtimeSeconds >= 60)
                 ? `Odehráno: ${formatPlaytime(p.playtimeSeconds)}`
                 : 'Zatím nehráno';
@@ -1448,7 +1517,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="profile-details">
                         <div class="profile-title-line">
                             <span class="p-name">${escapeHtml(p.name)}</span>
-                            <span class="p-badge ${badgeClass}">${escapeHtml(badgeText)}</span>
                         </div>
                         <div class="p-meta">${escapeHtml(meta)}</div>
                     </div>
@@ -1524,8 +1592,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
             if (sideConsoleStatus && !isRunning && !isLaunching) {
                 sideConsoleStatus.textContent = isInst
-                    ? 'Klient je připraven. Kliknutím na Hrát spustíš instanci s optimalizacemi.'
-                    : `Verze ${p.version} ještě není stažena. Kliknutím na Stáhnout ji nainstaluješ.`;
+                    ? 'Klient je připraven ke spuštění.'
+                    : `Verze ${p.version} není nainstalována.`;
             }
         } else {
             window.api.saveConfig({ activeProfileId: profileId });
@@ -1623,6 +1691,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    if (globalDownloadChip) {
+        globalDownloadChip.addEventListener('click', (e) => {
+            if (e.target.closest('#btnCancelGlobalDownload')) return;
+            switchTab('play');
+        });
+    }
+
+    if (btnCancelGlobalDownload) {
+        btnCancelGlobalDownload.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            appendLog('[LAUNCHER] Stahování / instalace byla zrušena z horní lišty.');
+            if (progressText) progressText.textContent = 'Ruším instalaci a mažu stažená data...';
+            if (globalDownloadText) globalDownloadText.textContent = 'Ruším...';
+            try {
+                await window.api.cancelLaunch();
+            } catch (err) {
+                console.error('Cancel error:', err);
+            }
+            resetPlayState();
+            appendLog('[LAUNCHER] Instalace byla úspěšně zrušena a nekompletní soubory byly smazány.');
+        });
+    }
+
     // ── Launch Minecraft ────────────────────────────────────────────────────
     async function startLaunch(profileId, serverIp) {
         if (typeof autoSaveSettings === 'function') {
@@ -1643,23 +1734,46 @@ document.addEventListener('DOMContentLoaded', async () => {
         const targetPid = profileId || currentConfig.activeProfileId || 'minecraft-26.2';
         const targetProf = (currentConfig.profiles || []).find(x => x.id === targetPid);
 
+        const isAlreadyInstalled = targetProf && Array.isArray(installedVersions) && installedVersions.includes(targetProf.version);
+        const hasBeenPlayed = targetProf && (Boolean(targetProf.lastPlayed) || (typeof targetProf.playtimeSeconds === 'number' && targetProf.playtimeSeconds > 0));
+        const hasExplicitLoader = targetProf && Boolean(targetProf.loader) && ['fabric', 'vanilla', 'forge', 'neoforge'].includes(targetProf.loader);
+
         // Pokud pro tento profil ještě nebyla vybrána varianta (Vanilla vs Optimalizovaný), zeptáme se:
+        // ALE NIKDY se neptáme, pokud:
+        // 1. Hráč už profil dříve hrál (lastPlayed / playtime > 0)
+        // 2. Verze hry je již stažena/nainstalována (isAlreadyInstalled)
+        // 3. Profil má explicitně určený loader (např. záměrně vytvořený Fabric, Vanilla apod.)
         if (targetProf && !targetProf.optimizedChosen) {
-            isLaunching = false;
-            if (sidebarPlayBtn) sidebarPlayBtn.style.opacity = '1';
-            promptFirstLaunchOptimizer(targetProf, () => {
-                startLaunch(targetPid, serverIp);
-            });
-            return;
+            if (hasBeenPlayed || isAlreadyInstalled || hasExplicitLoader) {
+                targetProf.optimizedChosen = targetProf.loader === 'fabric' ? 'optimized' : 'vanilla';
+                try {
+                    window.api.saveConfig({ profiles: currentConfig.profiles });
+                } catch (_) {}
+            } else {
+                isLaunching = false;
+                if (sidebarPlayBtn) sidebarPlayBtn.style.opacity = '1';
+                promptFirstLaunchOptimizer(targetProf, () => {
+                    startLaunch(targetPid, serverIp);
+                });
+                return;
+            }
         }
 
-        const isAlreadyInstalled = targetProf && Array.isArray(installedVersions) && installedVersions.includes(targetProf.version);
+        const initStatusText = isAlreadyInstalled ? 'Načítání hry...' : 'Stahuji verzi a herní data...';
+        maxRenderedProgress = calculatePerceptualProgress(8);
+        lastProgressData = { percent: 8, text: initStatusText };
 
         if (progressContainer) {
             progressContainer.style.display = 'flex';
-            if (progressBar) progressBar.style.width = '10%';
-            if (progressPercent) progressPercent.textContent = '10%';
-            if (progressText) progressText.textContent = isAlreadyInstalled ? 'Načítání hry...' : 'Stahuji verzi a herní data...';
+            if (progressBar) progressBar.style.width = `${maxRenderedProgress}%`;
+            if (progressPercent) progressPercent.textContent = `${maxRenderedProgress}%`;
+            if (progressText) progressText.textContent = initStatusText;
+        }
+
+        if (globalDownloadChip) {
+            globalDownloadChip.style.display = 'inline-flex';
+            if (globalDownloadBar) globalDownloadBar.style.width = `${maxRenderedProgress}%`;
+            if (globalDownloadText) globalDownloadText.textContent = `${initStatusText} (${maxRenderedProgress}%)`;
         }
 
         appendLog(isAlreadyInstalled
@@ -1818,8 +1932,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     function resetPlayState() {
         isRunning = false;
         isLaunching = false;
+        lastProgressData = null;
+        maxRenderedProgress = 0;
         if (progressContainer) {
             progressContainer.style.display = 'none';
+        }
+        if (globalDownloadChip) {
+            globalDownloadChip.style.display = 'none';
         }
         if (sidebarPlayBtn) {
             sidebarPlayBtn.style.opacity = '1';
@@ -1838,8 +1957,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const activeInst = activeP && Array.isArray(installedVersions) && installedVersions.includes(activeP.version);
         if (sideConsoleStatus) {
             sideConsoleStatus.textContent = activeInst
-                ? 'Klient je připraven. Kliknutím na Hrát spustíš instanci s optimalizacemi.'
-                : `Verze ${activeP ? activeP.version : ''} ještě není stažena. Kliknutím na Stáhnout ji nainstaluješ.`;
+                ? 'Klient je připraven ke spuštění.'
+                : `Verze ${activeP ? activeP.version : ''} není nainstalována.`;
         }
         document.querySelectorAll('.v-card-progress').forEach(p => p.style.display = 'none');
         refreshVersionStatuses();
@@ -2205,7 +2324,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const extraDups = res.collisions.reduce((acc, c) => acc + (c.count - 1), 0);
                     modCollisionBanner.style.display = 'flex';
                     if (modCollisionDescText) {
-                        modCollisionDescText.textContent = `Nalezeno ${res.collisions.length} módů s duplicitními verzemi (${extraDups} duplikátů). Automaticky zachová nejnovější verzi a starší bezpečně deaktivuje.`;
+                        modCollisionDescText.textContent = `Nalezeno ${res.collisions.length} módů s duplicitními verzemi (${extraDups} duplikátů). Zachová nejnovější verzi a starší deaktivuje.`;
                     }
                     if (btnResolveModCollisions) {
                         btnResolveModCollisions.onclick = async () => {
@@ -2221,7 +2340,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 showToast('Chyba při řešení kolizí: ' + err.message, 'error');
                             } finally {
                                 btnResolveModCollisions.disabled = false;
-                                btnResolveModCollisions.textContent = 'Automaticky vyřešit';
+                                btnResolveModCollisions.textContent = 'Vyřešit konflikty';
                             }
                         };
                     }
@@ -2259,11 +2378,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="empty-mods-icon">
                             <svg class="ui-icon-svg ui-icon-svg--xl" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
                         </div>
-                        <div class="empty-mods-title">V tomto profilu zatím nejsou žádné módy</div>
-                        <p class="empty-mods-desc">Přidej módy z Modrinth katalogu jedním kliknutím nebo vlož .jar soubory do složky mods.</p>
+                        <div class="empty-mods-title">Žádné módy</div>
+                        <p class="empty-mods-desc">Přidej módy z katalogu nebo vlož .jar soubory do složky mods.</p>
                         <div class="empty-mods-actions">
                             <button type="button" class="mc-btn mc-btn-primary" id="btnEmptyGoCatalog">
-                                <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> Přejít do Modrinth katalogu</span>
+                                <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> Přejít do katalogu</span>
                             </button>
                             <button type="button" class="mc-btn mc-btn-secondary" id="btnEmptyOpenFolder">
                                 <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Otevřít složku mods</span>
@@ -2596,10 +2715,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     /**
-     * Inteligentně najde odpovídající nainstalovaný mód v profilu pro danou položku z katalogu Modrinth.
+     * Spolehlivě a přesně najde odpovídající nainstalovaný mód v profilu pro danou položku z katalogu Modrinth.
+     * Zabraňuje falešným shodám (např. 'Capes' vs 'WaveyCapes', 'Sounds' vs 'Sound Physics Remastered').
      */
     function findInstalledModForCatalog(catalogMod, profileMods) {
-        if (!profileMods || profileMods.length === 0) return null;
+        if (!profileMods || profileMods.length === 0 || !catalogMod) return null;
 
         const catId = (catalogMod.id || '').toLowerCase().trim();
         const catSlug = (catalogMod.slug || catalogMod.id || '').toLowerCase().trim();
@@ -2611,8 +2731,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         const cleanTitle = clean(catTitle);
         const cleanId = clean(catId);
 
+        // Striktní ověření shody názvu souboru s oddělovačem
+        // Např. slug 'capes' smí odpovídat pouze 'capes-1.0.jar' nebo 'capes.jar',
+        // ale NIKDY nesmí odpovídat 'waveycapes-1.0.jar'.
+        function matchFilenameStrict(file, slug) {
+            if (!file || !slug) return false;
+            const normFile = file.toLowerCase().replace(/\.disabled$/i, '').replace(/\.jar$/i, '');
+            if (normFile === slug) return true;
+            const escaped = slug.replace(/[-_]/g, '[-_]').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const pattern = new RegExp('^' + escaped + '([-_+.]|$)', 'i');
+            return pattern.test(normFile);
+        }
+
         for (const inst of profileMods) {
-            // 0. Metadata shoda z .mod_meta.json
+            // 0. 100% jistá metadata shoda z .mod_meta.json
             const instMId = (inst.modrinthId || '').toLowerCase().trim();
             const instMSlug = (inst.modrinthSlug || '').toLowerCase().trim();
             if (instMId && (instMId === catId || instMId === catSlug || instMId === catProjId)) {
@@ -2627,30 +2759,28 @@ document.addEventListener('DOMContentLoaded', async () => {
             const instFile = (inst.filename || '').toLowerCase().trim();
             const cleanInstId = clean(instModId);
             const cleanInstName = clean(instName);
-            const cleanInstFile = clean(instFile);
 
-            // 1. Přesná shoda ID / slug
-            if (cleanSlug && (cleanSlug === cleanInstId || cleanId === cleanInstId || catSlug === instModId)) {
+            // 1. Přesná shoda normalizovaného ID módu / slug (např. 'sound-physics-remastered' === 'sound_physics_remastered')
+            if (cleanSlug && (cleanSlug === cleanInstId || cleanId === cleanInstId)) {
+                return inst;
+            }
+            if (catSlug && (catSlug === instModId || catId === instModId)) {
                 return inst;
             }
 
-            // 2. Přesná shoda názvu módu
-            if (cleanTitle && (cleanTitle === cleanInstName || catTitle === instName)) {
+            // 2. Přesná shoda oficiálního názvu módu
+            if (cleanTitle && cleanTitle === cleanInstName) {
+                return inst;
+            }
+            if (catTitle && catTitle === instName) {
                 return inst;
             }
 
-            // 3. Shoda začátku nebo části názvu souboru (např. sodium-fabric-0.6.6 vs slug sodium)
-            if (catSlug && catSlug.length >= 3) {
-                if (instFile.startsWith(catSlug + '-') || instFile.startsWith(catSlug + '_') || instFile.startsWith(catSlug + '.')) {
-                    return inst;
-                }
-            }
-            if (cleanSlug && cleanSlug.length >= 3 && (cleanInstFile.startsWith(cleanSlug) || cleanInstFile.includes(cleanSlug))) {
+            // 3. Shoda názvu souboru se striktním oddělovačem na začátku (nikdy uvnitř nebo na konci)
+            if (catSlug && matchFilenameStrict(instFile, catSlug)) {
                 return inst;
             }
-
-            // 4. Fallback na cleanName
-            if (cleanSlug && cleanSlug.length >= 4 && cleanInstName.startsWith(cleanSlug)) {
+            if (cleanSlug && cleanSlug.length >= 4 && matchFilenameStrict(instFile, cleanSlug)) {
                 return inst;
             }
         }
@@ -3400,10 +3530,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (currentConfig) {
                 const isMicrosoft = currentConfig.authType === 'microsoft';
                 const effectiveSkin = currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
-                const name = (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.username : currentConfig.username) || 'Steve';
-                const skinSrc = effectiveSkin
-                    ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
-                    : `https://minotar.net/skin/${encodeURIComponent(name)}`;
+                const msName = currentConfig.microsoftAccount?.name || currentConfig.microsoftAccount?.username;
+                const name = (isMicrosoft ? msName : currentConfig.username) || 'Hráč';
+                let skinSrc;
+                if (effectiveSkin) {
+                    skinSrc = (effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://') || effectiveSkin.startsWith('assets/')) ? effectiveSkin : `file://${effectiveSkin}`;
+                } else if (name.toLowerCase() === 'steve' || name.toLowerCase() === 'alex' || name === 'Hráč') {
+                    skinSrc = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
+                } else {
+                    skinSrc = `https://minotar.net/skin/${encodeURIComponent(name)}`;
+                }
                 const effectiveCape = getEffectiveCape();
 
                 const pSkin = heroSkinViewer.loadSkin(skinSrc, { model: isSlim ? 'slim' : 'default' });
@@ -3566,11 +3702,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         const effectiveSkin = currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
         const effectiveCape = getEffectiveCape();
         const isSlim = currentConfig.customSkinVariant === 'slim';
-        const name = (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.username : currentConfig.username) || 'Steve';
+        const msName = currentConfig.microsoftAccount?.name || currentConfig.microsoftAccount?.username;
+        const name = (isMicrosoft ? msName : currentConfig.username) || 'Hráč';
 
-        const skinSrc = effectiveSkin
-            ? ((effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://')) ? effectiveSkin : `file://${effectiveSkin}`)
-            : `https://minotar.net/skin/${encodeURIComponent(name)}`;
+        let skinSrc;
+        if (effectiveSkin) {
+            skinSrc = (effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://') || effectiveSkin.startsWith('assets/')) ? effectiveSkin : `file://${effectiveSkin}`;
+        } else if (name.toLowerCase() === 'steve' || name.toLowerCase() === 'alex' || name === 'Hráč') {
+            skinSrc = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
+        } else {
+            skinSrc = `https://minotar.net/skin/${encodeURIComponent(name)}`;
+        }
 
         updateSkinViewer3D(skinSrc, effectiveCape, isSlim);
         updateHeroSkinViewer3D(skinSrc, effectiveCape, isSlim);
@@ -3732,6 +3874,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const res = await window.api.getMojangProfile();
             if (res && res.success && res.profile) {
+                // Automatically reflect active Mojang skin and arm model (Classic vs Slim)
+                const activeSkin = (res.profile.skins || []).find(s => s.state === 'ACTIVE') || (res.profile.skins || [])[0];
+                const isSlimArm = activeSkin ? (activeSkin.variant || '').toLowerCase() === 'slim' : (currentConfig.customSkinVariant === 'slim');
+                if (activeSkin && activeSkin.url && !currentConfig.customSkinPath) {
+                    currentConfig.customSkinVariant = isSlimArm ? 'slim' : 'classic';
+                    if (currentConfig.microsoftAccount) {
+                        currentConfig.microsoftAccount.skinUrl = activeSkin.url;
+                    }
+                    lastLoadedSkinUrl = activeSkin.url;
+                    drawSkinToCanvas(activeSkin.url, isSlimArm);
+                }
+
                 const capes = res.profile.capes || [];
                 if (capes.length === 0) {
                     container.innerHTML = '<div class="cape-loading-hint">Na tomto Mojang účtu nemáš žádné oficiální pláště.</div>';
@@ -3759,18 +3913,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (canvas) drawCapeModelThumb(c.url, canvas);
                 });
 
+                const targetSkin = lastLoadedSkinUrl || currentConfig.microsoftAccount?.skinUrl || (isSlimArm ? 'assets/default_alex.png' : 'assets/default_steve.png');
+
                 if (equippedBadge && equippedName) {
                     if (activeCapeFound) {
                         equippedBadge.style.display = 'block';
                         equippedName.textContent = activeCapeFound.alias || 'Aktivní plášť';
                         activeMojangCapeUrl = activeCapeFound.url;
-                        updateSkinViewer3D(lastLoadedSkinUrl, activeCapeFound.url, currentConfig.customSkinVariant === 'slim');
-                        updateHeroSkinViewer3D(lastLoadedSkinUrl, activeCapeFound.url, currentConfig.customSkinVariant === 'slim');
+                        updateSkinViewer3D(targetSkin, activeCapeFound.url, isSlimArm);
+                        updateHeroSkinViewer3D(targetSkin, activeCapeFound.url, isSlimArm);
                     } else {
                         equippedBadge.style.display = 'none';
                         activeMojangCapeUrl = null;
-                        updateSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
-                        updateHeroSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
+                        updateSkinViewer3D(targetSkin, null, isSlimArm);
+                        updateHeroSkinViewer3D(targetSkin, null, isSlimArm);
                     }
                 }
 
@@ -3788,6 +3944,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                     });
                 });
+            } else if (res && res.expired) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 10px 4px;">
+                        <div class="cape-loading-hint" style="color: #f51515; margin-bottom: 8px;">
+                            ${escapeHtml(res.error || 'Platnost Microsoft přihlášení vypršela.')}
+                        </div>
+                        <button type="button" class="mc-btn mc-btn-green" id="btnReloginExpiredMs" style="margin: 0 auto; justify-content: center; font-size: 11.5px; padding: 6px 14px;">
+                            <span>Obnovit Microsoft přihlášení</span>
+                        </button>
+                    </div>
+                `;
+                const btnRelogin = document.getElementById('btnReloginExpiredMs');
+                if (btnRelogin) {
+                    btnRelogin.onclick = () => loginWithMicrosoft();
+                }
+                if (equippedBadge) equippedBadge.style.display = 'none';
             } else {
                 container.innerHTML = `<div class="cape-loading-hint">Pláště nelze načíst (${res?.error || 'Nepřihlášen'}).</div>`;
             }
@@ -3818,10 +3990,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             nickDebounce = setTimeout(() => {
                 if (skinCaption) skinCaption.textContent = `3D Náhled: ${val}`;
                 if (!currentConfig.customSkinPath && currentConfig.authType !== 'microsoft') {
-                    const minotarSkin = `https://minotar.net/skin/${encodeURIComponent(val)}`;
-                    drawSkinToCanvas(minotarSkin, currentConfig.customSkinVariant === 'slim');
-                    updateSkinViewer3D(minotarSkin, getEffectiveCape(), currentConfig.customSkinVariant === 'slim');
-                    updateHeroSkinViewer3D(minotarSkin, getEffectiveCape(), currentConfig.customSkinVariant === 'slim');
+                    const isSlim = currentConfig.customSkinVariant === 'slim';
+                    const skinToDraw = (val.toLowerCase() === 'steve' || val.toLowerCase() === 'alex' || val === 'Hráč')
+                        ? (isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png')
+                        : `https://minotar.net/skin/${encodeURIComponent(val)}`;
+                    drawSkinToCanvas(skinToDraw, isSlim);
+                    updateSkinViewer3D(skinToDraw, getEffectiveCape(), isSlim);
+                    updateHeroSkinViewer3D(skinToDraw, getEffectiveCape(), isSlim);
                 }
             }, 300);
         });
@@ -3891,8 +4066,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             const res = await window.api.resetMojangSkin();
             if (res && res.success) {
                 showToast('Skin byl resetován na výchozí.', 'success');
-                const defaultSkin = `https://minotar.net/skin/${encodeURIComponent(currentConfig.username)}`;
-                drawSkinToCanvas(defaultSkin, currentConfig.customSkinVariant === 'slim');
+                const isSlim = currentConfig.customSkinVariant === 'slim';
+                const defaultSkin = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
+                if (currentConfig.microsoftAccount) {
+                    currentConfig.microsoftAccount.skinUrl = null;
+                }
+                currentConfig.customSkinPath = null;
+                drawSkinToCanvas(defaultSkin, isSlim);
+                updateSkinViewer3D(defaultSkin, getEffectiveCape(), isSlim);
+                updateHeroSkinViewer3D(defaultSkin, getEffectiveCape(), isSlim);
             } else {
                 showToast('Reset selhal: ' + (res.error || 'Chyba'), 'error');
             }
@@ -3929,7 +4111,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     variant: currentConfig.customSkinVariant || 'classic'
                 });
                 updateUserUI(currentConfig.username, 'offline', destPath);
-                showToast('Offline skin byl uložen v launcheru!', 'success');
+                showToast('Skin byl uložen.', 'success');
                 appendLog(`[SKIN] Vlastní offline skin nastaven: ${destPath}`);
             }
         });
@@ -3979,7 +4161,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         variant: currentConfig.customSkinVariant || 'classic'
                     });
                     updateUserUI(currentConfig.username, currentConfig.authType || 'offline', res.customSkinPath);
-                    showToast('Skin byl úspěšně nahrán přetažením myší!', 'success');
+                    showToast('Skin byl nahrán.', 'success');
                     appendLog(`[SKIN] Skin úspěšně nahrán přes Drag & Drop: ${file.name}`);
                 } else {
                     showToast('Chyba při ukládání skinu: ' + (res?.error || 'Neznámá chyba'), 'error');
@@ -4000,7 +4182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await window.api.saveOfflineSkin({ capePath: capePath });
                 updateUserUI(currentConfig.username, 'offline', currentConfig.customSkinPath);
                 loadOfflinePresetCapes();
-                showToast('Offline plášť byl uložen v launcheru!', 'success');
+                showToast('Plášť byl uložen.', 'success');
                 appendLog(`[CAPE] Vlastní offline plášť nastaven: ${capePath}`);
             }
         });
@@ -4031,8 +4213,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentConfig.authType = 'offline';
                 // Note: customSkinPath is kept!
                 updateUserUI(nick, 'offline', currentConfig.customSkinPath);
-                temporaryButtonText(btnSaveCharacter, '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span>Postava uložena!</span>');
-                showToast(`Postava "${nick}" byla uložena s tvým skinem!`, 'success');
+                temporaryButtonText(btnSaveCharacter, '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span>Uloženo</span>');
+                showToast(`Postava "${nick}" uložena.`, 'success');
             }
         });
     }
@@ -4047,34 +4229,47 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    if (authMicrosoftBtn) {
-        authMicrosoftBtn.addEventListener('click', async () => {
-            authMicrosoftBtn.disabled = true;
-            const originalHtml = authMicrosoftBtn.innerHTML;
-            authMicrosoftBtn.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Čekám na okno Microsoftu...</span>';
-            appendLog('[AUTH] Otevírám oficiální Microsoft přihlašovací okno...');
+    async function loginWithMicrosoft() {
+        if (!authMicrosoftBtn) return;
+        authMicrosoftBtn.disabled = true;
+        const originalHtml = authMicrosoftBtn.innerHTML;
+        authMicrosoftBtn.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Čekám na okno Microsoftu...</span>';
+        appendLog('[AUTH] Otevírám oficiální Microsoft přihlašovací okno...');
 
-            try {
-                const res = await window.api.loginMicrosoft();
-                if (res && res.success) {
-                    currentConfig.username = res.profile.name;
-                    currentConfig.authType = 'microsoft';
-                    currentConfig.microsoftAccount = res.auth;
-                    updateUserUI(res.profile.name, 'microsoft', res.profile.skinUrl);
-                    appendLog(`[AUTH] Úspěšné přihlášení Microsoft účtu: ${res.profile.name}`);
-                    showToast(`Úspěšně přihlášen Microsoft účet: ${res.profile.name}`, 'success');
-                } else {
-                    appendLog(`[AUTH] Přihlášení k Microsoft účtu: ${res.error || 'Zrušeno'}`);
-                    showToast(res.error || 'Přihlášení bylo zrušeno', 'error');
+        try {
+            const res = await window.api.loginMicrosoft();
+            if (res && res.success) {
+                currentConfig.username = res.profile.name;
+                currentConfig.authType = 'microsoft';
+                currentConfig.microsoftAccount = {
+                    ...res.auth,
+                    name: res.profile.name,
+                    username: res.profile.name,
+                    skinUrl: res.profile.skinUrl,
+                    skins: res.profile.skins || [],
+                    capes: res.profile.capes || []
+                };
+                if (res.profile.skinVariant) {
+                    currentConfig.customSkinVariant = res.profile.skinVariant.toLowerCase() === 'slim' ? 'slim' : 'classic';
                 }
-            } catch (err) {
-                appendLog(`[AUTH] Chyba při přihlašování: ${err.message}`);
-                showToast(`Chyba: ${err.message}`, 'error');
-            } finally {
-                authMicrosoftBtn.disabled = false;
-                authMicrosoftBtn.innerHTML = originalHtml;
+                updateUserUI(res.profile.name, 'microsoft', res.profile.skinUrl);
+                appendLog(`[AUTH] Úspěšné přihlášení Microsoft účtu: ${res.profile.name}`);
+                showToast(`Úspěšně přihlášen Microsoft účet: ${res.profile.name}`, 'success');
+            } else {
+                appendLog(`[AUTH] Přihlášení k Microsoft účtu: ${res.error || 'Zrušeno'}`);
+                showToast(res.error || 'Přihlášení bylo zrušeno', 'error');
             }
-        });
+        } catch (err) {
+            appendLog(`[AUTH] Chyba při přihlašování: ${err.message}`);
+            showToast(`Chyba: ${err.message}`, 'error');
+        } finally {
+            authMicrosoftBtn.disabled = false;
+            authMicrosoftBtn.innerHTML = originalHtml;
+        }
+    }
+
+    if (authMicrosoftBtn) {
+        authMicrosoftBtn.addEventListener('click', loginWithMicrosoft);
     }
 
     // Offline Account Switcher
@@ -4322,13 +4517,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── IPC Launch Events ───────────────────────────────────────────────────
     window.api.onProgress((data) => {
+        lastProgressData = data;
         const rawPercent = Math.min(Math.max(data.percent || 0, 0), 100);
-        const percent = calculatePerceptualProgress(rawPercent);
+        let curvedPercent;
+        if (rawPercent <= 0) {
+            curvedPercent = 0;
+        } else if (rawPercent >= 100) {
+            curvedPercent = 100;
+        } else {
+            curvedPercent = calculatePerceptualProgress(rawPercent);
+        }
+
+        maxRenderedProgress = Math.max(maxRenderedProgress, curvedPercent);
+        const percent = maxRenderedProgress;
+        const statusText = data.text || 'Načítání hry...';
+
         if (progressContainer) {
             progressContainer.style.display = 'flex';
             if (progressBar) progressBar.style.width = `${percent}%`;
             if (progressPercent) progressPercent.textContent = `${percent}%`;
-            if (progressText) progressText.textContent = data.text || 'Načítání hry...';
+            if (progressText) progressText.textContent = statusText;
+        }
+
+        if (globalDownloadChip) {
+            globalDownloadChip.style.display = 'inline-flex';
+            if (globalDownloadBar) globalDownloadBar.style.width = `${percent}%`;
+            if (globalDownloadText) {
+                const shortStatus = statusText.length > 25 ? statusText.substring(0, 25) + '...' : statusText;
+                globalDownloadText.textContent = `${shortStatus} (${percent}%)`;
+            }
         }
 
         // Živý indikátor stahování přímo v kartě spouštěné verze
@@ -4379,10 +4596,33 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 2000);
     });
 
+    // Live Playtime & Session Updates
+    if (window.api && window.api.onPlaytimeUpdated) {
+        window.api.onPlaytimeUpdated((data) => {
+            if (!data || !data.profileId) return;
+            if (currentConfig && Array.isArray(currentConfig.profiles)) {
+                const targetProf = currentConfig.profiles.find(p => p.id === data.profileId);
+                if (targetProf) {
+                    targetProf.playtimeSeconds = data.totalPlaytime || ((targetProf.playtimeSeconds || 0) + (data.addedSeconds || 0));
+                    targetProf.lastPlayed = Date.now();
+                    renderProfilesList();
+                }
+            }
+        });
+    }
+
     // Zero-overhead during gameplay & background pause (Tray restore)
     if (window.api && window.api.onGameStarted) {
         window.api.onGameStarted(() => {
             appendLog('[VÝKON] Hra spuštěna – launcher minimalizován do Tray lišty, pozastaveno 3D vykreslování pro 0% zátěž CPU/GPU.');
+            isRunning = true;
+            isLaunching = false;
+            if (sidebarPlayBtn) {
+                sidebarPlayBtn.style.opacity = '1';
+                sidebarPlayBtn.style.background = '#ef4444';
+                sidebarPlayBtn.querySelector('span').innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg> Stop';
+            }
+            renderProfilesList();
             if (heroSkinViewer) heroSkinViewer.renderPaused = true;
             if (skinViewer) skinViewer.renderPaused = true;
         });
@@ -4391,6 +4631,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.api && window.api.onGameStopped) {
         window.api.onGameStopped(() => {
             appendLog('[VÝKON] Hra ukončena – okno launcheru obnoveno ze systémové lišty.');
+            resetPlayState();
             const curTab = document.querySelector('.nav-btn.active')?.dataset?.tab || 'play';
             if (heroSkinViewer) heroSkinViewer.renderPaused = (curTab !== 'play');
             if (skinViewer) skinViewer.renderPaused = (curTab !== 'character');
@@ -4406,7 +4647,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function loadScreenshotsGallery() {
         if (!screenshotsGridContainer) return;
-        screenshotsGridContainer.innerHTML = '<div class="mods-loading">Načítám snímky obrazovky...</div>';
+        screenshotsGridContainer.innerHTML = '<div class="mods-loading">Načítám screenshoty...</div>';
         try {
             const profId = currentConfig.activeProfileId;
             const res = await window.api.getProfileScreenshots(profId);
@@ -4426,8 +4667,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 <polyline points="21 15 16 10 5 21"/>
                             </svg>
                         </div>
-                        <div class="empty-mods-title">Zatím žádné snímky obrazovky</div>
-                        <p class="empty-mods-desc">Stiskni během hry klávesu <strong>F2</strong> pro pořízení screenshotu. Zde se ti okamžitě zobrazí pro bleskové sdílení na Discord.</p>
+                        <div class="empty-mods-title">Žádné screenshoty</div>
+                        <p class="empty-mods-desc">V tomto profilu zatím nejsou žádné screenshoty.</p>
                     </div>
                 `;
                 return;
@@ -4435,10 +4676,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             screenshotsGridContainer.innerHTML = items.map(sc => `
                 <div class="screenshot-card" data-path="${escapeHtml(sc.fullPath)}">
-                    <div class="screenshot-thumb-box" title="Kliknutím otevřít v plné velikosti">
+                    <div class="screenshot-thumb-box" title="Otevřít">
                         <img src="${sc.thumbUrl}" alt="${escapeHtml(sc.filename)}" class="screenshot-thumb-img" loading="lazy">
                         <div class="screenshot-overlay">
-                            <button type="button" class="btn-screenshot-copy" data-path="${escapeHtml(sc.fullPath)}" title="Zkopírovat obrázek do schránky (Ctrl+V na Discord)">
+                            <button type="button" class="btn-screenshot-copy" data-path="${escapeHtml(sc.fullPath)}" title="Kopírovat do schránky">
                                 <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -4455,10 +4696,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <span>${escapeHtml(sc.sizeFormatted)}</span>
                         </div>
                         <div class="screenshot-actions">
-                            <button type="button" class="mc-btn mc-btn-secondary btn-sm btn-open-single-sc" data-path="${escapeHtml(sc.fullPath)}" title="Otevřít v systémovém prohlížeči">
+                            <button type="button" class="mc-btn mc-btn-secondary btn-sm btn-open-single-sc" data-path="${escapeHtml(sc.fullPath)}" title="Otevřít">
                                 Otevřít
                             </button>
-                            <button type="button" class="mc-btn btn-sm btn-delete-single-sc" data-path="${escapeHtml(sc.fullPath)}" style="color: #f51515;" title="Smazat snímek">
+                            <button type="button" class="mc-btn btn-sm btn-delete-single-sc" data-path="${escapeHtml(sc.fullPath)}" style="color: #f51515;" title="Smazat">
                                 <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24">
                                     <polyline points="3 6 5 6 21 6"></polyline>
                                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -4477,7 +4718,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     try {
                         const cRes = await window.api.copyScreenshotToClipboard(fullPath);
                         if (cRes && cRes.success) {
-                            showToast('Screenshot zkopírován do schránky! Můžeš vložit (Ctrl+V) na Discord.', 'success');
+                            showToast('Screenshot zkopírován do schránky.', 'success');
                         } else {
                             showToast('Chyba při kopírování: ' + (cRes?.error || 'Neznámá'), 'error');
                         }
@@ -4511,11 +4752,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 btn.onclick = async (e) => {
                     e.stopPropagation();
                     const fullPath = btn.dataset.path;
-                    if (!confirm('Opravdu chceš smazat tento snímek obrazovky?')) return;
+                    if (!confirm('Opravdu chceš smazat tento screenshot?')) return;
                     try {
                         const dRes = await window.api.deleteScreenshot(fullPath);
                         if (dRes && dRes.success) {
-                            showToast('Snímek byl smazán.', 'info');
+                            showToast('Screenshot byl smazán.', 'info');
                             loadScreenshotsGallery();
                         } else {
                             showToast('Chyba při mazání: ' + (dRes?.error || 'Neznámá chyba'), 'error');
@@ -4863,6 +5104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 name: rawName,
                 version: ver,
                 loader: ldr,
+                optimizedChosen: ldr === 'fabric' ? 'optimized' : 'vanilla',
                 desc: `${rawName} (${ver}${ldr !== 'vanilla' ? ' • ' + ldr : ''})`,
                 icon: newProfileSelectedIcon,
                 ramMax: ram,
@@ -5303,7 +5545,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alert('Chyba: ' + e.message);
             } finally {
                 btnResetLauncherData.disabled = false;
-                btnResetLauncherData.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> <span>Smazat data launcheru (Reset)</span>';
+                btnResetLauncherData.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> <span>Smazat data launcheru</span>';
             }
         });
     }

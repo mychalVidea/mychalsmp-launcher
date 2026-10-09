@@ -35,6 +35,25 @@
                 <span class="update-text" id="updateText">Nová verze k dispozici</span>
                 <button type="button" class="btn-update-chip" id="btnUpdateChip">Aktualizovat</button>
             </div>
+
+            <!-- Global Game Launch / Download Progress Chip (Visible across all tabs) -->
+            <div class="download-status-chip" id="globalDownloadChip" style="display: none;" title="Stahování">
+                <span class="download-chip-spinner">
+                    <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/>
+                    </svg>
+                </span>
+                <span class="download-chip-label" id="globalDownloadText">Stahuji verzi... 0%</span>
+                <div class="download-chip-track">
+                    <div class="download-chip-fill" id="globalDownloadBar"></div>
+                </div>
+                <button type="button" class="btn-cancel-chip" id="btnCancelGlobalDownload" title="Zrušit stahování">
+                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <div class="window-controls">
@@ -61,26 +80,26 @@
         <!-- Compact Vertical Icon Sidebar (Inspired by Dawn Client) -->
         <aside class="sidebar-compact">
             <div class="sidebar-nav-top">
-                <button class="nav-icon-btn active" data-tab="play" title="Domů & Profily">
+                <button class="nav-icon-btn active" data-tab="play" title="Domů">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                         <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     </svg>
                 </button>
-                <button class="nav-icon-btn" data-tab="mods" title="Správa módů & Modrinth">
+                <button class="nav-icon-btn" data-tab="mods" title="Módy">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path
                             d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
                         </path>
                     </svg>
                 </button>
-                <button class="nav-icon-btn" data-tab="character" title="Postava & Skin">
+                <button class="nav-icon-btn" data-tab="character" title="Postava">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                         <circle cx="12" cy="7" r="4"></circle>
                     </svg>
                 </button>
-                <button class="nav-icon-btn" data-tab="servers" title="Servery & Quick Play">
+                <button class="nav-icon-btn" data-tab="servers" title="Servery">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"></circle>
                         <line x1="2" y1="12" x2="22" y2="12"></line>
@@ -93,7 +112,7 @@
 
             <!-- Bottom Sidebar: Settings -->
             <div class="sidebar-nav-bottom">
-                <button class="nav-icon-btn" data-tab="settings" title="Nastavení & Optimalizace">
+                <button class="nav-icon-btn" data-tab="settings" title="Nastavení">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path
@@ -119,14 +138,14 @@
                             <div class="stage-bg-overlay"></div>
                             <div class="stage-character">
                                 <div class="stage-skin-wrapper" id="heroSkinWrapper"
-                                    title="3D Skin – Otáčej tažením myši">
+                                    title="3D náhled">
                                     <canvas id="heroSkinCanvas3D" class="hero-3d-canvas" width="160"
                                         height="220"></canvas>
-                                    <img src="https://minotar.net/armor/body/Steve/180.png" alt="Skin" id="heroSkinImg"
+                                    <img src="assets/default_steve.png" alt="Skin" id="heroSkinImg"
                                         class="stage-skin" style="display: none;">
                                 </div>
                                 <div class="stage-nick-pill" id="stageNickPill">
-                                    <span id="heroNickLabel">Steve</span>
+                                    <span id="heroNickLabel">Hráč</span>
                                     <button class="stage-edit-btn" id="btnEditNickFromHero" title="Změnit postavu">
                                         <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                             <path d="M12 20h9"></path>
@@ -141,14 +160,54 @@
                                     <span id="heroAccountTypeBadge">Připraven ke hře</span>
                                 </div>
                                 <h1 class="stage-title">Vítej zpět, <span id="heroPlayerNick">Hráč</span>!</h1>
-                                <p class="stage-subtitle" id="heroPlayerSubtitle">Všechny mody i profily jsou načteny.
-                                    Zvol herní verzi a můžeš vyrazit do hry.</p>
-                                <div class="version-pills-row">
-                                    <span class="v-pill active" title="Doporučená síťová verze">26.2 (Doporučeno)</span>
-                                    <span class="v-pill" title="Nejnovější aktivní vydání">26.3 (Nejnovější)</span>
-                                    <span class="v-pill" title="Legacy verze">26.1.2</span>
-                                    <span class="v-pill v-pill-future" title="V přípravě">26.4 (Prosinec)</span>
+                                <p class="stage-subtitle" id="heroPlayerSubtitle">Vyber profil a vyraz na server.</p>
+                                <div class="hero-live-stats" id="heroLiveStats">
+                                    <div class="hero-stat-chip" id="heroStatActiveProfile" title="Aktivní profil">
+                                        <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <rect x="2" y="6" width="20" height="12" rx="4"></rect>
+                                            <line x1="6" y1="12" x2="10" y2="12"></line>
+                                            <line x1="8" y1="10" x2="8" y2="14"></line>
+                                            <line x1="15" y1="11" x2="15.01" y2="11"></line>
+                                            <line x1="18" y1="13" x2="18.01" y2="13"></line>
+                                        </svg>
+                                        <span class="hero-stat-label">Profil:</span>
+                                        <span class="hero-stat-val" id="heroActiveProfileName">Minecraft 26.2</span>
+                                    </div>
+                                    <div class="hero-stat-chip" id="heroStatPlaytime" title="Odehraný čas">
+                                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" style="color: #94a3b8;">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <polyline points="12 6 12 12 16 14"></polyline>
+                                        </svg>
+                                        <span class="hero-stat-label">Odehráno:</span>
+                                        <span class="hero-stat-val" id="heroTotalPlaytimeVal">Zatím nehráno</span>
+                                    </div>
+                                    <div class="hero-stat-chip" id="heroStatServer" title="Stav serveru">
+                                        <span class="hero-stat-dot" id="heroServerDot"></span>
+                                        <span class="hero-stat-label">mychalsmp.xyz:</span>
+                                        <span class="hero-stat-val" id="heroServerStatusVal">Načítání...</span>
+                                    </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Launch / Download Progress Bar (Directly between Hero and Profiles) -->
+                        <div class="progress-container" id="progressContainer" style="display: none;">
+                            <div class="progress-info">
+                                <span class="progress-status" id="progressText">Příprava herních souborů...</span>
+                                <div class="progress-right-side">
+                                    <span class="progress-percent" id="progressPercent">0%</span>
+                                    <button class="btn-cancel-progress" id="btnCancelDownload"
+                                        title="Zrušit stahování / spuštění">
+                                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                        </svg>
+                                        Zrušit
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="progress-track">
+                                <div class="progress-bar" id="progressBar"></div>
                             </div>
                         </div>
 
@@ -197,7 +256,6 @@
                                     <div class="profile-details">
                                         <div class="profile-title-line">
                                             <span class="p-name">Minecraft 26.3</span>
-                                            <span class="p-badge p-latest">Nejnovější 26.3</span>
                                         </div>
                                         <div class="p-meta">26.3 • Zatím nehráno</div>
                                     </div>
@@ -238,7 +296,6 @@
                                     <div class="profile-details">
                                         <div class="profile-title-line">
                                             <span class="p-name">Minecraft 26.2</span>
-                                            <span class="p-badge p-recommended">Doporučeno 26.2</span>
                                         </div>
                                         <div class="p-meta">26.2 • Zatím nehráno</div>
                                     </div>
@@ -287,7 +344,6 @@
                                     <div class="profile-details">
                                         <div class="profile-title-line">
                                             <span class="p-name">Minecraft 26.1.2</span>
-                                            <span class="p-badge p-vanilla">Verze 26.1.2</span>
                                         </div>
                                         <div class="p-meta">26.1.2 • Zatím nehráno</div>
                                     </div>
@@ -349,10 +405,10 @@
                                         <line x1="12" y1="5" x2="12" y2="19"></line>
                                         <line x1="5" y1="12" x2="19" y2="12"></line>
                                     </svg>
-                                    <span class="action-btn-label">Katalog módů</span>
+                                    <span class="action-btn-label">Katalog</span>
                                 </button>
                                 <button class="mc-btn mc-btn-secondary" id="btnOpenScreenshotsModal"
-                                    title="Snímky obrazovky pořízené klávesou F2">
+                                    title="Screenshoty">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                                         <circle cx="8.5" cy="8.5" r="1.5" />
@@ -360,27 +416,6 @@
                                     </svg>
                                     <span class="action-btn-label">Screenshoty</span>
                                 </button>
-                            </div>
-
-                            <!-- Launch / Download Progress Bar (Hidden by default) -->
-                            <div class="progress-container" id="progressContainer" style="display: none;">
-                                <div class="progress-info">
-                                    <span class="progress-status" id="progressText">Příprava herních souborů...</span>
-                                    <div class="progress-right-side">
-                                        <span class="progress-percent" id="progressPercent">0%</span>
-                                        <button class="btn-cancel-progress" id="btnCancelDownload"
-                                            title="Zrušit stahování / spuštění">
-                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                                            </svg>
-                                            Zrušit
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="progress-track">
-                                    <div class="progress-bar" id="progressBar"></div>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -426,9 +461,8 @@
                                         </svg>
                                     </span>
                                     <div class="warden-banner-text">
-                                        <strong>MYCHAL SMP Quick Play zablokován</strong>
-                                        <span id="wardenBlockedCountText">Nalezeny nepovolené módy (povoleny pro
-                                            singleplayer a jiné servery)</span>
+                                        <strong>Quick Play zablokován</strong>
+                                        <span id="wardenBlockedCountText">V profilu jsou nepovolené módy</span>
                                     </div>
                                 </div>
                                 <button type="button" class="btn-warden-action" id="btnOpenWardenModal">Vyřešit</button>
@@ -514,7 +548,7 @@
                                         d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z">
                                     </path>
                                 </svg>
-                                Modrinth Katalog
+                                Katalog
                             </span>
                         </button>
                         <button type="button" class="mods-switch-btn" id="btnSwitchInstalledMods"
@@ -527,7 +561,7 @@
                                     <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
                                     <line x1="12" y1="22.08" x2="12" y2="12"></line>
                                 </svg>
-                                Mody v profilu (<span id="installedModsCount">0</span>)
+                                Nainstalované (<span id="installedModsCount">0</span>)
                             </span>
                         </button>
                     </div>
@@ -548,12 +582,12 @@
                                 </svg>
                             </span>
                             <div class="mod-collision-text">
-                                <strong>Pozor: Detekovány duplicitní verze módů!</strong>
+                                <strong>Duplicitní verze módů</strong>
                                 <span id="modCollisionDescText">Nalezeno více verzí stejného módu v profilu.</span>
                             </div>
                         </div>
                         <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnResolveModCollisions">
-                            Automaticky vyřešit
+                            Vyřešit
                         </button>
                     </div>
 
@@ -624,7 +658,7 @@
                                 </svg>
                             </span>
                             <input type="text" id="modSearchInput"
-                                placeholder="Hledat v katalogu Modrinth (Sodium, Iris, Lithium, AppleSkin...)..."
+                                placeholder="Hledat módy (Sodium, Iris, Lithium...)..."
                                 class="catalog-search-input">
                         </div>
                     </div>
@@ -636,11 +670,11 @@
                                 <div class="filter-group-title">Verze hry</div>
                                 <label class="filter-label">
                                     <input type="radio" name="filterVersion" value="26.2" checked>
-                                    <span>26.2 (Doporučeno)</span>
+                                    <span>26.2</span>
                                 </label>
                                 <label class="filter-label">
                                     <input type="radio" name="filterVersion" value="26.3">
-                                    <span>26.3 (Nejnovější)</span>
+                                    <span>26.3</span>
                                 </label>
                                 <label class="filter-label">
                                     <input type="radio" name="filterVersion" value="26.1.2">
@@ -717,9 +751,8 @@
             ══════════════════════════════════════════════════════════════════ -->
             <section class="tab-pane" id="tab-character">
                 <div class="pane-header">
-                    <h2>Správa postavy & Skinu</h2>
-                    <p>Správa skinů a plášťů. Pro Microsoft účty se změny ukládají přímo na tvůj Mojang účet. Pro
-                        offline hráče je skin trvale uložen v launcheru.</p>
+                    <h2>Postava</h2>
+                    <p>Úprava skinu, pláště a herní přezdívky.</p>
                 </div>
 
                 <div class="character-grid">
@@ -729,7 +762,7 @@
                             <canvas id="skinCanvas3D" class="skin-3d-canvas"></canvas>
                             <canvas id="skinCanvas2D" width="128" height="256" class="skin-2d-canvas"
                                 style="display:none;"></canvas>
-                            <img src="https://minotar.net/armor/body/Steve/220.png" alt="Skin 2D" id="skinPreviewImg"
+                            <img src="assets/default_steve.png" alt="Skin 2D" id="skinPreviewImg"
                                 class="skin-2d-render" style="display:none;">
                             <div class="skin-drop-hint" id="skinDropHint" style="display: none;">
                                 <svg class="ui-icon-svg ui-icon-svg--lg ui-icon-bounce" viewBox="0 0 24 24">
@@ -740,13 +773,13 @@
                                 <span>Pusť soubor skinu (.png)</span>
                             </div>
                         </div>
-                        <div class="skin-caption" id="skinCaption">3D Náhled (Otáčej tažením myši)</div>
+                        <div class="skin-caption" id="skinCaption">3D Náhled</div>
                         <div id="skinAccountTypeBadge" class="skin-badge-pill">Offline Profil</div>
 
                         <!-- Clean Segmented 3D Toolbar -->
                         <div class="viewer-3d-toolbar-clean">
                             <button type="button" class="btn-3d-chip" id="btn3DRotateToggle"
-                                title="Plynulé automatické otáčení">
+                                title="Rotace">
                                 <span>
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <polyline points="23 4 23 10 17 10"></polyline>
@@ -758,7 +791,7 @@
                                 </span>
                             </button>
                             <button type="button" class="btn-3d-chip active" id="btn3DElytraToggle"
-                                title="Přepnout Plášť vs. Elytra">
+                                title="Plášť / Elytra">
                                 <span id="label3DElytra">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <path
@@ -769,7 +802,7 @@
                                 </span>
                             </button>
                             <button type="button" class="btn-3d-chip" id="btn3DFlyingToggle"
-                                title="Létající poloha (plachtění s pláštěm a elytrou)">
+                                title="Poloha při letu">
                                 <span id="label3DFlying">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <path
@@ -810,7 +843,7 @@
                     <div class="skin-form-card">
                         <div class="form-group">
                             <div class="label-with-badge">
-                                <label for="inputNick">Herní přezdívka (Nick)</label>
+                                <label for="inputNick">Herní přezdívka</label>
                                 <span id="nickLockBadge" class="nick-lock-badge" style="display: none;">
                                     <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -821,8 +854,7 @@
                             </div>
                             <input type="text" id="inputNick" class="input-text" placeholder="Zadej herní nick..."
                                 maxlength="16">
-                            <span class="input-hint" id="inputNickHint">Přezdívka se použije při vstupu na server a pro
-                                tvůj profil.</span>
+                            <span class="input-hint" id="inputNickHint">Přezdívka pro připojení a profil.</span>
                         </div>
 
                         <div class="form-group">
@@ -844,11 +876,10 @@
                                     <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
                                         <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
                                     </svg>
-                                    Oficiální Mojang správa (Uloží se na účet)
+                                    Mojang účet
                                 </span>
                             </div>
-                            <p class="panel-desc">Skin i plášť nahraný zde se okamžitě propíše na tvůj oficiální
-                                Minecraft účet a uvidí ho všichni hráči.</p>
+                            <p class="panel-desc">Skin a plášť se synchronizují s oficiálním účtem.</p>
 
                             <div class="form-actions-row">
                                 <button class="mc-btn mc-btn-green" id="btnUploadMojangSkin">
@@ -899,13 +930,13 @@
                                             <line x1="18" y1="6" x2="6" y2="18"></line>
                                             <line x1="6" y1="6" x2="18" y2="18"></line>
                                         </svg>
-                                        Sundat / Skrýt plášť
+                                        Sundat plášť
                                     </span>
                                 </button>
                             </div>
                         </div>
 
-                        <!-- OFFLINE / WAREZ ACCOUNT PANEL -->
+                        <!-- OFFLINE ACCOUNT PANEL -->
                         <div id="panelOfflineSkin" class="skin-account-panel">
                             <div class="offline-skin-notice">
                                 <span class="notice-icon">
@@ -916,13 +947,13 @@
                                     </svg>
                                 </span>
                                 <div>
-                                    <strong>Offline (Warez) Profil:</strong><br>
-                                    Tvůj skin je uložen v launcheru a automaticky se přenese do hry.
+                                    <strong>Offline profil</strong><br>
+                                    Skin se uloží lokálně do launcheru.
                                 </div>
                             </div>
 
                             <div class="form-group">
-                                <label>Vlastní offline skin (.png)</label>
+                                <label>Vlastní skin (.png)</label>
                                 <div class="file-picker-row">
                                     <button class="mc-btn mc-btn-secondary" id="btnSelectSkinFile">
                                         <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
@@ -930,7 +961,7 @@
                                                 d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                                             </path>
                                         </svg>
-                                        Vybrat soubor skinu
+                                        Vybrat soubor
                                     </button>
                                     <span id="offlineSkinPathLabel" class="skin-file-label">Výchozí skin</span>
                                 </div>
@@ -939,7 +970,7 @@
                             <!-- Pláště jsou pro warez skryté (pouze pro oficiální Microsoft účty) -->
                             <div class="mojang-capes-section" id="offlineCapesSection" style="display: none;">
                                 <div class="capes-header">
-                                    <label>Oblíbené offline pláště (nebo nahraj vlastní):</label>
+                                    <label>Pláště:</label>
                                 </div>
                                 <div class="capes-selector-grid" id="offlineCapesList">
                                     <!-- Dynamic upright cape cards -->
@@ -951,7 +982,7 @@
                                             <polyline points="17 8 12 3 7 8"></polyline>
                                             <line x1="12" y1="3" x2="12" y2="15"></line>
                                         </svg>
-                                        Nahrát vlastní .png plášť
+                                        Nahrát plášť (.png)
                                     </button>
                                     <button class="mc-btn mc-btn-secondary btn-icon-only" id="btnRemoveOfflineCape"
                                         title="Sundat plášť">
@@ -965,8 +996,7 @@
                             </div>
 
                             <div class="form-actions mt-3">
-                                <button class="mc-btn mc-btn-green" id="btnSaveCharacter">Uložit postavu &
-                                    nastavení</button>
+                                <button class="mc-btn mc-btn-green" id="btnSaveCharacter">Uložit postavu</button>
                             </div>
                         </div>
                     </div>
@@ -1025,7 +1055,7 @@
                                 <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24">
                                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                                 </svg>
-                                <span>Doporučeno: <strong id="ramRecommendedVal">-- GB</strong></span>
+                                <span>Optimální RAM: <strong id="ramRecommendedVal">-- GB</strong></span>
                             </button>
                         </div>
                     </div>
@@ -1055,7 +1085,7 @@
                             <label for="javaPathInput" class="setting-section-label">Java Runtime</label>
                             <div class="input-with-button">
                                 <input type="text" id="javaPathInput" class="input-text"
-                                    placeholder="Automaticky: Java 25 (LTS)...">
+                                    placeholder="Výchozí: Java 25...">
                                 <button type="button" class="mc-btn mc-btn-secondary"
                                     id="btnDetectJava">Detekovat</button>
                             </div>
@@ -1132,7 +1162,7 @@
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                 <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
-                            <span>Pokročilá nastavení (JVM argumenty & Systém)</span>
+                            <span>Pokročilá nastavení</span>
                         </summary>
 
                         <div class="settings-advanced-body">
@@ -1156,7 +1186,7 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="jvmArgsInput" class="setting-section-label">Argumenty Javy (JVM)</label>
+                                <label for="jvmArgsInput" class="setting-section-label">Argumenty Javy</label>
                                 <input type="text" id="jvmArgsInput" class="input-text"
                                     placeholder="-XX:+UseZGC -XX:+UnlockExperimentalVMOptions...">
                                 <div class="jvm-args-actions">
@@ -1187,12 +1217,12 @@
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                                 </path>
                             </svg>
-                            Otevřít složku hry (.mychalsmp)
+                            Otevřít složku hry
                         </button>
                         <button class="mc-btn mc-btn-green" id="btnSaveSettings">Uložit nastavení</button>
                     </div>
 
-                    <!-- Automatická detekce a čištění nepotřebné Java cache -->
+                    <!-- Čištění cache a dočasných dat -->
                     <div class="cache-cleaner-card"
                         style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 16px; margin-top: 18px;">
                         <div
@@ -1205,16 +1235,14 @@
                                             <path d="M14 8 3 19a2.83 2.83 0 0 0 4 4l11-11"></path>
                                         </svg>
                                     </span>
-                                    <strong style="color: #f1f5f9; font-size: 14px;">Čištění nepotřebné Java cache &
-                                        logů</strong>
+                                    <strong style="color: #f1f5f9; font-size: 14px;">Údržba disku</strong>
                                 </div>
                                 <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin: 0;">
-                                    Automaticky detekuje a promaže staré komprimované logy (.log.gz), crash reporty
-                                    starší než 30 dní a dočasná data.
+                                    Promaže staré logy, crash reporty a dočasné soubory.
                                 </p>
                                 <div id="cacheCleanerSummary"
                                     style="font-size: 12px; color: #38bdf8; margin-top: 8px; font-weight: 500;">
-                                    Stav: Připraveno k analýze uvolnitelného místa.
+                                    Stav: Připraveno k analýze místa.
                                 </div>
                             </div>
                             <div style="display: flex; gap: 8px; align-items: center;">
@@ -1235,7 +1263,7 @@
                                             <path d="m16 2-4 4 4 4 4-4-4-4z"></path>
                                             <path d="M14 8 3 19a2.83 2.83 0 0 0 4 4l11-11"></path>
                                         </svg>
-                                        Vyčistit disk (1 klik)
+                                        Vyčistit
                                     </span>
                                 </button>
                             </div>
@@ -1259,8 +1287,7 @@
                                             </path>
                                         </svg>
                                     </span>
-                                    <strong style="color: #f1f5f9; font-size: 14px;">Aktualizace MYCHAL SMP
-                                        Launcheru</strong>
+                                    <strong style="color: #f1f5f9; font-size: 14px;">Aktualizace aplikace</strong>
                                 </div>
                                 <p style="font-size: 12px; color: #94a3b8; margin: 0;" id="launcherVersionStatus">
                                     Nainstalovaná verze: <strong>v1.0.4</strong>
@@ -1292,10 +1319,9 @@
                                     <line x1="12" y1="9" x2="12" y2="13"></line>
                                     <line x1="12" y1="17" x2="12.01" y2="17"></line>
                                 </svg>
-                                Tovární reset launcheru
+                                Reset dat
                             </span>
-                            <span class="danger-zone-desc">Smaže veškerá lokální data, stažené verze, profily a resetuje
-                                konfiguraci launcheru.</span>
+                            <span class="danger-zone-desc">Smaže uložené profily, stažená data a obnoví výchozí nastavení.</span>
                         </div>
                         <button class="btn-danger-reset" id="btnResetLauncherData">
                             <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24">
@@ -1304,7 +1330,7 @@
                                     d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
                                 </path>
                             </svg>
-                            Smazat data launcheru (Reset)
+                            Smazat data launcheru
                         </button>
                     </div>
                 </div>
@@ -1333,11 +1359,11 @@
                             <polyline points="21 15 16 10 5 21" />
                         </svg>
                     </span>
-                    <h3>Snímky obrazovky ze hry (F2)</h3>
+                    <h3>Screenshoty</h3>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnOpenScreenshotsFolder"
-                        title="Otevřít složku v průzkumníku">
+                        title="Otevřít složku">
                         <span>
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
@@ -1401,7 +1427,7 @@
                                             <line x1="19" y1="21" x2="21" y2="19"></line>
                                         </svg>
                                     </span>
-                                    <span class="custom-dropdown-selected-text">26.2 (Doporučeno)</span>
+                                    <span class="custom-dropdown-selected-text">26.2</span>
                                 </div>
                                 <span class="custom-dropdown-chevron"><svg class="ui-icon-svg ui-icon-svg--xs"
                                         viewBox="0 0 24 24">
@@ -1422,8 +1448,7 @@
                                         </span>
                                         <div class="custom-option-text">
                                             <span class="custom-option-title">Minecraft 26.2</span>
-                                            <span class="custom-option-desc">Doporučená síťová verze MYCHAL
-                                                SMP</span>
+                                            <span class="custom-option-desc">Verze 26.2</span>
                                         </div>
                                     </div>
                                     <span class="custom-option-check">
@@ -1444,7 +1469,7 @@
                                         </span>
                                         <div class="custom-option-text">
                                             <span class="custom-option-title">Minecraft 26.3</span>
-                                            <span class="custom-option-desc">Nejnovější aktivní vydání</span>
+                                            <span class="custom-option-desc">Verze 26.3</span>
                                         </div>
                                     </div>
                                     <span class="custom-option-check"></span>
@@ -1647,7 +1672,7 @@
                             <line x1="12" y1="15" x2="12" y2="1"></line>
                         </svg>
                     </span>
-                    <h3>Importovat profil z jiného launcheru</h3>
+                    <h3>Importovat profil</h3>
                 </div>
                 <button class="modal-close-btn" id="btnCloseImportModal">
                     <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
@@ -1658,10 +1683,7 @@
             </div>
             <div class="modal-body">
                 <p class="modal-desc">
-                    Vyber složku profilu či instance z Prism Launcheru, CurseForge, Modrinth App nebo
-                    .minecraft.
-                    Launcher automaticky přenese tvé nastavení hry, modifikace, konfigurace a texture packy bez
-                    nutnosti začínat od nuly.
+                    Vyber složku profilu z libovolného launcheru nebo .minecraft. Přenese módy, nastavení i balíčky.
                 </p>
                 <div class="import-browse-zone" id="importBrowseZone">
                     <button class="mc-btn mc-btn-primary" id="btnSelectImportFolder">
@@ -1670,7 +1692,7 @@
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                                 </path>
                             </svg>
-                            Procházet a vybrat složku instance
+                            Vybrat složku
                         </span>
                     </button>
                     <div class="import-path-label" id="importPathLabel">Zatím nebyla vybrána žádná složka</div>
@@ -1686,8 +1708,8 @@
                         <div class="form-group">
                             <label>Verze Minecraftu</label>
                             <select class="text-input select-input" id="importVersionSelect">
-                                <option value="26.2">Minecraft 26.2 (Doporučeno MYCHAL SMP)</option>
-                                <option value="26.3">Minecraft 26.3 (Nejnovější)</option>
+                                <option value="26.2">Minecraft 26.2</option>
+                                <option value="26.3">Minecraft 26.3</option>
                                 <option value="26.1.2">Minecraft 26.1.2</option>
                             </select>
                         </div>
@@ -1728,7 +1750,7 @@
                             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                         </svg>
                     </span>
-                    <h3>Upgrade profilu na novou verzi</h3>
+                    <h3>Aktualizovat profil</h3>
                 </div>
                 <button class="modal-close-btn" id="btnCloseUpgradeModal">
                     <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
@@ -1739,9 +1761,7 @@
             </div>
             <div class="modal-body">
                 <p class="modal-desc">
-                    Vytvoří nový profil s novější verzí hry, překopíruje veškeré tvé nastavení hry (ovládání,
-                    citlivost myši, video nastavení), konfigurace módů i texture packy. Launcher se navíc pokusí
-                    automaticky vyhledat a stáhnout kompatibilní novější verze tvých módů z Modrinthu!
+                    Vytvoří profil na novější verzi se zachováním tvého nastavení, módů a balíčků.
                 </p>
                 <div class="upgrade-source-badge" id="upgradeSourceProfileName">Zdrojový profil: MYCHAL SMP 26.2
                 </div>
@@ -1749,27 +1769,27 @@
                 <div class="form-group" style="margin-top: 14px;">
                     <label>Cílová verze Minecraftu</label>
                     <select class="text-input select-input" id="upgradeTargetVersionSelect">
-                        <option value="26.3">Minecraft 26.3 (Nejnovější jádro 26.3)</option>
-                        <option value="26.2">Minecraft 26.2 (Doporučená verze)</option>
+                        <option value="26.3">Minecraft 26.3</option>
+                        <option value="26.2">Minecraft 26.2</option>
                     </select>
                 </div>
 
                 <div class="upgrade-checkboxes">
                     <label class="checkbox-label">
                         <input type="checkbox" id="checkUpgradeOptions" checked>
-                        <span>Překopírovat nastavení hry (ovládání, video, zvuk, citlivost)</span>
+                        <span>Zachovat herní nastavení</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="checkUpgradeConfig" checked>
-                        <span>Překopírovat nastavení a konfigurace módů (složka config/)</span>
+                        <span>Zachovat konfigurace módů</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="checkUpgradePacks" checked>
-                        <span>Překopírovat texture packy a shadery (resourcepacks/)</span>
+                        <span>Zachovat resource packy a shadery</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="checkUpgradeMods" checked>
-                        <span>Automaticky vyhledat a aktualizovat módy pro novou verzi na Modrinthu</span>
+                        <span>Vyhledat novější verze módů na Modrinthu</span>
                     </label>
                 </div>
 
@@ -1781,8 +1801,7 @@
                                 <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle>
                             </svg>
                         </span>
-                        <span class="upgrade-status-text" id="upgradeStatusText">Probíhá upgrade
-                            profilu...</span>
+                        <span class="upgrade-status-text" id="upgradeStatusText">Probíhá aktualizace...</span>
                     </div>
                 </div>
             </div>
@@ -1798,7 +1817,7 @@
                                 d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z">
                             </path>
                         </svg>
-                        Spustit upgrade
+                        Aktualizovat
                     </span>
                 </button>
             </div>
@@ -1873,14 +1892,11 @@
                 <div class="form-group">
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <label style="margin-bottom: 0;">Herní zavaděč</label>
-                        <span style="font-size: 11px; color: #21DE00; font-weight: 700;">Fabric = Doporučeno pro MYCHAL
-                            SMP</span>
+                        <label style="margin-bottom: 0;">Mod Loader</label>
                     </div>
                     <input type="hidden" id="profileSettingsLoaderSelect" value="fabric">
                     <div class="loader-cards-grid" id="loaderCardsContainer">
                         <div class="loader-card active" data-loader="fabric">
-                            <div class="loader-card-badge">DOPORUČENO</div>
                             <div class="loader-card-icon">⚡</div>
                             <div class="loader-card-title">Fabric</div>
                             <div class="loader-card-desc">Nejvyšší FPS, Sodium, Iris shadery a plynulost.</div>
@@ -1893,12 +1909,12 @@
                         <div class="loader-card" data-loader="neoforge">
                             <div class="loader-card-icon">⚙️</div>
                             <div class="loader-card-title">NeoForge</div>
-                            <div class="loader-card-desc">Moderní Forge odnož pro velké modpacky.</div>
+                            <div class="loader-card-desc">Moderní platforma pro velké modpacky.</div>
                         </div>
                         <div class="loader-card" data-loader="forge">
                             <div class="loader-card-icon">🔨</div>
                             <div class="loader-card-title">Forge</div>
-                            <div class="loader-card-desc">Tradiční modloader pro starší modpacky.</div>
+                            <div class="loader-card-desc">Tradiční loader pro starší modpacky.</div>
                         </div>
                     </div>
                 </div>
@@ -1910,10 +1926,9 @@
                             <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24">
                                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                             </svg>
-                            <span>Doporučená optimalizace pro MYCHAL SMP</span>
+                            <span>Herní optimalizace</span>
                         </div>
-                        <div class="profile-quick-opt-desc">Automaticky zapne Fabric, stáhne Sodium, Lithium, Iris,
-                            shadery Complementary Reimagined a nastaví GUI Scale: 2.</div>
+                        <div class="profile-quick-opt-desc">Nainstaluje Sodium, Lithium a Iris pro maximální FPS a plynulost.</div>
                     </div>
                     <button type="button" class="mc-btn mc-btn-green" id="btnApplyProfileOptimization"
                         style="padding: 7px 14px; font-size: 11.5px; white-space: nowrap;">
@@ -1922,7 +1937,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Přidělená operační paměť RAM pro tento profil</label>
+                    <label>Paměť RAM</label>
                     <div class="ram-slider-row" style="display: flex; align-items: center; gap: 12px;">
                         <input type="range" min="2" max="16" step="1" value="4" class="slider" id="profileRamSlider"
                             style="flex: 1;">
@@ -1933,7 +1948,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Složky a soubory tohoto profilu</label>
+                    <label>Složky profilu</label>
                     <div class="profile-folders-quick-grid"
                         style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
                         <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder=""
@@ -2017,63 +2032,58 @@
         <div class="launcher-modal-card first-launch-modal-card">
             <div class="modal-header">
                 <div class="modal-title-box">
-                    <span class="modal-icon"
-                        style="background: rgba(33, 222, 0, 0.15); border: 1px solid rgba(33, 222, 0, 0.35);">
-                        <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24">
+                    <span class="modal-icon">
+                        <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
                             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                         </svg>
                     </span>
                     <div>
-                        <h3 id="firstLaunchModalTitle" style="font-size: 16px;">Jak chceš spustit Minecraft?</h3>
-                        <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Zvol výchozí nastavení pro tento
-                            herní profil.</div>
+                        <h3 id="firstLaunchModalTitle">Jak chceš spustit Minecraft?</h3>
+                        <div class="first-launch-modal-subtitle">Zvol výchozí nastavení pro tento herní profil.</div>
                     </div>
                 </div>
-                <button class="modal-close-btn" id="btnCloseFirstLaunchModal">
+                <button class="modal-close-btn" id="btnCloseFirstLaunchModal" title="Zavřít">
                     <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
                 </button>
             </div>
-            <div class="modal-body" style="padding: 16px 20px;">
+            <div class="modal-body first-launch-modal-body">
                 <div class="first-launch-options-grid">
-                    <!-- Option 1: Optimalizovaný (Doporučeno) -->
+                    <!-- Option 1: Optimalizovaný -->
                     <div class="first-launch-card recommended" id="cardChooseOptimized">
-                        <div class="first-launch-badge">DOPORUČENO (AŽ +300 % FPS)</div>
-                        <div class="first-launch-card-header">
-                            <div class="first-launch-icon">⚡</div>
-                            <div>
-                                <div class="first-launch-name">Optimalizovaný</div>
-                                <div class="first-launch-sub">Pro nejlepší zážitek na MYCHAL SMP</div>
+                        <div class="first-launch-card-top">
+                            <div class="first-launch-card-header">
+                                <div class="first-launch-icon-box">
+                                    <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--green" viewBox="0 0 24 24">
+                                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="first-launch-name">Optimalizovaný</div>
+                                    <div class="first-launch-sub">Konfigurace pro MYCHAL SMP</div>
+                                </div>
                             </div>
                         </div>
+
                         <ul class="first-launch-features">
-                            <li><span class="feat-check">✓</span> <strong>Fabric + Sodium & Lithium</strong> (plynulost
-                                bez lagů)</li>
-                            <li><span class="feat-check">✓</span> <strong>Iris Shaders</strong> + shadery
-                                <em>Complementary</em>
-                            </li>
-                            <li><span class="feat-check">✓</span> <strong>GUI Scale: 2</strong></li>
-                            <li><span class="feat-check">✓</span> <strong>Uložené</strong> tvé
-                                servery</li>
+                            <li><span class="feat-check">✓</span> <span><strong>Fabric + Sodium & Lithium</strong> (vysoké FPS bez lagů)</span></li>
+                            <li><span class="feat-check">✓</span> <span><strong>Iris Shaders</strong> s balíčkem Complementary</span></li>
+                            <li><span class="feat-check">✓</span> <span>Vyladěné herní nastavení pro MYCHAL SMP</span></li>
                         </ul>
-                        <button type="button" class="mc-btn mc-btn-green" id="btnConfirmChooseOptimized"
-                            style="width: 100%; margin-top: 14px; justify-content: center;">
-                            <span>⚡ Spustit s optimalizací</span>
-                        </button>
-                        <div id="firstLaunchOptProgressBox"
-                            style="display: none; margin-top: 12px; background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 10px 12px;">
-                            <div
-                                style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 6px;">
-                                <span id="firstLaunchOptStatusText"
-                                    style="color: #94a3b8; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; margin-right: 8px;">Příprava stahování...</span>
-                                <span id="firstLaunchOptPercentText" style="color: #21DE00; font-weight: 700;">0%</span>
-                            </div>
-                            <div class="progress-track"
-                                style="height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden;">
-                                <div id="firstLaunchOptProgressBarFill" class="progress-bar"
-                                    style="height: 100%; width: 0%; background: linear-gradient(90deg, #0a67e5, #21DE00); border-radius: 4px;">
+
+                        <div class="first-launch-card-bottom">
+                            <button type="button" class="mc-btn mc-btn-green" id="btnConfirmChooseOptimized">
+                                <span>Spustit s optimalizací</span>
+                            </button>
+                            <div id="firstLaunchOptProgressBox" style="display: none;" class="first-launch-progress-box">
+                                <div class="first-launch-progress-head">
+                                    <span id="firstLaunchOptStatusText">Příprava stahování...</span>
+                                    <span id="firstLaunchOptPercentText">0%</span>
+                                </div>
+                                <div class="progress-track" style="height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden;">
+                                    <div id="firstLaunchOptProgressBarFill" class="progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #0a67e5, #21DE00); border-radius: 4px;"></div>
                                 </div>
                             </div>
                         </div>
@@ -2081,22 +2091,33 @@
 
                     <!-- Option 2: Čistá Vanilla -->
                     <div class="first-launch-card" id="cardChooseVanilla">
-                        <div class="first-launch-card-header">
-                            <div class="first-launch-icon">🧊</div>
-                            <div>
-                                <div class="first-launch-name">Čistá Vanilla</div>
-                                <div class="first-launch-sub">Originální Minecraft</div>
+                        <div class="first-launch-card-top">
+                            <div class="first-launch-card-header">
+                                <div class="first-launch-icon-box">
+                                    <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--muted" viewBox="0 0 24 24">
+                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="first-launch-name">Čistá Vanilla</div>
+                                    <div class="first-launch-sub">Originální Minecraft</div>
+                                </div>
                             </div>
                         </div>
+
                         <ul class="first-launch-features">
-                            <li><span class="feat-check">•</span> Bez modifikací a shaderů</li>
-                            <li><span class="feat-check">•</span> Tovární nastavení hry</li>
-                            <li><span class="feat-check">•</span> Vhodné pro čisté testování</li>
+                            <li><span class="feat-dot">•</span> <span>Původní čistá hra bez modifikací</span></li>
+                            <li><span class="feat-dot">•</span> <span>Tovární grafické nastavení hry</span></li>
+                            <li><span class="feat-dot">•</span> <span>Vhodné pro čisté testování</span></li>
                         </ul>
-                        <button type="button" class="mc-btn mc-btn-secondary" id="btnConfirmChooseVanilla"
-                            style="width: 100%; margin-top: 14px; justify-content: center;">
-                            <span>Spustit čistou Vanillu</span>
-                        </button>
+
+                        <div class="first-launch-card-bottom">
+                            <button type="button" class="mc-btn mc-btn-secondary" id="btnConfirmChooseVanilla">
+                                <span>Spustit čistou Vanillu</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2114,8 +2135,8 @@
                         </svg>
                     </span>
                     <div>
-                        <h3>Bezpečnostní kontrola modifikací</h3>
-                        <p class="modal-subtitle">Ochrana účtu před porušením pravidel na mychalsmp.xyz</p>
+                        <h3>Nepovolené módy</h3>
+                        <p class="modal-subtitle">Pravidla serveru mychalsmp.xyz</p>
                     </div>
                 </div>
                 <button class="modal-close-x" id="btnCloseWardenModal">
@@ -2127,18 +2148,15 @@
             </div>
             <div class="modal-body">
                 <div class="warden-warning-notice">
-                    <p>V aktivním profilu byly nalezeny modifikace, které nejsou na síti MYCHAL SMP povoleny.
-                        Na <strong>ostatních serverech a v singleplayeru</strong> můžeš tyto módy volně
-                        používat, pro připojení na MYCHAL SMP je však nutné je zakázat.</p>
+                    <p>Profil obsahuje módy, které nejsou na síti MYCHAL SMP povoleny.</p>
                     <p class="warden-allowed-hint"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold"
                             viewBox="0 0 24 24">
                             <circle cx="12" cy="12" r="10"></circle>
                             <line x1="12" y1="16" x2="12" y2="12"></line>
                             <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                        </svg> <em>Poznámka: Replay Mod, optimalizace (Sodium, Iris) a
-                            estetické doplňky jsou povoleny.</em></p>
+                        </svg> <em>Optimalizační módy a estetické doplňky jsou povoleny.</em></p>
                 </div>
-                <div class="illegal-mods-list-title">Nepovolené modifikace pro síť MYCHAL SMP:</div>
+                <div class="illegal-mods-list-title">Nalezené módy:</div>
                 <div class="illegal-mods-list" id="wardenIllegalModsList">
                     <!-- Dynamicky vloženo -->
                 </div>
@@ -2154,7 +2172,7 @@
                             <line x1="15" y1="11" x2="15.01" y2="11"></line>
                             <line x1="18" y1="13" x2="18.01" y2="13"></line>
                         </svg>
-                        Hrát bez SMP (Povolit módy)
+                        Hrát lokálně
                     </span>
                 </button>
                 <button class="mc-btn mc-btn-green" id="btnCleanIllegalMods">
@@ -2163,7 +2181,7 @@
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                             <polyline points="9 12 11 14 15 10"></polyline>
                         </svg>
-                        Zakázat tyto módy a odemknout Quick Play
+                        Deaktivovat a pokračovat
                     </span>
                 </button>
             </div>
@@ -2359,8 +2377,8 @@
                         </svg>
                     </span>
                     <div>
-                        <h3 id="crashAnalyzerTitle" style="color: #f51515;">Analyzátor pádů Minecraftu</h3>
-                        <p class="modal-subtitle" id="crashAnalyzerSubtitle">Detekován pád hry (Exit kód: 1)</p>
+                        <h3 id="crashAnalyzerTitle" style="color: #f51515;">Pád hry</h3>
+                        <p class="modal-subtitle" id="crashAnalyzerSubtitle">Chyba při běhu (kód 1)</p>
                     </div>
                 </div>
                 <button class="modal-close-x" id="btnCloseCrashModal">
@@ -2384,23 +2402,21 @@
                     </div>
                     <p id="crashCauseDesc"
                         style="font-size: 13px; color: #e2e8f0; line-height: 1.5; margin: 0 0 10px 0;">
-                        Hře došla přidělená operační paměť RAM. Minecraft nebo nainstalované modifikace vyžadují
-                        více paměti.
+                        Hře došla přidělená paměť RAM.
                     </p>
                     <div
                         style="background: rgba(0,0,0,0.3); border-left: 3px solid #0a67e5; padding: 8px 12px; border-radius: 4px;">
-                        <span style="font-size: 12px; color: #94a3b8;">Doporučené řešení:</span>
+                        <span style="font-size: 12px; color: #94a3b8;">Doporučení:</span>
                         <div id="crashRecommendation"
                             style="font-size: 13px; color: #60a5fa; font-weight: 500; margin-top: 2px;">
-                            Zvyš posuvník RAM na alespoň 6 GB.
+                            Zvyš paměť RAM v nastavení na alespoň 6 GB.
                         </div>
                     </div>
                 </div>
 
                 <!-- Technical Log Excerpt -->
                 <div style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 12px; color: #94a3b8; font-weight: 600;">Výňatek z chybového
-                        hlášení:</span>
+                    <span style="font-size: 12px; color: #94a3b8; font-weight: 600;">Záznam chyby:</span>
                 </div>
                 <pre id="crashLogExcerpt"
                     style="max-height: 140px; overflow-y: auto; background: #0c0e17; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; font-size: 11px; font-family: monospace; color: #cbd5e1; white-space: pre-wrap; user-select: text; margin: 0;"></pre>
