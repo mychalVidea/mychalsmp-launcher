@@ -262,17 +262,35 @@ async function installOptimizationPack(gameDir, version = '26.2', onProgress) {
     ];
 
     const neededItems = items.filter(i => i.needed);
-    let done = 0;
     const total = neededItems.length;
+
+    if (total === 0) {
+        if (onProgress) {
+            onProgress({
+                current: 0,
+                total: 0,
+                percent: 100,
+                subPercent: 100,
+                itemTitle: 'Hotovo',
+                status: 'Optimalizační balíček je již nainstalován'
+            });
+        }
+        return { success: true, installedCount: 0 };
+    }
+
+    let done = 0;
 
     for (const item of neededItems) {
         try {
             if (onProgress) {
+                const startPct = Math.round((done / total) * 100);
                 onProgress({
                     current: done + 1,
                     total,
-                    percent: Math.round(((done) / total) * 100),
-                    status: `Instaluji ${item.title}...`
+                    percent: startPct,
+                    subPercent: 0,
+                    itemTitle: item.title,
+                    status: `Stahuji ${item.title}...`
                 });
             }
 
@@ -281,10 +299,36 @@ async function installOptimizationPack(gameDir, version = '26.2', onProgress) {
                 title: item.title,
                 projectType: item.projectType,
                 version: version || '26.2',
-                loader: 'fabric'
+                loader: 'fabric',
+                onProgress: (received, totalBytes, subPercent) => {
+                    if (onProgress) {
+                        const safeSub = Math.max(0, Math.min(100, subPercent || 0));
+                        const overallPct = Math.min(99, Math.round(((done + (safeSub / 100)) / total) * 100));
+                        onProgress({
+                            current: done + 1,
+                            total,
+                            percent: overallPct,
+                            subPercent: safeSub,
+                            itemTitle: item.title,
+                            status: safeSub > 0 ? `Stahuji ${item.title}... ${safeSub}%` : `Stahuji ${item.title}...`
+                        });
+                    }
+                }
             }, gameDir);
 
             done++;
+
+            if (onProgress) {
+                const afterPct = Math.round((done / total) * 100);
+                onProgress({
+                    current: done,
+                    total,
+                    percent: afterPct,
+                    subPercent: 100,
+                    itemTitle: item.title,
+                    status: `Nainstalováno: ${item.title}`
+                });
+            }
         } catch (err) {
             console.warn(`[OPTIMIZER] Instalace ${item.title} selhala:`, err.message);
         }
@@ -295,6 +339,8 @@ async function installOptimizationPack(gameDir, version = '26.2', onProgress) {
             current: total,
             total,
             percent: 100,
+            subPercent: 100,
+            itemTitle: 'Dokončeno',
             status: 'Optimalizační balíček připraven'
         });
     }

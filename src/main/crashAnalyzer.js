@@ -201,6 +201,28 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
         };
     }
 
+    // ── Diagnostic Rule: Could not find or load main class (Corrupted Client JAR) ──
+    if (
+        /Could not find or load main class net\.minecraft\.client\.main\.Main/i.test(combinedText) ||
+        /ClassNotFoundException: net\.minecraft\.client\.main\.Main/i.test(combinedText)
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Chybějící nebo neúplný soubor klienta hry',
+            severity: 'critical',
+            description: 'Minecraft nebyl spuštěn, protože v systémové složce verze chybí nebo je poškozen hlavní soubor klienta (client jar).',
+            recommendation: 'Launcher automaticky odstraní poškozená data verze pro čisté znovustažení.',
+            logExcerpt,
+            autoFix: {
+                id: 'REDOWNLOAD_VERSION_JAR',
+                label: '🔄 Znovu čistě stáhnout soubor verze',
+                description: 'Odstraní stávající soubor verze, aby jej launcher při příštím spuštění v pořádku stáhl.'
+            }
+        };
+    }
+
     // ── Diagnostic Rule 4: Duplicate Mods ────────────────────────────────────
     const duplicateMatch = combinedText.match(/DuplicateModsException[^\n]*|Found duplicate mods[^\n]*|Found multiple mod files providing the same mod:\s*([^\n\r]+)/i);
     if (duplicateMatch) {
@@ -519,6 +541,20 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                 success: true,
                 message: `Cesta k Javě byla resetována. Při příštím spuštění launcher automaticky stáhne Javu ${targetVer}.`,
                 updatedConfig: { javaPath: '' }
+            };
+        }
+
+        case 'REDOWNLOAD_VERSION_JAR': {
+            const targetVer = config.version || '26.2';
+            const baseDir = config.baseDir || BASE_DIR;
+            const verDir = path.join(baseDir, 'versions');
+            const vJar = path.join(verDir, targetVer, `${targetVer}.jar`);
+            try {
+                if (fs.existsSync(vJar)) fs.unlinkSync(vJar);
+            } catch (_) {}
+            return {
+                success: true,
+                message: `Soubor verze ${targetVer} byl resetován. Při příštím spuštění launcher stáhne čerstvou kopii!`
             };
         }
 

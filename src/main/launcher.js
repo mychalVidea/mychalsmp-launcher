@@ -712,21 +712,10 @@ function getJavaMajorVersion(binPath) {
 function getRequiredJavaVersion(gameVersion) {
     if (!gameVersion) return 25;
     const str = String(gameVersion).trim();
-    if (/^26\./.test(str) || /^26[a-z0-9_]*/i.test(str)) {
-        return 25;
-    }
-    if (/^1\.(2[1-9]|20\.[5-9])/.test(str)) {
-        return 21;
-    }
-    if (/^1\.(1[89]|20\.[0-4])/.test(str)) {
-        return 17;
-    }
-    if (/^1\.(1[67])/.test(str)) {
-        return 16;
-    }
-    if (/^1\./.test(str)) {
-        return 8;
-    }
+    if (/^1\.(1[67])/.test(str)) return 16;
+    if (/^1\.(1[89]|20\.[0-4])/.test(str)) return 17;
+    if (/^1\./.test(str) && !/^1\.(2[1-9])/.test(str)) return 8;
+    // Výchozí standard pro celou síť MYCHAL SMP je moderní Java 25
     return 25;
 }
 
@@ -875,10 +864,13 @@ async function downloadAndInstallJava(targetVersion = 25, onLog = console.log, o
 }
 
 /**
- * Backwards compatibility alias for Java 21 installer.
+ * Backwards compatibility alias for Java installer (default: Java 25).
  */
+async function downloadAndInstallJava25(onLog = console.log, onProgress = null) {
+    return downloadAndInstallJava(25, onLog, onProgress);
+}
 async function downloadAndInstallJava21(onLog = console.log, onProgress = null) {
-    return downloadAndInstallJava(21, onLog, onProgress);
+    return downloadAndInstallJava(25, onLog, onProgress);
 }
 
 /**
@@ -927,22 +919,17 @@ async function ensureJavaExecutable(config, onLog = console.log, onProgress = nu
 }
 
 /**
- * Scans installed Java environments prioritizing Java 25 and Java 21.
+ * Scans installed Java environments prioritizing Java 25.
  */
 function detectJavaPath(minMajor = 25) {
     const isWin = process.platform === 'win32';
     const candidates = [];
 
-    // Check launcher local runtimes (java-25, java-21)
+    // Check launcher local runtimes (java-25)
     const local25 = path.join(BASE_DIR, 'runtime', 'java-25', 'bin', isWin ? 'javaw.exe' : 'java');
-    const local21 = path.join(BASE_DIR, 'runtime', 'java-21', 'bin', isWin ? 'javaw.exe' : 'java');
     if (fs.existsSync(local25)) candidates.push(local25);
     if (isWin && fs.existsSync(path.join(BASE_DIR, 'runtime', 'java-25', 'bin', 'java.exe'))) {
         candidates.push(path.join(BASE_DIR, 'runtime', 'java-25', 'bin', 'java.exe'));
-    }
-    if (fs.existsSync(local21)) candidates.push(local21);
-    if (isWin && fs.existsSync(path.join(BASE_DIR, 'runtime', 'java-21', 'bin', 'java.exe'))) {
-        candidates.push(path.join(BASE_DIR, 'runtime', 'java-21', 'bin', 'java.exe'));
     }
 
     // 1. Linux candidates
@@ -951,9 +938,6 @@ function detectJavaPath(minMajor = 25) {
             '/usr/lib/jvm/java-25-openjdk-amd64/bin/java',
             '/usr/lib/jvm/java-25-openjdk/bin/java',
             '/usr/lib/jvm/openjdk-25/bin/java',
-            '/usr/lib/jvm/java-21-openjdk-amd64/bin/java',
-            '/usr/lib/jvm/java-21-openjdk/bin/java',
-            '/usr/lib/jvm/openjdk-21/bin/java',
             '/usr/lib/jvm/default-runtime/bin/java'
         ];
         candidates.push(...linuxCandidates);
@@ -1051,14 +1035,12 @@ function getAvailableJavas() {
 
     // Check launcher local runtimes
     const local25 = path.join(BASE_DIR, 'runtime', 'java-25', 'bin', isWin ? 'javaw.exe' : 'java');
-    const local21 = path.join(BASE_DIR, 'runtime', 'java-21', 'bin', isWin ? 'javaw.exe' : 'java');
     checkPath(local25, 'Vestavěná Java 25 (Adoptium)');
-    checkPath(local21, 'Vestavěná Java 21 (Adoptium)');
 
     if (!isWin) {
         const candidates = [
             ['/usr/lib/jvm/java-25-openjdk-amd64/bin/java', 'Java 25 (LTS)'],
-            ['/usr/lib/jvm/java-21-openjdk-amd64/bin/java', 'Java 21 (LTS)'],
+            ['/usr/lib/jvm/java-25-openjdk/bin/java', 'Java 25 (LTS)'],
             ['/usr/bin/java', 'Systémová Java']
         ];
         candidates.forEach(([p, l]) => checkPath(p, l));
@@ -1501,20 +1483,21 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     // 🎭 Aplikace vlastního offline skinu a pláště pro warez / offline režim
     await setupOfflineCustomSkinAndCape(gameInstanceDir, config, onLog);
 
-    // JVM Arguments (supports modern Java 21/25 Generational ZGC and G1GC)
+    // JVM Arguments (supports modern Java 25 ZGC and G1GC)
     let jvmArgs = [];
     if (config.customJvmArgs && config.customJvmArgs.trim()) {
         jvmArgs = config.customJvmArgs.trim().split(/\s+/).filter(Boolean);
     } else {
-        // High-performance Java 21+ Generational ZGC default
+        // High-performance Java 25 ZGC default
         jvmArgs = [
             '-XX:+UseZGC',
-            '-XX:+ZGenerational',
             '-XX:+UnlockExperimentalVMOptions',
             '-XX:+AlwaysPreTouch',
             '-XX:+DisableExplicitGC'
         ];
     }
+    // Pro Java 24/25: odfiltrovat -XX:+ZGenerational (bylo v 24.0 odstraněno a hází warning v konzoli)
+    jvmArgs = jvmArgs.filter(a => a !== '-XX:+ZGenerational');
     if (!jvmArgs.some(a => a.startsWith('-Dfile.encoding='))) {
         jvmArgs.push('-Dfile.encoding=UTF-8');
     }

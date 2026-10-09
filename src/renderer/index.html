@@ -1158,13 +1158,13 @@
                             <div class="form-group">
                                 <label for="jvmArgsInput" class="setting-section-label">Argumenty Javy (JVM)</label>
                                 <input type="text" id="jvmArgsInput" class="input-text"
-                                    placeholder="-XX:+UseZGC -XX:+ZGenerational...">
+                                    placeholder="-XX:+UseZGC -XX:+UnlockExperimentalVMOptions...">
                                 <div class="jvm-args-actions">
                                     <button type="button" class="btn-pill-small" id="btnPresetZgc">
                                         <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
                                             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                                         </svg>
-                                        Generational ZGC
+                                        ZGC (Java 25)
                                     </button>
                                     <button type="button" class="btn-pill-small" id="btnPresetG1gc">Standardní
                                         G1GC</button>
@@ -2052,16 +2052,31 @@
                             <li><span class="feat-check">✓</span> <strong>Fabric + Sodium & Lithium</strong> (plynulost
                                 bez lagů)</li>
                             <li><span class="feat-check">✓</span> <strong>Iris Shaders</strong> + shadery
-                                <em>Complementary</em></li>
-                            <li><span class="feat-check">✓</span> <strong>GUI Scale: 2</strong> (optimální měřítko pro
-                                monitory)</li>
-                            <li><span class="feat-check">✓</span> <strong>Uložený server MYCHAL SMP</strong> i tvé
+                                <em>Complementary</em>
+                            </li>
+                            <li><span class="feat-check">✓</span> <strong>GUI Scale: 2</strong></li>
+                            <li><span class="feat-check">✓</span> <strong>Uložené</strong> tvé
                                 servery</li>
                         </ul>
                         <button type="button" class="mc-btn mc-btn-green" id="btnConfirmChooseOptimized"
                             style="width: 100%; margin-top: 14px; justify-content: center;">
                             <span>⚡ Spustit s optimalizací</span>
                         </button>
+                        <div id="firstLaunchOptProgressBox"
+                            style="display: none; margin-top: 12px; background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 10px 12px;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 6px;">
+                                <span id="firstLaunchOptStatusText"
+                                    style="color: #94a3b8; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; margin-right: 8px;">Příprava stahování...</span>
+                                <span id="firstLaunchOptPercentText" style="color: #21DE00; font-weight: 700;">0%</span>
+                            </div>
+                            <div class="progress-track"
+                                style="height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden;">
+                                <div id="firstLaunchOptProgressBarFill" class="progress-bar"
+                                    style="height: 100%; width: 0%; background: linear-gradient(90deg, #0a67e5, #21DE00); border-radius: 4px;">
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Option 2: Čistá Vanilla -->

@@ -35,90 +35,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     const progressPercent = document.getElementById('progressPercent');
     const progressText = document.getElementById('progressText');
 
-    // Perceptual Speed Curve (Harrison & Yeo ease-out model):
-    // Moves swiftly at the start and settles cleanly near 100%, creating the psychological illusion of high speed.
+    // Stevens' Perceptual Speed Curve (Power law with gamma ~ 0.42):
+    // Sub-linear response gives high initial velocity (5% -> 28%, 10% -> 38%, 50% -> 75%),
+    // making launch and download progress feel instantly fast and responsive.
     function calculatePerceptualProgress(realPercent) {
-        if (typeof realPercent !== 'number' || isNaN(realPercent)) return 0;
-        if (realPercent <= 0) return 0;
-        if (realPercent >= 100) return 100;
-        const x = Math.max(0, Math.min(1, realPercent / 100));
-        // Power curve with gamma ~ 1.45: front-loaded acceleration
-        const perceived = 1 - Math.pow(1 - x, 1.45);
+        const val = Number(realPercent);
+        if (isNaN(val) || val <= 0) return 0;
+        if (val >= 100) return 100;
+        const x = Math.max(0, Math.min(1, val / 100));
+        const perceived = Math.pow(x, 0.42);
         const result = Math.round(perceived * 100);
         return Math.min(99, Math.max(1, result));
     }
 
-    // ── 50 Unikátních uvítacích & Lore hlášek (MYCHAL SMP & Minecraft) ──────
-    const SERVER_LORE_QUOTES = [
-        "Nikdy nekopej přímo pod sebe. Fakt nikdy.",
-        "Herobrine byl z bezpečnostních důvodů odstraněn. Snad.",
-        "Dneska je ideální počasí na hledání netheritu v lávě.",
-        "Tvoji vlci doma čekají. Už tři měsíce sedí na stejném bloku.",
-        "Připoj se na mychalsmp.xyz a ukaž jim svůj nejlepší build.",
-        "Pozor na creepery za zády... tsssss.",
-        "Slyšíš ten divný zvuk? To tě právě obklíčil Warden ve tmě.",
-        "Máš dost jídla? Zlatá mrkev ti v boji zachrání život.",
-        "Legenda praví, že na souřadnicích 0, 0 někdo nechal plný shulker box.",
-        "Beacon zapnut, síla II a regenerace připraveny k akci.",
-        "Když spadneš do lávy, nezapomeň vypít fire resistance. Pokud ho máš...",
-        "Enderman se na tebe dívá. Radši zklop zrak a dívej se do země.",
-        "PVPConnect hlásí: v aréně to právě vře.",
-        "Stavíš základnu? Nezapomeň na tajnou podzemní skrýš.",
-        "Lektvary navařeny, netheritové meče nabroušeny.",
-        "Nether fortress je vždycky přesně na opačné straně, než se vydáš.",
-        "Žádný ping, žádný lag. Jen čistá radost z kostiček.",
-        "Diamanty těží jen ti trpěliví. Nebo ti s Fortune III.",
-        "Dneska neponocuj... počkat, v Minecraftu se noce nepočítají.",
-        "Elytra natankována raketami, letíme nad oblaky!",
-        "Věděl jsi, že vesničané nikdy nespí, když je v okolí zombie?",
-        "Jeden blok sem, jeden blok tam a za hodinu je z toho hrad.",
-        "Kdo neclaimuje, ten pláče. Zabezpeč si své území!",
-        "Generational ZGC čistí paměť rychleji než voda lávu.",
-        "Mychal SMP: Místo, kde i obyčejný dirtový domek má styl.",
-        "Ztracený v jeskyni bez loučí? Klasický páteční večer.",
-        "Netheritový armor ti dodá respekt. A odolnost proti odhození.",
-        "Nepřátelé vidí tvůj ping, ale nevidí tvoje komba.",
-        "Totem nesmrtelnosti v levé ruce je nejlepší pojištění.",
-        "Vesničan nabízí 1 smaragd za 32 emeraldů... chci říct pšenice.",
-        "Optifine je minulost, Sodium a Iris vládnou modernímu světu.",
-        "Postav automatickou farmu dřív, než tě předběhnou sousedi.",
-        "Redstone obvody: 10 % logika, 90 % zkoušení proč to nefunguje.",
-        "Každý správný horník nosí v kapse alespoň jeden kyblík vody.",
-        "Nezapomeň si nastavit spawn v posteli, než skočíš do Endu.",
-        "Když tě honí baby zombie, je čas začít sprintovat.",
-        "Dneska padne drak v Endu. Připrav si luk a šípy.",
-        "Maringotka u řeky nebo megazákladna v horách? Volba je na tobě.",
-        "Wither se právě spawnuje... vezmi nohy na ramena!",
-        "Základní pravidlo přežití: Nikdy nepodceňuj kostlivce s lukem.",
-        "Complementary shadery zapnuty, voda se třpytí a slunce hřeje.",
-        "V inventáři máš plno hlíny a zapomněl jsi doma krumpáč. Klasika.",
-        "Hráč vedle tebe právě vycraftil první netherite meč.",
-        "Zlato v Netheru nesbírej bez zlaté boty, piglini tě sledují.",
-        "Přežít první noc je jen začátek tvého impéria.",
-        "Když dojdou torche, uhlí je vždycky na stropě, kam nedosáhneš.",
-        "Na serveru tě čekají noví přátelé i staří rivalové.",
-        "Klikni na HRÁT a uvidíme se na mychalsmp.xyz!"
-    ];
 
-    function getRandomHeroQuote() {
-        return SERVER_LORE_QUOTES[Math.floor(Math.random() * SERVER_LORE_QUOTES.length)];
-    }
-
-    function rotateHeroQuote(animate = false) {
-        const subtitleEl = document.getElementById('heroPlayerSubtitle');
-        if (!subtitleEl) return;
-        const quote = getRandomHeroQuote();
-        if (animate) {
-            subtitleEl.style.transition = 'opacity 0.15s ease';
-            subtitleEl.style.opacity = '0';
-            setTimeout(() => {
-                subtitleEl.textContent = quote;
-                subtitleEl.style.opacity = '1';
-            }, 150);
-        } else {
-            subtitleEl.textContent = quote;
-        }
-    }
 
     // Right Column: Server Banner & Tracker
     const serverPlayersCount = document.getElementById('serverPlayersCount');
@@ -248,13 +178,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnAddModsShortcut.addEventListener('click', () => switchTab('mods'));
     }
 
-    // Kliknutí na podtitul protočí další náhodnou hlášku
-    const heroSubtitleEl = document.getElementById('heroPlayerSubtitle');
-    if (heroSubtitleEl) {
-        heroSubtitleEl.style.cursor = 'pointer';
-        heroSubtitleEl.title = 'Kliknutím protočíš další hlášku ze serveru';
-        heroSubtitleEl.addEventListener('click', () => rotateHeroQuote(true));
-    }
 
     // ── Easter Egg: 5x rychlé kliknutí na postavičku na home screenu ─────────
     let avatarClickCount = 0;
@@ -320,8 +243,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
 
-        // 3. Protočí novou vtipnou hlášku
-        rotateHeroQuote(true);
     }
 
     if (heroAvatarArea) {
@@ -372,7 +293,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             currentConfig = await window.api.getConfig();
             installedVersions = await window.api.getInstalledVersions();
-            rotateHeroQuote(false);
 
             // Automatické pročištění starého defaultního canvas pláště z konfigurace
             if (currentConfig && currentConfig.customCapePath && (
@@ -493,7 +413,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (checkDiscordRpc) checkDiscordRpc.checked = currentConfig.enableDiscordRpc !== false;
 
             const jvmArgsInput = document.getElementById('jvmArgsInput');
-            if (jvmArgsInput) jvmArgsInput.value = currentConfig.customJvmArgs || '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC';
+            if (jvmArgsInput) jvmArgsInput.value = (currentConfig.customJvmArgs || '-XX:+UseZGC -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC').replace(/-XX:\+ZGenerational\s*/g, '').trim();
 
             const customEnvVarsInput = document.getElementById('customEnvVarsInput');
             if (customEnvVarsInput) customEnvVarsInput.value = currentConfig.customEnvVars || '';
@@ -1818,18 +1738,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         const btnClose = document.getElementById('btnCloseFirstLaunchModal');
         const btnOpt = document.getElementById('btnConfirmChooseOptimized');
         const btnVan = document.getElementById('btnConfirmChooseVanilla');
+        const progressBox = document.getElementById('firstLaunchOptProgressBox');
+        const statusText = document.getElementById('firstLaunchOptStatusText');
+        const percentText = document.getElementById('firstLaunchOptPercentText');
+        const barFill = document.getElementById('firstLaunchOptProgressBarFill');
         if (!modal) {
             if (onComplete) onComplete();
             return;
         }
 
         if (title) title.textContent = `Jak chceš spustit ${profile.name || 'Minecraft'}?`;
+        if (progressBox) progressBox.style.display = 'none';
+        if (barFill) barFill.style.width = '0%';
+        if (btnOpt) {
+            btnOpt.disabled = false;
+            btnOpt.innerHTML = '<span>⚡ Spustit s optimalizací</span>';
+        }
+        if (btnVan) btnVan.disabled = false;
         modal.style.display = 'flex';
 
         function cleanup() {
             modal.style.display = 'none';
-            if (btnOpt) btnOpt.onclick = null;
-            if (btnVan) btnVan.onclick = null;
+            if (progressBox) progressBox.style.display = 'none';
+            if (btnOpt) {
+                btnOpt.onclick = null;
+                btnOpt.disabled = false;
+                btnOpt.innerHTML = '<span>⚡ Spustit s optimalizací</span>';
+            }
+            if (btnVan) {
+                btnVan.onclick = null;
+                btnVan.disabled = false;
+            }
             if (btnClose) btnClose.onclick = null;
         }
 
@@ -1840,6 +1779,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (btnOpt) {
             btnOpt.onclick = async () => {
                 btnOpt.disabled = true;
+                if (btnVan) btnVan.disabled = true;
+                if (progressBox) {
+                    progressBox.style.display = 'block';
+                    if (statusText) statusText.textContent = 'Příprava optimalizace...';
+                    if (percentText) percentText.textContent = '0%';
+                    if (barFill) barFill.style.width = '0%';
+                }
                 btnOpt.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Optimalizuji...</span>';
                 profile.optimizedChosen = 'optimized';
                 profile.loader = 'fabric';
@@ -1847,11 +1793,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                     await window.api.applyProfileOptimization(profile.id);
                 } catch (_) { }
                 await window.api.saveConfig({ profiles: currentConfig.profiles, loader: 'fabric' });
+                if (statusText) statusText.textContent = 'Optimalizace dokončena!';
+                if (percentText) percentText.textContent = '100%';
+                if (barFill) barFill.style.width = '100%';
                 showToast('Aplikována doporučená optimalizace pro MYCHAL SMP!', 'success');
-                btnOpt.disabled = false;
-                btnOpt.innerHTML = '<span>⚡ Spustit s optimalizací</span>';
-                cleanup();
-                if (onComplete) onComplete();
+                setTimeout(() => {
+                    cleanup();
+                    if (onComplete) onComplete();
+                }, 400);
             };
         }
 
@@ -2044,6 +1993,37 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             if (profileSeedProgressText) {
                 profileSeedProgressText.textContent = `${data.current} z ${data.total}: ${data.title || ''}`;
+            }
+        });
+    }
+
+    if (window.api && window.api.onOptimizationProgress) {
+        window.api.onOptimizationProgress((data) => {
+            const rawPct = Math.max(0, Math.min(100, data.percent || 0));
+            const pct = calculatePerceptualProgress(rawPct);
+
+            // 1. Modální okno prvního spuštění
+            const flBox = document.getElementById('firstLaunchOptProgressBox');
+            const flStatus = document.getElementById('firstLaunchOptStatusText');
+            const flPercent = document.getElementById('firstLaunchOptPercentText');
+            const flFill = document.getElementById('firstLaunchOptProgressBarFill');
+            const flBtn = document.getElementById('btnConfirmChooseOptimized');
+
+            if (flBox && flBox.style.display !== 'none') {
+                if (flStatus) flStatus.textContent = data.status || 'Optimalizuji...';
+                if (flPercent) flPercent.textContent = `${pct}%`;
+                if (flFill) flFill.style.width = `${pct}%`;
+                if (flBtn) {
+                    const label = data.itemTitle ? `Instalace: ${data.itemTitle}` : (data.status || 'Optimalizuji...');
+                    flBtn.innerHTML = `<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> ${escapeHtml(label)}</span>`;
+                }
+            }
+
+            // 2. Nastavení profilu – tlačítko "⚡ Optimalizovat"
+            const btnApplyOpt = document.getElementById('btnApplyProfileOptimization');
+            if (btnApplyOpt && btnApplyOpt.disabled) {
+                const label = data.itemTitle ? `${data.itemTitle} (${pct}%)` : `${pct}%`;
+                btnApplyOpt.innerHTML = `<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> ${escapeHtml(label)}</span>`;
             }
         });
     }
@@ -4137,10 +4117,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     });
 
                     if (sideJavaBadge) {
-                        sideJavaBadge.textContent = list[0].label.includes('25') ? 'Java 25 (LTS)' : 'Java 21 (LTS)';
+                        sideJavaBadge.textContent = 'Java 25 (LTS)';
                     }
                 } else {
-                    javaDetectedList.innerHTML = `<span class="java-pill">Java 25/21 automatická detekce</span>`;
+                    javaDetectedList.innerHTML = `<span class="java-pill">Java 25 automatická detekce</span>`;
                 }
             }
         } catch (e) { }
@@ -4297,9 +4277,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnPresetZgc.addEventListener('click', () => {
             const jvmInput = document.getElementById('jvmArgsInput');
             if (jvmInput) {
-                jvmInput.value = '-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC';
+                jvmInput.value = '-XX:+UseZGC -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC';
                 autoSaveSettings(true);
-                showToast('Nastaveny doporučené parametry Generational ZGC (Java 21/25)!', 'info');
+                showToast('Nastaveny doporučené parametry ZGC (Java 25)!', 'info');
             }
         });
     }
