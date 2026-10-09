@@ -312,7 +312,20 @@ ipcMain.handle('download-mod-or-pack', async (event, modOptions) => {
     const targetProfile = (config.profiles || []).find(p => p.id === targetProfileId) || config.profiles[0];
     const targetDir = targetProfile?.gameDir || BASE_DIR;
     try {
-        const res = await downloadModOrPack(modOptions, targetDir);
+        const optsWithProgress = {
+            ...modOptions,
+            onProgress: (received, total, percent) => {
+                try {
+                    event.sender.send('mod-download-progress', {
+                        id: modOptions?.id,
+                        received,
+                        total,
+                        percent
+                    });
+                } catch (_) {}
+            }
+        };
+        const res = await downloadModOrPack(optsWithProgress, targetDir);
         if (res && res.success && (!modOptions?.projectType || modOptions.projectType === 'mod')) {
             const detectedLoader = res.resolvedLoader || modOptions?.loader || 'fabric';
             const currentLoader = targetProfile?.loader || 'vanilla';

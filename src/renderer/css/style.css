@@ -207,11 +207,11 @@ body {
     font-size: 15px;
     font-weight: 800;
     letter-spacing: 0.5px;
-    color: var(--text-primary);
+    color: var(--brand-blue);
 }
 
 .brand-title span {
-    color: var(--brand-blue);
+    color: var(--text-primary);
 }
 
 .brand-badge {
@@ -665,6 +665,20 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.stage-nick-pill:hover {
+    background: rgba(10, 103, 229, 0.25);
+    border-color: rgba(10, 103, 229, 0.6);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(10, 103, 229, 0.3);
+}
+
+.stage-nick-pill:active {
+    transform: translateY(0);
 }
 
 .stage-edit-btn {
@@ -673,6 +687,7 @@ body {
     color: var(--brand-blue);
     cursor: pointer;
     font-size: 12px;
+    pointer-events: none;
 }
 
 .stage-caption {
@@ -1264,9 +1279,10 @@ body {
 .progress-bar {
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, #22c55e 0%, #38bdf8 100%);
+    background: linear-gradient(90deg, #0a67e5 0%, #21DE00 100%);
     border-radius: 3px;
-    transition: width 0.15s ease-out;
+    box-shadow: 0 0 10px rgba(33, 222, 0, 0.4);
+    transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ── TAB: VERSIONS & INSTALLERS ───────────────────────────────────────── */
@@ -1528,9 +1544,10 @@ body {
 
 .v-progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #0a67e5, #38bdf8);
+    background: linear-gradient(90deg, #0a67e5, #21DE00);
+    box-shadow: 0 0 10px rgba(33, 222, 0, 0.45);
     border-radius: 3px;
-    transition: width 0.18s ease;
+    transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .v-card-actions {
@@ -1782,6 +1799,88 @@ select option {
     background: #090a12;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
     flex-shrink: 0;
+}
+
+.mod-avatar-box {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #090a12;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mod-avatar-box .mod-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    box-shadow: none;
+    display: block;
+}
+
+/* Apple-style circular progress overlay on mod avatar */
+.apple-progress-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(10, 14, 26, 0.75);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 3;
+}
+
+.apple-progress-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.apple-progress-svg {
+    width: 32px;
+    height: 32px;
+    transform: rotate(-90deg);
+}
+
+.apple-progress-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.25);
+    stroke-width: 2.5;
+}
+
+.apple-progress-bar {
+    fill: none;
+    stroke: var(--brand-blue, #0a67e5);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 87.96;
+    stroke-dashoffset: 87.96;
+    transition: stroke-dashoffset 0.1s linear, stroke 0.2s ease;
+}
+
+.apple-progress-stop {
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    background: #ffffff;
+    border-radius: 1.5px;
+    transition: background 0.2s ease;
+}
+
+.apple-progress-overlay.success .apple-progress-bar {
+    stroke: #21DE00;
+}
+
+.apple-progress-overlay.success .apple-progress-stop {
+    background: #21DE00;
 }
 
 .mod-info-area {
@@ -3915,10 +4014,10 @@ input[type="radio"]:checked::after {
 
 .update-progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #0a67e5, #38bdf8);
+    background: linear-gradient(90deg, #0a67e5, #21DE00);
     border-radius: 999px;
-    transition: width 0.2s ease-out;
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+    transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 0 12px rgba(33, 222, 0, 0.45);
 }
 
 /* ── Satisfying Boot Splash Screen ─────────────────────────────────── */
@@ -4080,9 +4179,9 @@ input[type="radio"]:checked::after {
 .boot-progress-fill {
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, #0a67e5, #38bdf8);
+    background: linear-gradient(90deg, #0a67e5, #21DE00);
     border-radius: 999px;
-    box-shadow: 0 0 12px #38bdf8;
+    box-shadow: 0 0 12px rgba(33, 222, 0, 0.4);
     transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

@@ -249,6 +249,38 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
     });
 }
 
+async function downloadToFileWithProgress(url, destPath, onProgress) {
+    const dlRes = await fetch(url, {
+        headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
+    });
+    if (!dlRes.ok) throw new Error(`Chyba stahování: HTTP ${dlRes.status}`);
+
+    const contentLength = parseInt(dlRes.headers.get('content-length') || '0', 10);
+    const chunks = [];
+    let received = 0;
+
+    if (dlRes.body && typeof dlRes.body.getReader === 'function') {
+        const reader = dlRes.body.getReader();
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(Buffer.from(value));
+            received += value.length;
+            if (typeof onProgress === 'function') {
+                const percent = contentLength > 0 ? Math.min(100, Math.round((received / contentLength) * 100)) : 0;
+                onProgress(received, contentLength, percent);
+            }
+        }
+        fs.writeFileSync(destPath, Buffer.concat(chunks));
+    } else {
+        const buffer = await dlRes.arrayBuffer();
+        fs.writeFileSync(destPath, Buffer.from(buffer));
+        if (typeof onProgress === 'function') {
+            onProgress(buffer.byteLength, buffer.byteLength, 100);
+        }
+    }
+}
+
 /**
  * Downloads a mod, resourcepack, or shader from Modrinth directly into the profile's directory.
  */
@@ -273,36 +305,31 @@ async function downloadModOrPack(options, targetDir) {
                 }
             }
             const destPath = path.join(destDir, outFilename);
-            const dlRes = await fetch(directUrl, {
-                headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
-            });
-            if (dlRes.ok) {
-                const buffer = await dlRes.arrayBuffer();
-                fs.writeFileSync(destPath, Buffer.from(buffer));
-                const metaPath = path.join(destDir, '.mod_meta.json');
-                let metaObj = {};
-                if (fs.existsSync(metaPath)) {
-                    try { metaObj = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (_) {}
-                }
-                metaObj[outFilename] = {
-                    id: id || outFilename,
-                    slug: options.slug || id,
-                    title: title || id,
-                    version: options.version || null,
-                    loader: normLoader,
-                    projectType: projectType,
-                    downloadUrl: directUrl,
-                    downloadedAt: Date.now()
-                };
-                fs.writeFileSync(metaPath, JSON.stringify(metaObj, null, 2), 'utf8');
-                return {
-                    success: true,
-                    filename: outFilename,
-                    subfolder,
-                    destPath,
-                    resolvedLoader: normLoader
-                };
+            await downloadToFileWithProgress(directUrl, destPath, options.onProgress);
+
+            const metaPath = path.join(destDir, '.mod_meta.json');
+            let metaObj = {};
+            if (fs.existsSync(metaPath)) {
+                try { metaObj = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (_) {}
             }
+            metaObj[outFilename] = {
+                id: id || outFilename,
+                slug: options.slug || id,
+                title: title || id,
+                version: options.version || null,
+                loader: normLoader,
+                projectType: projectType,
+                downloadUrl: directUrl,
+                downloadedAt: Date.now()
+            };
+            fs.writeFileSync(metaPath, JSON.stringify(metaObj, null, 2), 'utf8');
+            return {
+                success: true,
+                filename: outFilename,
+                subfolder,
+                destPath,
+                resolvedLoader: normLoader
+            };
         } catch (e) {
             console.warn(`[DIRECT-DL] Přímé stažení selhalo, zkouším Modrinth API:`, e.message);
         }
@@ -382,13 +409,7 @@ async function downloadModOrPack(options, targetDir) {
     }
 
     const destPath = path.join(destDir, file.filename);
-    const dlRes = await fetch(file.url, {
-        headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
-    });
-    if (!dlRes.ok) throw new Error(`Chyba stahování: HTTP ${dlRes.status}`);
-
-    const buffer = await dlRes.arrayBuffer();
-    fs.writeFileSync(destPath, Buffer.from(buffer));
+    await downloadToFileWithProgress(file.url, destPath, options.onProgress);
 
     // Zjistíme, pro jaký loader stažený soubor ve skutečnosti je
     let resolvedLoader = normLoader || 'fabric';

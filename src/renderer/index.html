@@ -2354,6 +2354,15 @@
                             <span>Stáhnout</span>
                         </button>
                     </div>
+                    <div id="profileSeedProgressBox" style="display: none; margin-top: 10px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 5px;">
+                            <span id="profileSeedProgressText" style="color: #94a3b8;">Stahování...</span>
+                            <span id="profileSeedProgressPercent" style="color: #60a5fa; font-weight: 600;">0%</span>
+                        </div>
+                        <div style="height: 5px; background: rgba(255, 255, 255, 0.08); border-radius: 999px; overflow: hidden;">
+                            <div id="profileSeedProgressBarFill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #0a67e5, #21DE00); border-radius: 999px; transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);"></div>
+                        </div>
+                    </div>
                     <div id="profileSeedImportStatus" style="font-size: 11px; color: #94a3b8; margin-top: 6px; min-height: 16px;"></div>
                 </div>
             </div>

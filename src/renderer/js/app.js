@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const heroSkinImg = document.getElementById('heroSkinImg');
     const heroSkinCanvas3D = document.getElementById('heroSkinCanvas3D');
     const heroNickLabel = document.getElementById('heroNickLabel');
+    const stageNickPill = document.getElementById('stageNickPill');
     const btnEditNickFromHero = document.getElementById('btnEditNickFromHero');
     const btnManageProfiles = document.getElementById('btnManageProfiles');
     const btnAddModsShortcut = document.getElementById('btnAddModsShortcut');
@@ -33,6 +34,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     const progressBar = document.getElementById('progressBar');
     const progressPercent = document.getElementById('progressPercent');
     const progressText = document.getElementById('progressText');
+
+    // Perceptual Speed Curve (Harrison & Yeo ease-out model):
+    // Moves swiftly at the start and settles cleanly near 100%, creating the psychological illusion of high speed.
+    function calculatePerceptualProgress(realPercent) {
+        if (typeof realPercent !== 'number' || isNaN(realPercent)) return 0;
+        if (realPercent <= 0) return 0;
+        if (realPercent >= 100) return 100;
+        const x = Math.max(0, Math.min(1, realPercent / 100));
+        // Power curve with gamma ~ 1.45: front-loaded acceleration
+        const perceived = 1 - Math.pow(1 - x, 1.45);
+        const result = Math.round(perceived * 100);
+        return Math.min(99, Math.max(1, result));
+    }
 
     // Right Column: Server Banner & Tracker
     const serverPlayersCount = document.getElementById('serverPlayersCount');
@@ -146,8 +160,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
+    if (stageNickPill) {
+        stageNickPill.addEventListener('click', () => switchTab('character'));
+    }
     if (btnEditNickFromHero) {
-        btnEditNickFromHero.addEventListener('click', () => switchTab('character'));
+        btnEditNickFromHero.addEventListener('click', (e) => {
+            e.stopPropagation();
+            switchTab('character');
+        });
     }
     if (btnManageProfiles) {
         btnManageProfiles.addEventListener('click', () => switchTab('mods'));
@@ -1094,32 +1114,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateProgressContainer.style.display = 'block';
 
             if (data.status === 'downloading') {
-                const pct = data.percent || 0;
+                const rawPct = data.percent || 0;
+                const pct = calculatePerceptualProgress(rawPct);
                 if (updateProgressBar) updateProgressBar.style.width = `${pct}%`;
                 if (updateProgressText) {
-                    updateProgressText.textContent = data.isDelta
-                        ? `Stahuji bleskovou delta aktualizaci... ${pct} %`
-                        : `Stahuji aktualizaci... ${pct} %`;
+                    updateProgressText.textContent = `Stahuji aktualizaci... ${pct} %`;
                 }
                 if (updateProgressSize && data.total) {
                     const curMb = (data.current / 1048576).toFixed(1);
                     const totMb = (data.total / 1048576).toFixed(1);
-                    updateProgressSize.textContent = `${curMb} MB / ${totMb} MB${data.isDelta ? ' (Delta)' : ''}`;
+                    updateProgressSize.textContent = `${curMb} MB / ${totMb} MB`;
                 }
             } else if (data.status === 'extracting') {
                 if (updateProgressBar) updateProgressBar.style.width = '100%';
                 if (updateProgressText) {
-                    updateProgressText.textContent = data.step || (data.isDelta
-                        ? 'Aplikuji delta změny v kódu launcheru...'
-                        : 'Rozbaluji aktualizační archiv...');
+                    updateProgressText.textContent = data.step || 'Příprava aktualizace...';
                 }
-                if (updateProgressSize) updateProgressSize.textContent = data.isDelta ? 'Delta instalace' : 'Rozbalování';
+                if (updateProgressSize) updateProgressSize.textContent = 'Instalace';
             } else if (data.status === 'installing') {
                 if (updateProgressBar) updateProgressBar.style.width = '100%';
                 if (updateProgressText) {
-                    updateProgressText.textContent = data.step || 'Instaluji aktualizované soubory...';
+                    updateProgressText.textContent = data.step || 'Instaluji aktualizaci...';
                 }
-                if (updateProgressSize) updateProgressSize.textContent = 'Instalace';
+                if (updateProgressSize) updateProgressSize.textContent = 'Dokončování';
             }
         });
     }
@@ -1133,12 +1150,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (title) title.textContent = `Dostupná nová verze v${update.latestVersion || ''}`;
         if (desc) {
-            if (update.isDelta) {
-                const mb = update.downloadSize ? (update.downloadSize / 1048576).toFixed(1) + ' MB' : '~3 MB';
-                desc.innerHTML = `Byla vydána nová verze MYCHAL SMP Launcheru (máš v${update.currentVersion || '1.0.0'}).<br><span style="display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: #21de00; font-weight: 700; background: rgba(33, 222, 0, 0.12); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(33, 222, 0, 0.3);"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Blesková delta aktualizace: stahují se pouze změny (${mb} namísto ~90 MB)</span>`;
-            } else {
-                desc.textContent = `Byla vydána nová verze MYCHAL SMP Launcheru (máš nainstalovanou v${update.currentVersion || '1.0.0'}). Chceš aktualizaci stáhnout a nainstalovat?`;
-            }
+            desc.textContent = `Byla vydána nová verze MYCHAL SMP Launcheru (máš nainstalovanou v${update.currentVersion || '1.0.0'}). Chceš aktualizaci stáhnout a nainstalovat?`;
         }
 
         if (notes && update.releaseNotes) {
@@ -1157,9 +1169,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const btnConfirm = document.getElementById('btnConfirmUpdate');
         if (btnConfirm) {
             btnConfirm.disabled = false;
-            btnConfirm.innerHTML = update.isDelta
-                ? '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-pulse" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Aktualizovat bleskově (Delta)</span>'
-                : '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Aktualizovat nyní</span>';
+            btnConfirm.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Aktualizovat nyní</span>';
         }
 
         modal.style.display = 'flex';
@@ -1220,9 +1230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             isUpdatingCurrently = true;
             btnConfirmUpdate.disabled = true;
-            btnConfirmUpdate.innerHTML = pendingUpdateData.isDelta
-                ? '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Stahuji delta aktualizaci...</span>'
-                : '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Stahuji aktualizaci...</span>';
+            btnConfirmUpdate.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Stahuji aktualizaci...</span>';
 
             const notes = document.getElementById('updateReleaseNotes');
             if (notes) notes.style.display = 'none';
@@ -1230,9 +1238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (updateProgressContainer) {
                 updateProgressContainer.style.display = 'block';
                 if (updateProgressBar) updateProgressBar.style.width = '0%';
-                if (updateProgressText) updateProgressText.textContent = pendingUpdateData.isDelta
-                    ? 'Stahuji bleskový delta balíček...'
-                    : 'Navazuji spojení s GitHub Releases...';
+                if (updateProgressText) updateProgressText.textContent = 'Stahuji aktualizaci...';
                 if (updateProgressSize) updateProgressSize.textContent = '0 MB / ...';
             }
 
@@ -1727,10 +1733,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const profileSeedImportInput = document.getElementById('profileSeedImportInput');
     const btnApplyProfileSeed = document.getElementById('btnApplyProfileSeed');
     const profileSeedImportStatus = document.getElementById('profileSeedImportStatus');
+    const profileSeedProgressBox = document.getElementById('profileSeedProgressBox');
+    const profileSeedProgressText = document.getElementById('profileSeedProgressText');
+    const profileSeedProgressPercent = document.getElementById('profileSeedProgressPercent');
+    const profileSeedProgressBarFill = document.getElementById('profileSeedProgressBarFill');
 
     function closeProfileSeedModal() {
         if (modalProfileSeed) modalProfileSeed.style.display = 'none';
         if (profileSeedImportStatus) profileSeedImportStatus.textContent = '';
+        if (profileSeedProgressBox) profileSeedProgressBox.style.display = 'none';
     }
 
     if (btnCloseProfileSeedModal) btnCloseProfileSeedModal.addEventListener('click', closeProfileSeedModal);
@@ -1748,6 +1759,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (profileSeedSummary) profileSeedSummary.textContent = '';
             if (profileSeedImportStatus) profileSeedImportStatus.textContent = '';
             if (profileSeedImportInput) profileSeedImportInput.value = '';
+            if (profileSeedProgressBox) profileSeedProgressBox.style.display = 'none';
+            if (profileSeedProgressBarFill) {
+                profileSeedProgressBarFill.style.width = '0%';
+                profileSeedProgressBarFill.style.background = 'linear-gradient(90deg, #0a67e5, #21DE00)';
+            }
 
             try {
                 const res = await window.api.generateProfileSeed(profId);
@@ -1785,8 +1801,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (window.api && window.api.onProfileSeedProgress) {
         window.api.onProfileSeedProgress((data) => {
-            if (profileSeedImportStatus) {
-                profileSeedImportStatus.innerHTML = `<span style="color: #60a5fa;">Stahování: ${data.current} z ${data.total}</span>`;
+            if (profileSeedProgressBox) profileSeedProgressBox.style.display = 'block';
+            const rawPct = Math.max(0, Math.min(100, data.percent || 0));
+            const pct = calculatePerceptualProgress(rawPct);
+            if (profileSeedProgressBarFill) {
+                profileSeedProgressBarFill.style.width = `${pct}%`;
+                profileSeedProgressBarFill.style.background = 'linear-gradient(90deg, #0a67e5, #21DE00)';
+            }
+            if (profileSeedProgressPercent) {
+                profileSeedProgressPercent.textContent = `${pct}%`;
+            }
+            if (profileSeedProgressText) {
+                profileSeedProgressText.textContent = `${data.current} z ${data.total}: ${data.title || ''}`;
             }
         });
     }
@@ -1807,29 +1833,50 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnApplyProfileSeed.disabled = true;
             const originalBtnContent = btnApplyProfileSeed.innerHTML;
             btnApplyProfileSeed.innerHTML = '<span>Stahuji...</span>';
-            if (profileSeedImportStatus) profileSeedImportStatus.textContent = 'Příprava stahování...';
+            if (profileSeedImportStatus) profileSeedImportStatus.textContent = '';
+            if (profileSeedProgressBox) profileSeedProgressBox.style.display = 'block';
+            if (profileSeedProgressBarFill) {
+                profileSeedProgressBarFill.style.width = '2%';
+                profileSeedProgressBarFill.style.background = 'linear-gradient(90deg, #0a67e5, #21DE00)';
+            }
+            if (profileSeedProgressPercent) profileSeedProgressPercent.textContent = '0%';
+            if (profileSeedProgressText) profileSeedProgressText.textContent = 'Příprava stahování...';
 
             try {
                 const res = await window.api.importProfileSeed(profId, seedVal);
                 if (res && res.success) {
                     showToast('Balíček byl úspěšně stažen', 'success');
+                    if (profileSeedProgressBarFill) {
+                        profileSeedProgressBarFill.style.width = '100%';
+                        profileSeedProgressBarFill.style.background = '#21DE00';
+                    }
+                    if (profileSeedProgressPercent) profileSeedProgressPercent.textContent = '100%';
+                    if (profileSeedProgressText) profileSeedProgressText.textContent = 'Hotovo';
                     if (profileSeedImportStatus) {
                         if (res.failedCount > 0) {
                             profileSeedImportStatus.innerHTML = `<span style="color: #f59e0b;">Staženo: ${res.installedCount}, selhalo: ${res.failedCount}</span>`;
                         } else {
-                            profileSeedImportStatus.innerHTML = '<span style="color: #21DE00;">Hotovo</span>';
+                            profileSeedImportStatus.innerHTML = '<span style="color: #21DE00;">Všechny položky byly nainstalovány</span>';
                         }
                     }
                     // Refresh mods & packs list in UI
                     loadProfileMods(profId);
                 } else {
                     showToast(res?.error || 'Chyba při stahování', 'error');
+                    if (profileSeedProgressBarFill) {
+                        profileSeedProgressBarFill.style.background = '#f51515';
+                    }
+                    if (profileSeedProgressText) profileSeedProgressText.textContent = 'Chyba';
                     if (profileSeedImportStatus) {
                         profileSeedImportStatus.innerHTML = `<span style="color: #f51515;">${escapeHtml(res?.error || 'Chyba')}</span>`;
                     }
                 }
             } catch (err) {
                 showToast(err.message, 'error');
+                if (profileSeedProgressBarFill) {
+                    profileSeedProgressBarFill.style.background = '#f51515';
+                }
+                if (profileSeedProgressText) profileSeedProgressText.textContent = 'Chyba';
                 if (profileSeedImportStatus) {
                     profileSeedImportStatus.innerHTML = `<span style="color: #f51515;">${escapeHtml(err.message)}</span>`;
                 }
@@ -2456,6 +2503,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    // Apple-style circular progress overlay on mod avatar
+    if (window.api && window.api.onModDownloadProgress) {
+        window.api.onModDownloadProgress((data) => {
+            if (!data || !data.id) return;
+            const boxes = document.querySelectorAll(`.mod-avatar-box[data-mod-id="${CSS.escape(data.id)}"]`);
+            boxes.forEach(box => {
+                const ov = box.querySelector('.apple-progress-overlay');
+                const bar = box.querySelector('.apple-progress-bar');
+                if (ov && bar) {
+                    ov.classList.add('active');
+                    const rawPct = Math.max(0, Math.min(100, data.percent || 0));
+                    const pct = calculatePerceptualProgress(rawPct);
+                    const offset = 87.96 - (87.96 * pct / 100);
+                    bar.style.strokeDashoffset = offset;
+                }
+            });
+        });
+    }
+
     function renderModCards(mods) {
         if (!modsCardsList) return;
         if (!mods || mods.length === 0) {
@@ -2527,7 +2593,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             return `
                 <div class="mod-card-row">
-                    <img src="${escapeHtml(m.icon_url)}" class="mod-avatar" onerror="this.src='assets/server-icon.png'">
+                    <div class="mod-avatar-box" data-mod-id="${escapeHtml(m.id)}">
+                        <img src="${escapeHtml(m.icon_url)}" class="mod-avatar" onerror="this.src='assets/server-icon.png'">
+                        <div class="apple-progress-overlay">
+                            <svg class="apple-progress-svg" viewBox="0 0 36 36">
+                                <circle class="apple-progress-bg" cx="18" cy="18" r="14"></circle>
+                                <circle class="apple-progress-bar" cx="18" cy="18" r="14"></circle>
+                            </svg>
+                            <span class="apple-progress-stop"></span>
+                        </div>
+                    </div>
                     <div class="mod-info-area">
                         <div class="mod-name-row">
                             <span class="mod-name-title">${escapeHtml(m.title)}</span>
@@ -2562,6 +2637,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     for (let idx = 0; idx < total; idx++) {
                         const item = updateableMods[idx];
                         btnUpdateAll.innerHTML = `<span class="spinner-inline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span> <span>Aktualizuji ${idx + 1}/${total}...</span>`;
+                        const itemBox = document.querySelector(`.mod-avatar-box[data-mod-id="${CSS.escape(item.mod.id)}"]`);
+                        if (itemBox) {
+                            const ov = itemBox.querySelector('.apple-progress-overlay');
+                            const bar = itemBox.querySelector('.apple-progress-bar');
+                            if (ov && bar) {
+                                ov.classList.remove('success');
+                                ov.classList.add('active');
+                                bar.style.strokeDashoffset = '87.96';
+                            }
+                        }
                         try {
                             const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
                             const prof = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
@@ -2581,9 +2666,36 @@ document.addEventListener('DOMContentLoaded', async () => {
                             if (res && res.success) {
                                 successCount++;
                                 appendLog(`[UPDATE] ${item.mod.title} byl aktualizován na novou verzi (${res.filename}).`);
+                                if (itemBox) {
+                                    const ov = itemBox.querySelector('.apple-progress-overlay');
+                                    const bar = itemBox.querySelector('.apple-progress-bar');
+                                    if (ov && bar) {
+                                        bar.style.strokeDashoffset = '0';
+                                        ov.classList.add('success');
+                                        setTimeout(() => {
+                                            ov.classList.remove('active', 'success');
+                                            bar.style.strokeDashoffset = '87.96';
+                                        }, 600);
+                                    }
+                                }
+                            } else if (itemBox) {
+                                const ov = itemBox.querySelector('.apple-progress-overlay');
+                                const bar = itemBox.querySelector('.apple-progress-bar');
+                                if (ov && bar) {
+                                    ov.classList.remove('active', 'success');
+                                    bar.style.strokeDashoffset = '87.96';
+                                }
                             }
                         } catch (err) {
                             console.warn(`Selhala aktualizace módu ${item.mod.id}:`, err);
+                            if (itemBox) {
+                                const ov = itemBox.querySelector('.apple-progress-overlay');
+                                const bar = itemBox.querySelector('.apple-progress-bar');
+                                if (ov && bar) {
+                                    ov.classList.remove('active', 'success');
+                                    bar.style.strokeDashoffset = '87.96';
+                                }
+                            }
                         }
                     }
 
@@ -2681,6 +2793,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 btn.classList.add('btn-downloading');
                 btn.innerHTML = `<span class="spinner-inline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span> <span>${isUpdate ? 'Aktualizuji...' : 'Stahuji...'}</span>`;
 
+                const avatarBox = btn.closest('.mod-card-row')?.querySelector('.mod-avatar-box') || document.querySelector(`.mod-avatar-box[data-mod-id="${CSS.escape(modId)}"]`);
+                if (avatarBox) {
+                    const ov = avatarBox.querySelector('.apple-progress-overlay');
+                    const bar = avatarBox.querySelector('.apple-progress-bar');
+                    if (ov && bar) {
+                        ov.classList.remove('success');
+                        ov.classList.add('active');
+                        bar.style.strokeDashoffset = '87.96';
+                    }
+                }
+
                 try {
                     const res = await window.api.downloadModOrPack({
                         id: modId,
@@ -2697,6 +2820,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                         btn.classList.add('btn-download-success');
                         btn.dataset.action = 'installed';
                         btn.innerHTML = `<span class="checkmark-anim"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span>STAŽENO</span>`;
+
+                        if (avatarBox) {
+                            const ov = avatarBox.querySelector('.apple-progress-overlay');
+                            const bar = avatarBox.querySelector('.apple-progress-bar');
+                            if (ov && bar) {
+                                bar.style.strokeDashoffset = '0';
+                                ov.classList.add('success');
+                                setTimeout(() => {
+                                    ov.classList.remove('active', 'success');
+                                    bar.style.strokeDashoffset = '87.96';
+                                }, 600);
+                            }
+                        }
 
                         const sub = res.subfolder || 'mods';
                         const toastMsg = isUpdate
@@ -2738,11 +2874,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                         renderModCards(lastLoadedCatalogMods);
                         await checkWardenProbe();
                     } else {
+                        if (avatarBox) {
+                            const ov = avatarBox.querySelector('.apple-progress-overlay');
+                            const bar = avatarBox.querySelector('.apple-progress-bar');
+                            if (ov && bar) {
+                                ov.classList.remove('active', 'success');
+                                bar.style.strokeDashoffset = '87.96';
+                            }
+                        }
                         btn.classList.remove('btn-downloading');
                         btn.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> <span>Chyba</span>`;
                         showToast(`Chyba při stahování: ${res.error || 'Neznámá chyba'}`, 'error');
                     }
                 } catch (e) {
+                    if (avatarBox) {
+                        const ov = avatarBox.querySelector('.apple-progress-overlay');
+                        const bar = avatarBox.querySelector('.apple-progress-bar');
+                        if (ov && bar) {
+                            ov.classList.remove('active', 'success');
+                            bar.style.strokeDashoffset = '87.96';
+                        }
+                    }
                     btn.classList.remove('btn-downloading');
                     btn.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> <span>Chyba</span>`;
                     showToast(`Chyba: ${e.message}`, 'error');
@@ -3952,7 +4104,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── IPC Launch Events ───────────────────────────────────────────────────
     window.api.onProgress((data) => {
-        const percent = Math.min(Math.max(data.percent || 0, 0), 100);
+        const rawPercent = Math.min(Math.max(data.percent || 0, 0), 100);
+        const percent = calculatePerceptualProgress(rawPercent);
         if (progressContainer) {
             progressContainer.style.display = 'flex';
             if (progressBar) progressBar.style.width = `${percent}%`;
