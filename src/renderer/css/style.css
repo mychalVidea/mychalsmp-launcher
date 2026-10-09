@@ -363,14 +363,20 @@ body {
 /* ── App Layout ───────────────────────────────────────────────────────── */
 .app-layout {
     display: flex;
+    flex-direction: row;
     flex: 1;
     overflow: hidden;
     height: calc(100vh - var(--titlebar-height));
+    width: 100vw;
+    min-width: 0;
 }
 
 /* ── Compact Sidebar (Dawn Client Style) ──────────────────────────────── */
 .sidebar-compact {
     width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    max-width: var(--sidebar-width);
+    flex-shrink: 0;
     background-color: var(--surface);
     border-right: 1px solid var(--surface-border);
     display: flex;
@@ -433,6 +439,7 @@ body {
 /* ── Content Viewport ─────────────────────────────────────────────────── */
 .content-viewport {
     flex: 1;
+    min-width: 0;
     overflow-y: auto;
     overflow-x: hidden;
     background-color: var(--bg-dark);
@@ -1629,12 +1636,13 @@ body {
 
 .mods-browser-layout {
     display: grid;
-    grid-template-columns: 210px 1fr;
+    grid-template-columns: 210px minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     gap: 16px;
     padding: 14px 24px 16px 24px;
     flex: 1;
     min-height: 0;
+    min-width: 0;
     height: 100%;
     max-height: 100%;
     overflow: hidden;
@@ -1672,6 +1680,20 @@ body {
     color: var(--text-primary);
     margin-bottom: 6px;
     cursor: pointer;
+    user-select: none;
+}
+
+.filter-label input[type="radio"] {
+    accent-color: var(--brand-blue);
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+select option {
+    background: #12141f;
+    color: #fff;
+    padding: 6px 10px;
 }
 
 .mods-cards-container {

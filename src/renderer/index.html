@@ -292,17 +292,23 @@
                                     </span>
                                 </button>
                             </div>
-                                      <div class="progress-right-side">
-                                    <span class="progress-percent" id="progressPercent">0%</span>
-                                    <button class="btn-cancel-progress" id="btnCancelDownload"
-                                        title="Zrušit stahování / spuštění">
-                                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                        Zrušit
-                                    </button>
+
+                            <!-- Launch / Download Progress Bar (Hidden by default) -->
+                            <div class="progress-container" id="progressContainer" style="display: none;">
+                                <div class="progress-info">
+                                    <span class="progress-status" id="progressText">Příprava herních souborů...</span>
+                                    <div class="progress-right-side">
+                                        <span class="progress-percent" id="progressPercent">0%</span>
+                                        <button class="btn-cancel-progress" id="btnCancelDownload"
+                                            title="Zrušit stahování / spuštění">
+                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                            Zrušit
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="progress-track">
-                                <div class="progress-bar" id="progressBar"></div>
+                                <div class="progress-track">
+                                    <div class="progress-bar" id="progressBar"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1005,7 +1011,10 @@
                     <pre class="console-body" id="consoleOutput">Čekám na spuštění hry...</pre>
                 </div>
             </section>
-            <!-- Modal 0: Vytvořit nový profil (New Profile) -->
+        </main>
+    </div>
+
+    <!-- Modal 0: Vytvořit nový profil (New Profile) -->
             <div class="launcher-modal-overlay" id="modalCreateProfile" style="display: none;">
                 <div class="launcher-modal-card">
                     <div class="modal-header">
