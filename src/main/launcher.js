@@ -276,7 +276,7 @@ Handler.prototype.getJar = async function() {
                     fs.copyFileSync(candJar, targetJarPath);
                     if (isJarFileValid(targetJarPath)) {
                         copied = true;
-                        this.client.emit('debug', `[OPTIMALIZACE]: ⚡ Bleskově převzat platný herní klient ${jarName} z "${candJar}"!`);
+                        this.client.emit('debug', `[OPTIMALIZACE]: Převzat platný herní klient ${jarName} z "${candJar}"`);
                         break;
                     } else {
                         try { fs.unlinkSync(targetJarPath); } catch (e) {}
@@ -373,7 +373,7 @@ function linkOrShareExistingMinecraftData(targetRootDir, onLog) {
                     fs.mkdirSync(path.dirname(targetAssets), { recursive: true });
                     const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
                     fs.symlinkSync(candAssets, targetAssets, symlinkType);
-                    log(`[OPTIMALIZACE] ⚡ Bleskově propojeny existující Minecraft assety z "${candAssets}" (0 MB ke stahování)!`);
+                    log(`[OPTIMALIZACE] Propojeny existující Minecraft assety z "${candAssets}"`);
                     break;
                 } catch (e) {
                     log(`[OPTIMALIZACE] Nelze vytvořit symlink na assety (${e.message}), použijeme přímé čtení z disku.`);
@@ -634,7 +634,7 @@ Handler.prototype.getAssets = async function() {
     }
 
     if (missingAssetKeys.length === 0) {
-        this.client.emit('debug', `[DELTA ASSETY]: ⚡ Všech ${filteredAssetKeys.length} textur a zvuků již existuje na disku a jsou 100% aktuální. Spouštím hru bleskově bez stahování!`);
+        this.client.emit('debug', `[DELTA ASSETY]: Všech ${filteredAssetKeys.length} textur a zvuků existuje na disku a je aktuální.`);
         this.client.emit('progress', {
             type: 'assets',
             task: filteredAssetKeys.length,
@@ -682,7 +682,7 @@ Handler.prototype.getAssets = async function() {
     });
 
     await Promise.all(workers);
-    this.client.emit('debug', `[OPTIMALIZACE]: Staženo ${counter} nových/změněných assetů. ${reusedCount} nezměněných textur a zvuků bylo bleskově převzato z disku.`);
+    this.client.emit('debug', `[OPTIMALIZACE]: Staženo ${counter} nových/změněných assetů, ${reusedCount} převzato z disku.`);
 };
 
 

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, clipboard } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, shell, dialog, Tray, Menu, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { loadConfig, saveConfig, BASE_DIR } = require('./config');
@@ -115,13 +115,21 @@ function setupTray() {
 }
 
 function createSplashWindow() {
+    let splashX, splashY;
+    try {
+        const primary = screen.getPrimaryDisplay();
+        const { x, y, width, height } = primary.workArea;
+        splashX = Math.round(x + (width - 320) / 2);
+        splashY = Math.round(y + (height - 360) / 2);
+    } catch (e) { }
+
     splashWindow = new BrowserWindow({
         width: 320,
         height: 360,
+        ...(splashX !== undefined ? { x: splashX, y: splashY } : { center: true }),
         frame: false,
         transparent: true,
         resizable: false,
-        center: true,
         alwaysOnTop: true,
         show: true,
         backgroundColor: '#00000000',
@@ -142,9 +150,20 @@ function createSplashWindow() {
 }
 
 function createWindow() {
+    let winX, winY, winW = 1180, winH = 740;
+    try {
+        const primary = screen.getPrimaryDisplay();
+        const { x, y, width, height } = primary.workArea;
+        winW = Math.min(1180, width);
+        winH = Math.min(740, height);
+        winX = Math.round(x + (width - winW) / 2);
+        winY = Math.round(y + (height - winH) / 2);
+    } catch (e) { }
+
     mainWindow = new BrowserWindow({
-        width: 1180,
-        height: 740,
+        width: winW,
+        height: winH,
+        ...(winX !== undefined ? { x: winX, y: winY } : {}),
         minWidth: 980,
         minHeight: 640,
         frame: false, // Custom sleek titlebar
@@ -173,6 +192,17 @@ function createWindow() {
             splashWindow.destroy();
             splashWindow = null;
         }
+
+        // Enforce placement on primary display in case window manager misplaced it
+        try {
+            const primary = screen.getPrimaryDisplay();
+            const { x, y, width, height } = primary.workArea;
+            const currentBounds = mainWindow.getBounds();
+            const targetX = Math.round(x + (width - currentBounds.width) / 2);
+            const targetY = Math.round(y + (height - currentBounds.height) / 2);
+            mainWindow.setPosition(targetX, targetY);
+        } catch (e) { }
+
         mainWindow.show();
         mainWindow.focus();
     });
@@ -700,6 +730,84 @@ ipcMain.handle('resolve-mod-collisions', async (event, profileId) => {
 });
 
 // Resource Packs & Shaders Management
+const packMetadataCache = new Map();
+
+function cleanMinecraftFormatting(str) {
+    if (!str || typeof str !== 'string') return '';
+    return str
+        .replace(/§[0-9a-fk-or]/gi, '')
+        .replace(/§#[0-9a-fA-F]{6}/gi, '')
+        .replace(/§/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function getCachedPackMetadata(filePath, mtime, isDirectory) {
+    const cacheKey = `${filePath}:${mtime}`;
+    if (packMetadataCache.has(cacheKey)) {
+        return packMetadataCache.get(cacheKey);
+    }
+
+    let meta = {
+        description: null,
+        iconDataUrl: null
+    };
+
+    try {
+        if (isDirectory) {
+            const packPngPath = path.join(filePath, 'pack.png');
+            if (fs.existsSync(packPngPath)) {
+                try {
+                    const buf = fs.readFileSync(packPngPath);
+                    if (buf.length < 800000) {
+                        meta.iconDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+                    }
+                } catch (_) { }
+            }
+            const mcmetaPath = path.join(filePath, 'pack.mcmeta');
+            if (fs.existsSync(mcmetaPath)) {
+                try {
+                    const raw = JSON.parse(fs.readFileSync(mcmetaPath, 'utf8'));
+                    if (raw?.pack?.description) {
+                        const desc = typeof raw.pack.description === 'string'
+                            ? raw.pack.description
+                            : (raw.pack.description.text || JSON.stringify(raw.pack.description));
+                        meta.description = cleanMinecraftFormatting(desc);
+                    }
+                } catch (_) { }
+            }
+        } else {
+            let AdmZip;
+            try { AdmZip = require('adm-zip'); } catch (_) { }
+            if (AdmZip && fs.existsSync(filePath)) {
+                const zip = new AdmZip(filePath);
+                const packPng = zip.getEntry('pack.png') ||
+                                zip.getEntry('pack.icon.png') ||
+                                zip.getEntries().find(e => (e.entryName.toLowerCase().endsWith('pack.png') || e.entryName.toLowerCase().endsWith('icon.png')) && e.header.size < 800000);
+                if (packPng && packPng.header.size < 800000) {
+                    meta.iconDataUrl = `data:image/png;base64,${packPng.getData().toString('base64')}`;
+                }
+
+                const mcmetaEntry = zip.getEntry('pack.mcmeta');
+                if (mcmetaEntry) {
+                    try {
+                        const raw = JSON.parse(mcmetaEntry.getData().toString('utf8'));
+                        if (raw?.pack?.description) {
+                            const desc = typeof raw.pack.description === 'string'
+                                ? raw.pack.description
+                                : (raw.pack.description.text || '');
+                            meta.description = cleanMinecraftFormatting(desc);
+                        }
+                    } catch (_) { }
+                }
+            }
+        }
+    } catch (_) { }
+
+    packMetadataCache.set(cacheKey, meta);
+    return meta;
+}
+
 ipcMain.handle('get-profile-packs', async (event, profileId, packType) => {
     const config = loadConfig();
     const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
@@ -711,26 +819,63 @@ ipcMain.handle('get-profile-packs', async (event, profileId, packType) => {
         return { success: true, packs: [], folderPath };
     }
     try {
+        let metaMap = {};
+        try {
+            const metaFile = path.join(folderPath, '.mod_meta.json');
+            if (fs.existsSync(metaFile)) {
+                metaMap = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+            }
+        } catch (_) { }
+
         const files = fs.readdirSync(folderPath);
         const packs = [];
         for (const file of files) {
+            // Ignorujeme skryté soubory a složky jako .index, .DS_Store, .mod_meta.json atd.
+            if (file.startsWith('.')) continue;
+
             const lower = file.toLowerCase();
             const fullPath = path.join(folderPath, file);
             const stat = fs.statSync(fullPath);
-            if (lower.endsWith('.zip') || lower.endsWith('.zip.disabled') || stat.isDirectory()) {
+            const isDir = stat.isDirectory();
+
+            if (lower.endsWith('.zip') || lower.endsWith('.zip.disabled') || isDir) {
                 const isEnabled = !lower.endsWith('.disabled');
-                const cleanName = file.replace(/\.disabled$/i, '').replace(/\.zip$/i, '');
+                const rawCleanName = file.replace(/\.disabled$/i, '').replace(/\.zip$/i, '');
+                const cleanName = cleanMinecraftFormatting(rawCleanName);
+                const baseFile = file.replace(/\.disabled$/i, '');
+                const fileMeta = metaMap[file] || metaMap[baseFile] || {};
+
+                const packMeta = getCachedPackMetadata(fullPath, stat.mtimeMs, isDir);
+
+                // Extrakce verze z názvu nebo z metadat
+                let version = fileMeta.version || null;
+                if (!version) {
+                    const verMatch = cleanName.match(/[-_ ](?:v|r|ver)?([0-9]+(?:\.[0-9]+)+(?:[-_][a-zA-Z0-9]+)?)/i) ||
+                                     cleanName.match(/[-_ ](v?[0-9]+\.[0-9]+)/i);
+                    if (verMatch) version = verMatch[1];
+                }
+
+                const displayName = cleanMinecraftFormatting(fileMeta.title || cleanName);
+                const modId = fileMeta.id || cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
                 packs.push({
                     filename: file,
                     cleanName,
+                    name: displayName,
+                    modId,
+                    modrinthId: fileMeta.id || null,
+                    modrinthSlug: fileMeta.slug || null,
+                    version,
+                    description: packMeta?.description || null,
+                    iconDataUrl: packMeta?.iconDataUrl || null,
                     enabled: isEnabled,
-                    sizeFormatted: stat.isDirectory() ? 'Složka' : (stat.size / (1024 * 1024)).toFixed(1) + ' MB',
+                    sizeFormatted: isDir ? 'Složka' : (stat.size / (1024 * 1024)).toFixed(1) + ' MB',
                     mtime: stat.mtimeMs,
-                    isDirectory: stat.isDirectory()
+                    isDirectory: isDir
                 });
             }
         }
-        packs.sort((a, b) => a.cleanName.localeCompare(b.cleanName));
+        packs.sort((a, b) => (a.name || a.cleanName).localeCompare(b.name || b.cleanName));
         return { success: true, packs, folderPath };
     } catch (e) {
         return { success: false, error: e.message, packs: [] };
@@ -762,7 +907,14 @@ ipcMain.handle('delete-profile-pack', async (event, profileId, packType, filenam
     const gameDir = profile?.gameDir || BASE_DIR;
     const targetFolder = packType === 'shaderpacks' ? 'shaderpacks' : 'resourcepacks';
     const folderPath = path.join(gameDir, targetFolder);
-    const targetPath = path.join(folderPath, filename);
+    let targetPath = path.join(folderPath, filename);
+    if (!fs.existsSync(targetPath)) {
+        if (fs.existsSync(targetPath + '.disabled')) {
+            targetPath = targetPath + '.disabled';
+        } else if (filename.endsWith('.disabled') && fs.existsSync(targetPath.replace(/\.disabled$/i, ''))) {
+            targetPath = targetPath.replace(/\.disabled$/i, '');
+        }
+    }
     try {
         if (fs.existsSync(targetPath)) {
             if (fs.statSync(targetPath).isDirectory()) {
@@ -1147,14 +1299,36 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
     }
 
     // Select profile
-    const activeId = profileId || config.activeProfileId || 'minecraft-26.2';
-    const profile = (config.profiles || []).find(p => p.id === activeId) || {
-        version: '26.2',
-        loader: 'vanilla'
-    };
+    const profiles = config.profiles || [];
+    let activeId = profileId || config.activeProfileId;
+    let profile = profiles.find(p => p.id === activeId);
+
+    // If profile not found by activeId, resolve to the most recently played profile or first profile
+    if (!profile && profiles.length > 0) {
+        const playedProfiles = profiles.filter(p => typeof p.lastPlayed === 'number' && p.lastPlayed > 0)
+            .sort((a, b) => b.lastPlayed - a.lastPlayed);
+        profile = playedProfiles[0] || profiles[0];
+        activeId = profile.id;
+    }
+
+    // Fallback if config has no profiles
+    if (!profile) {
+        profile = {
+            id: 'minecraft-26.2',
+            name: 'Minecraft 26.2',
+            version: '26.2',
+            loader: 'fabric',
+            optimizedChosen: 'optimized'
+        };
+        activeId = profile.id;
+    }
+
+    if (!profile.loader) {
+        profile.loader = 'fabric';
+    }
 
     // Update active profile and timestamps with real Date.now()
-    const updatedProfiles = (config.profiles || []).map(p => {
+    const updatedProfiles = profiles.map(p => {
         if (p.id === activeId) {
             return { ...p, lastPlayed: Date.now() };
         }

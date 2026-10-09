@@ -460,6 +460,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             const customEnvVarsInput = document.getElementById('customEnvVarsInput');
             if (customEnvVarsInput) customEnvVarsInput.value = currentConfig.customEnvVars || '';
 
+            // Vyřešíme aktivní nebo naposledy hraný profil hned při načtení
+            currentConfig.activeProfileId = resolveLaunchProfileId();
+            const initialProf = (currentConfig.profiles || []).find(x => x.id === currentConfig.activeProfileId);
+            if (initialProf) {
+                currentConfig.version = initialProf.version;
+                currentConfig.loader = initialProf.loader || 'fabric';
+            }
+
             // Render Server Tracker & Profiles
             renderServerTracker();
             pingCustomServersInBackground();
@@ -836,8 +844,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         trackedServersList.querySelectorAll('.btn-quick-join').forEach(btn => {
             btn.addEventListener('click', () => {
                 const srv = btn.dataset.server;
+                const targetProfileId = resolveLaunchProfileId();
                 recordServerJoin(srv);
-                startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
+                selectActiveProfile(targetProfileId);
+                startLaunch(targetProfileId, srv);
             });
         });
 
@@ -897,8 +907,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         fullList.querySelectorAll('.btn-quick-join').forEach(btn => {
             btn.addEventListener('click', () => {
                 const srv = btn.dataset.server;
+                const targetProfileId = resolveLaunchProfileId();
                 recordServerJoin(srv);
-                startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
+                selectActiveProfile(targetProfileId);
+                startLaunch(targetProfileId, srv);
             });
         });
 
@@ -953,7 +965,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             await window.api.saveConfig({ servers });
             renderServerTracker();
             renderServersFullTab();
-            showToast(target.pinned ? `Server "${target.name}" byl připnut nahoru!` : `Server "${target.name}" byl odepnut.`, 'info');
+            showToast(target.pinned ? `Server "${target.name}" připnut.` : `Server "${target.name}" odepnut.`, 'info');
         }
     }
 
@@ -1241,7 +1253,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             closeWardenModal();
             appendLog('[PROFIL] Spouštím hru bez připojení k serveru MYCHAL SMP (módy povoleny pro singleplayer a jiné servery)...');
             showToast('Spouštím hru bez připojení k SMP – módy povoleny.', 'info');
-            startLaunch(currentConfig.activeProfileId, null);
+            const targetProfileId = resolveLaunchProfileId(currentConfig.activeProfileId);
+            startLaunch(targetProfileId, null);
         });
     }
 
@@ -1268,13 +1281,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Quick Play MYCHAL SMP Banner ────────────────────────────────────────
     if (btnQuickPlayMychal) {
         btnQuickPlayMychal.addEventListener('click', async () => {
+            const targetProfileId = resolveLaunchProfileId();
+            selectActiveProfile(targetProfileId);
+
             if (currentIllegalMods.length > 0) {
                 showToast('Quick Play zablokován: Nalezeny nepovolené módy.', 'error');
                 openWardenModal();
                 return;
             }
             recordServerJoin('mychalsmp.xyz');
-            startLaunch('minecraft-26.2', 'mychalsmp.xyz');
+            startLaunch(targetProfileId, 'mychalsmp.xyz');
         });
     }
 
@@ -1362,9 +1378,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const notes = document.getElementById('updateReleaseNotes');
         if (!modal) return;
 
-        if (title) title.textContent = `Dostupná nová verze v${update.latestVersion || ''}`;
+        if (title) title.textContent = `Aktualizace v${update.latestVersion || ''}`;
         if (desc) {
-            desc.textContent = `Byla vydána nová verze MYCHAL SMP Launcheru (máš nainstalovanou v${update.currentVersion || '1.0.0'}). Chceš aktualizaci stáhnout a nainstalovat?`;
+            desc.textContent = `K dispozici je verze v${update.latestVersion || ''} (nainstalováno: v${update.currentVersion || '1.0.0'}).`;
+            desc.style.display = 'block';
         }
 
         if (notes && update.releaseNotes) {
@@ -1383,7 +1400,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const btnConfirm = document.getElementById('btnConfirmUpdate');
         if (btnConfirm) {
             btnConfirm.disabled = false;
-            btnConfirm.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Aktualizovat nyní</span>';
+            btnConfirm.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Aktualizovat</span>';
         }
 
         modal.style.display = 'flex';
@@ -1444,16 +1461,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             isUpdatingCurrently = true;
             btnConfirmUpdate.disabled = true;
-            btnConfirmUpdate.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Stahuji aktualizaci...</span>';
 
+            const title = document.getElementById('updateModalTitle');
+            const desc = document.getElementById('updateModalDesc');
             const notes = document.getElementById('updateReleaseNotes');
+
+            if (title) title.textContent = 'Stahování aktualizace';
+            if (desc) desc.style.display = 'none';
             if (notes) notes.style.display = 'none';
+            if (updateModalFoot) updateModalFoot.style.display = 'none';
 
             if (updateProgressContainer) {
                 updateProgressContainer.style.display = 'block';
                 if (updateProgressBar) updateProgressBar.style.width = '0%';
                 if (updateProgressText) updateProgressText.textContent = 'Stahuji aktualizaci...';
-                if (updateProgressSize) updateProgressSize.textContent = '0 MB / ...';
+                if (updateProgressSize) updateProgressSize.textContent = '';
             }
 
             try {
@@ -1465,7 +1487,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const res = await window.api.applyUpdate(downloadUrl);
                 if (res && res.applied) {
                     if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+                    if (desc) desc.style.display = 'none';
                     if (updateModalFoot) updateModalFoot.style.display = 'none';
+                    if (title) title.textContent = 'Aktualizace dokončena';
                     if (updateCountdownContainer) updateCountdownContainer.style.display = 'block';
 
                     let countdown = 3;
@@ -1491,7 +1515,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (err) {
                 isUpdatingCurrently = false;
                 showToast('Chyba při aktualizaci: ' + err.message, 'error');
+                const title = document.getElementById('updateModalTitle');
+                const desc = document.getElementById('updateModalDesc');
+                if (title) title.textContent = 'Chyba aktualizace';
+                if (desc) desc.style.display = 'block';
                 if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+                if (updateModalFoot) updateModalFoot.style.display = 'flex';
                 if (btnConfirmUpdate) {
                     btnConfirmUpdate.disabled = false;
                     btnConfirmUpdate.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Zkusit znovu</span>';
@@ -1500,19 +1529,65 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    let hasUserManuallySelectedProfile = false;
+
+    function resolveLaunchProfileId(preferredId) {
+        const profiles = currentConfig.profiles || [];
+        if (profiles.length === 0) return 'minecraft-26.2';
+
+        if (preferredId) {
+            const foundPref = profiles.find(p => p.id === preferredId);
+            if (foundPref) return foundPref.id;
+        }
+
+        const playedProfiles = profiles.filter(p => typeof p.lastPlayed === 'number' && p.lastPlayed > 0);
+        const mostRecentPlayed = playedProfiles.length > 0
+            ? [...playedProfiles].sort((a, b) => b.lastPlayed - a.lastPlayed)[0]
+            : null;
+
+        // Pokud uživatel ručně vybral profil v UI launcheru, má to přednost
+        if (hasUserManuallySelectedProfile && currentConfig.activeProfileId) {
+            const activeProf = profiles.find(p => p.id === currentConfig.activeProfileId);
+            if (activeProf) return activeProf.id;
+        }
+
+        // Pokud aktivní profil nebyl ještě nikdy hrán, ale existuje naposledy hraný profil, použijeme naposledy hraný
+        if (mostRecentPlayed) {
+            const activeProf = profiles.find(p => p.id === currentConfig.activeProfileId);
+            if (!activeProf || !activeProf.lastPlayed) {
+                return mostRecentPlayed.id;
+            }
+        }
+
+        // Standardně vybraný profil v konfiguraci
+        if (currentConfig.activeProfileId) {
+            const activeProf = profiles.find(p => p.id === currentConfig.activeProfileId);
+            if (activeProf) return activeProf.id;
+        }
+
+        if (mostRecentPlayed) return mostRecentPlayed.id;
+
+        return profiles[0].id;
+    }
+
     // ── Profile List Rendering & Interactive Selection ──────────────────────
     function renderProfilesList() {
         const list = document.getElementById('profileCardsList');
         if (!list) return;
 
         const profiles = currentConfig.profiles || [];
-        const activeId = currentConfig.activeProfileId || (profiles[0] ? profiles[0].id : 'minecraft-26.2');
+        const activeId = resolveLaunchProfileId();
+        currentConfig.activeProfileId = activeId;
 
         const activeProfile = profiles.find(p => p.id === activeId);
         const heroActiveProfileEl = document.getElementById('heroActiveProfileName');
         if (heroActiveProfileEl && activeProfile) {
             const loaderTag = (activeProfile.loader && activeProfile.loader !== 'vanilla') ? ` (${activeProfile.loader})` : '';
             heroActiveProfileEl.textContent = `${activeProfile.name}${loaderTag}`;
+        }
+        if (btnQuickPlayMychal && activeProfile) {
+            const loaderTag = (activeProfile.loader && activeProfile.loader !== 'vanilla') ? ` • ${activeProfile.loader}` : '';
+            btnQuickPlayMychal.title = `Rychlé připojení na MYCHAL SMP (${activeProfile.name}${loaderTag})`;
         }
 
         const totalSec = profiles.reduce((acc, p) => acc + (p.playtimeSeconds || 0), 0);
@@ -1640,7 +1715,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    function selectActiveProfile(profileId) {
+    function selectActiveProfile(profileId, isManual = true) {
+        if (isManual) {
+            hasUserManuallySelectedProfile = true;
+        }
         currentConfig.activeProfileId = profileId;
         const p = (currentConfig.profiles || []).find(x => x.id === profileId);
         if (p) {
@@ -1652,6 +1730,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 loader: p.loader || 'vanilla'
             });
             appendLog(`[PROFIL] Aktivován profil: ${p.name} (${p.version}, zavaděč: ${(p.loader || 'vanilla').toUpperCase()})`);
+            const heroActiveProfileEl = document.getElementById('heroActiveProfileName');
+            if (heroActiveProfileEl) {
+                const loaderTag = (p.loader && p.loader !== 'vanilla') ? ` (${p.loader})` : '';
+                heroActiveProfileEl.textContent = `${p.name}${loaderTag}`;
+            }
+            if (btnQuickPlayMychal) {
+                const loaderTag = (p.loader && p.loader !== 'vanilla') ? ` • ${p.loader}` : '';
+                btnQuickPlayMychal.title = `Rychlé připojení na MYCHAL SMP (${p.name}${loaderTag})`;
+            }
             const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
             if (sideConsoleStatus && !isRunning && !isLaunching) {
                 sideConsoleStatus.textContent = isInst
@@ -1674,7 +1761,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (sidebarPlayBtn) {
         sidebarPlayBtn.addEventListener('click', () => {
-            startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', null);
+            const targetProfileId = resolveLaunchProfileId();
+            selectActiveProfile(targetProfileId, true);
+            startLaunch(targetProfileId, null);
         });
     }
 
@@ -1861,7 +1950,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         appendLog(isAlreadyInstalled
-            ? `[LAUNCHER] Zahajuji spuštění profilu ${profileId || 'aktivní'}...`
+            ? `[LAUNCHER] Zahajuji spuštění profilu ${targetProf?.name || targetPid}...`
             : `[LAUNCHER] Zahajuji stahování a instalaci verze ${targetProf?.version || ''}...`);
         if (sideConsoleStatus) sideConsoleStatus.textContent = isAlreadyInstalled ? 'Připravuji herní data a knihovny...' : 'Stahuji verzi a herní data...';
 
@@ -1870,13 +1959,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (currentIllegalMods && currentIllegalMods.length > 0) {
                 // If launch wasn't explicitly triggered from quick play, don't block the user, simply launch without connecting to SMP
                 actualServerIp = null;
-                showToast('Připojení na MYCHAL SMP přeskočeno (profil obsahuje nepovolené módy pro SMP). Hra spuštěna bez serveru.', 'info');
+                showToast('Spuštěno bez připojení k serveru (nepovolené módy).', 'info');
                 appendLog('[BEZPEČNOST] Quick Play na MYCHAL SMP přeskočen z důvodu nepovolených módů v profilu. Hra spuštěna bez automatického připojení k serveru.');
             }
         }
 
         try {
-            const res = await window.api.launchGame(profileId, actualServerIp);
+            const res = await window.api.launchGame(targetPid, actualServerIp);
             if (res && res.success) {
                 isRunning = true;
                 isLaunching = false;
@@ -1885,11 +1974,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     installedVersions = await window.api.getInstalledVersions();
                 } catch (e) { }
 
-                // Record real lastPlayed timestamp for profile
+                // Record real lastPlayed timestamp for profile and set as active profile
                 const launchedProfile = (currentConfig.profiles || []).find(x => x.id === targetPid);
                 if (launchedProfile) {
                     launchedProfile.lastPlayed = Date.now();
-                    window.api.saveConfig({ profiles: currentConfig.profiles });
+                    currentConfig.activeProfileId = targetPid;
+                    window.api.saveConfig({ profiles: currentConfig.profiles, activeProfileId: targetPid });
                     renderProfilesList();
                 }
 
@@ -2024,7 +2114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (statusText) statusText.textContent = 'Optimalizace dokončena!';
                 if (percentText) percentText.textContent = '100%';
                 if (barFill) barFill.style.width = '100%';
-                showToast('Aplikována doporučená optimalizace pro MYCHAL SMP!', 'success');
+                showToast('Doporučená optimalizace nastavena.', 'success');
                 setTimeout(() => {
                     cleanup();
                     if (onComplete) onComplete();
@@ -2486,6 +2576,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const searchInput = document.getElementById('installedModsSearchInput');
         if (!listEl) return;
 
+        const summaryEl = document.getElementById('installedModsSummary');
+        if (summaryEl) {
+            const activeCount = currentProfileModsList.filter(m => m.enabled).length;
+            summaryEl.innerHTML = `Módy: <strong>${activeCount}/${currentProfileModsList.length} aktivních</strong>`;
+        }
+
         const filterText = (searchInput?.value || '').trim().toLowerCase();
         const filtered = currentProfileModsList.filter(m => {
             if (!filterText) return true;
@@ -2655,12 +2751,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="empty-mods-title">V tomto profilu zatím nejsou žádné ${escapeHtml(typeLabelPlural.toLowerCase())}</div>
                         <p class="empty-mods-desc">Vlož .zip soubory do složky ${escapeHtml(folderName)} nebo si je stáhni v katalogu.</p>
                         <div class="empty-mods-actions">
+                            <button type="button" class="mc-btn mc-btn-primary" id="btnEmptyGoCatalogPacks">
+                                <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> Přejít do katalogu</span>
+                            </button>
                             <button type="button" class="mc-btn mc-btn-secondary" id="btnEmptyOpenPackFolder">
                                 <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Otevřít složku ${escapeHtml(folderName)}</span>
                             </button>
                         </div>
                     </div>
                 `;
+                const btnGoCatalog = document.getElementById('btnEmptyGoCatalogPacks');
+                if (btnGoCatalog) {
+                    btnGoCatalog.onclick = () => {
+                        btnSwitchCatalogMods?.click();
+                        const targetType = isShader ? 'shader' : 'resourcepack';
+                        const targetTab = Array.from(modTabButtons).find(b => b.dataset.modType === targetType);
+                        if (targetTab) targetTab.click();
+                    };
+                }
                 const btnOpen = document.getElementById('btnEmptyOpenPackFolder');
                 if (btnOpen) {
                     btnOpen.onclick = () => {
@@ -2676,38 +2784,44 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const profId = selectedModsProfileId || currentConfig.activeProfileId;
         listEl.innerHTML = filtered.map(p => {
-            const initial = (p.cleanName || 'P').charAt(0).toUpperCase();
+            const displayName = cleanMinecraftFormatting(p.name || p.cleanName);
+            const initial = (displayName || 'P').charAt(0).toUpperCase();
+            const cleanFileName = cleanMinecraftFormatting(p.filename);
             return `
             <div class="installed-mod-row ${p.enabled ? 'mod-enabled' : 'mod-disabled'}" data-filename="${escapeHtml(p.filename)}">
                 <div class="mod-row-left">
                     <div class="mod-avatar-wrapper">
-                        <div class="mod-avatar-fallback">${escapeHtml(initial)}</div>
+                        ${p.iconDataUrl
+                            ? `<img src="${p.iconDataUrl}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                               <div class="mod-avatar-fallback" style="display:none;">${escapeHtml(initial)}</div>`
+                            : `<div class="mod-avatar-fallback">${escapeHtml(initial)}</div>`
+                        }
                     </div>
                     <div class="mod-row-info">
                         <div class="mod-row-title-line">
-                            <span class="mod-row-name" title="${escapeHtml(p.cleanName)}">${escapeHtml(p.cleanName)}</span>
+                            <span class="mod-row-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
+                            ${p.version ? `<span class="mod-version-tag">v${escapeHtml(p.version)}</span>` : ''}
                             <span class="mod-row-badge ${p.enabled ? 'badge-enabled' : 'badge-disabled'}">
                                 ${p.enabled ? '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Aktivní' : 'Vypnuto'}
                             </span>
                         </div>
                         <div class="mod-row-file-meta">
-                            <span class="mod-file-name" title="${escapeHtml(p.filename)}">${escapeHtml(p.filename)}</span>
+                            <span class="mod-file-name" title="${escapeHtml(p.filename)}">${escapeHtml(cleanFileName)}</span>
                             <span>•</span>
                             <span class="mod-file-size">${escapeHtml(p.sizeFormatted)}</span>
                         </div>
                     </div>
                 </div>
                 <div class="mod-row-actions">
-                    <button type="button" class="btn-pack-toggle mc-btn btn-sm ${p.enabled ? 'mc-btn-secondary' : 'mc-btn-primary'}"
+                    <button type="button" class="btn-pack-toggle btn-mod-toggle ${p.enabled ? 'btn-disable' : 'btn-enable'}"
                         data-filename="${escapeHtml(p.filename)}"
                         data-pack-type="${escapeHtml(packType)}"
                         title="${p.enabled ? 'Deaktivovat' : 'Aktivovat'}">
                         <span>${p.enabled ? 'Vypnout' : 'Zapnout'}</span>
                     </button>
-                    <button type="button" class="btn-pack-delete mc-btn btn-sm"
+                    <button type="button" class="btn-pack-delete btn-mod-delete"
                         data-filename="${escapeHtml(p.filename)}"
                         data-pack-type="${escapeHtml(packType)}"
-                        style="color: #f51515;"
                         title="Smazat soubor">
                         <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Smazat</span>
                     </button>
@@ -2835,9 +2949,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         return false;
     }
 
+    function cleanMinecraftFormatting(str) {
+        if (!str || typeof str !== 'string') return '';
+        return str
+            .replace(/§[0-9a-fk-or]/gi, '')
+            .replace(/§#[0-9a-fA-F]{6}/gi, '')
+            .replace(/§/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
     /**
-     * Spolehlivě a přesně najde odpovídající nainstalovaný mód v profilu pro danou položku z katalogu Modrinth.
-     * Zabraňuje falešným shodám (např. 'Capes' vs 'WaveyCapes', 'Sounds' vs 'Sound Physics Remastered').
+     * Spolehlivě a přesně najde odpovídající nainstalovaný mód, resource pack nebo shader v profilu pro danou položku z katalogu Modrinth.
      */
     function findInstalledModForCatalog(catalogMod, profileMods) {
         if (!profileMods || profileMods.length === 0 || !catalogMod) return null;
@@ -2853,11 +2976,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const cleanId = clean(catId);
 
         // Striktní ověření shody názvu souboru s oddělovačem
-        // Např. slug 'capes' smí odpovídat pouze 'capes-1.0.jar' nebo 'capes.jar',
-        // ale NIKDY nesmí odpovídat 'waveycapes-1.0.jar'.
         function matchFilenameStrict(file, slug) {
             if (!file || !slug) return false;
-            const normFile = file.toLowerCase().replace(/\.disabled$/i, '').replace(/\.jar$/i, '');
+            const normFile = file.toLowerCase().replace(/\.disabled$/i, '').replace(/\.(jar|zip)$/i, '');
             if (normFile === slug) return true;
             const escaped = slug.replace(/[-_]/g, '[-_]').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const pattern = new RegExp('^' + escaped + '([-_+.]|$)', 'i');
@@ -2876,12 +2997,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const instModId = (inst.modId || '').toLowerCase().trim();
-            const instName = (inst.name || '').toLowerCase().trim();
+            const instName = (inst.name || inst.cleanName || '').toLowerCase().trim();
             const instFile = (inst.filename || '').toLowerCase().trim();
             const cleanInstId = clean(instModId);
             const cleanInstName = clean(instName);
+            const cleanInstFile = clean(instFile.replace(/\.disabled$/i, '').replace(/\.(jar|zip)$/i, ''));
 
-            // 1. Přesná shoda normalizovaného ID módu / slug (např. 'sound-physics-remastered' === 'sound_physics_remastered')
+            // 1. Přesná shoda normalizovaného ID módu / slug
             if (cleanSlug && (cleanSlug === cleanInstId || cleanId === cleanInstId)) {
                 return inst;
             }
@@ -2889,7 +3011,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return inst;
             }
 
-            // 2. Přesná shoda oficiálního názvu módu
+            // 2. Přesná shoda oficiálního názvu
             if (cleanTitle && cleanTitle === cleanInstName) {
                 return inst;
             }
@@ -2897,12 +3019,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return inst;
             }
 
-            // 3. Shoda názvu souboru se striktním oddělovačem na začátku (nikdy uvnitř nebo na konci)
+            // 3. Shoda názvu souboru se striktním oddělovačem na začátku
             if (catSlug && matchFilenameStrict(instFile, catSlug)) {
                 return inst;
             }
             if (cleanSlug && cleanSlug.length >= 4 && matchFilenameStrict(instFile, cleanSlug)) {
                 return inst;
+            }
+
+            // 4. Chytrá shoda pro Texture Packy a Shadery (camelCase a verze na konci)
+            // Např. ComplementaryReimagined_r5.8.1.zip odpovídá complementary-reimagined
+            // FreshAnimations_v1.10.5.zip odpovídá fresh-animations
+            // Solas Shader V3.6.zip odpovídá solas-shader
+            // Cursed Fog - V1.0.8.zip odpovídá cursed-fog
+            if (cleanSlug && cleanSlug.length >= 5) {
+                const withoutVer = cleanInstFile.replace(/(?:v|r|ver)?[0-9]+.*$/, '');
+                if (withoutVer === cleanSlug || cleanInstFile.startsWith(cleanSlug)) {
+                    return inst;
+                }
+            }
+            if (cleanTitle && cleanTitle.length >= 5) {
+                const withoutVer = cleanInstFile.replace(/(?:v|r|ver)?[0-9]+.*$/, '');
+                if (withoutVer === cleanTitle || cleanInstFile.startsWith(cleanTitle)) {
+                    return inst;
+                }
             }
         }
         return null;
@@ -2929,13 +3069,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         isCatalogLoading = true;
 
         try {
-            // VŽDY načteme aktuální módy profilu přímo z disku pro 100% přesnou detekci stavu stažení
+            // VŽDY načteme aktuální položky profilu (módy, resource packy i shadery) přímo z disku
             const profId = selectedModsProfileId || currentConfig.activeProfileId;
             if (profId) {
                 try {
                     const pRes = await window.api.getProfileMods(profId);
                     if (pRes && pRes.success) {
                         currentProfileModsList = pRes.mods || [];
+                    }
+                } catch (_) { }
+
+                try {
+                    const rpRes = await window.api.getProfilePacks(profId, 'resourcepacks');
+                    if (rpRes && rpRes.success) {
+                        currentProfileResourcePacksList = rpRes.packs || [];
+                    }
+                } catch (_) { }
+
+                try {
+                    const shRes = await window.api.getProfilePacks(profId, 'shaderpacks');
+                    if (shRes && shRes.success) {
+                        currentProfileShadersList = shRes.packs || [];
                     }
                 } catch (_) { }
             }
@@ -3005,9 +3159,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const updateableMods = [];
 
+        // Vybereme správný seznam nainstalovaných položek podle aktivního typu projektu
+        const activeInstalledList = currentModFilter.projectType === 'shader'
+            ? currentProfileShadersList
+            : (currentModFilter.projectType === 'resourcepack' ? currentProfileResourcePacksList : currentProfileModsList);
+
         modsCardsList.innerHTML = mods.map(m => {
-            const installedMod = findInstalledModForCatalog(m, currentProfileModsList);
-            // Zásadní oprava: Zda je mód nainstalován, závisí VÝHRADNĚ na tom, zda skutečně existuje v profilu!
+            const installedMod = findInstalledModForCatalog(m, activeInstalledList);
+            // Zásadní oprava: Zda je položka nainstalována, závisí VÝHRADNĚ na tom, zda skutečně existuje v profilu!
             const isInstalled = !!installedMod;
             const currentVer = installedMod ? (installedMod.version || '') : '';
             const latestVer = m.latest_version_number || '';
@@ -3015,6 +3174,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Kontrola, zda nová verze podporuje stejnou verzi hry:
             // Pokud je nová verze pro jinou verzi MC, neukazujeme aktualizaci, ale "Staženo" / "Nainstalováno"
             const latestSupportsOurMc = !m.latest_game_versions || m.latest_game_versions.length === 0 || m.latest_game_versions.includes(targetMcVersion);
+            const isCompatibleWithTarget = latestSupportsOurMc;
+            const displayVersionTag = (m.latest_game_versions && m.latest_game_versions.length > 0)
+                ? (m.latest_game_versions.includes(targetMcVersion) ? targetMcVersion : m.latest_game_versions[m.latest_game_versions.length - 1])
+                : (currentModFilter.version || targetMcVersion);
             const hasUpdate = isInstalled && isModVersionNewer(latestVer, currentVer) && latestSupportsOurMc;
 
             if (hasUpdate) {
@@ -3052,6 +3215,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         </button>
                     </div>
                 `;
+            } else if (!isCompatibleWithTarget) {
+                statusPill = `<span class="mod-status-pill mod-status-incompatible"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Nekompatibilní (MC ${escapeHtml(displayVersionTag)})</span>`;
+                btnHtml = `
+                    <button class="mc-btn btn-incompatible-mod" disabled title="Mód není dostupný pro Minecraft ${escapeHtml(targetMcVersion)} (dostupné pro: MC ${escapeHtml(displayVersionTag)})">
+                        <span>Nekompatibilní</span>
+                    </button>
+                `;
             } else {
                 btnHtml = `
                     <button class="mc-btn mc-btn-green btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="download" title="Stáhnout do profilu">
@@ -3082,7 +3252,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="mod-stats-row">
                             <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> ${downloadsFormatted} stažení</span>
                             <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg> ${(m.follows || 1000).toLocaleString()} oblíbení</span>
-                            <span>Verze: ${currentModFilter.version}</span>
+                            <span>Verze: MC ${escapeHtml(displayVersionTag)}</span>
                         </div>
                     </div>
                     ${btnHtml}
@@ -3186,25 +3356,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             delBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const filename = delBtn.dataset.filename;
-                const modTitle = delBtn.dataset.modTitle || 'mód';
+                const modTitle = delBtn.dataset.modTitle || 'položku';
                 const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
                 if (!filename) {
-                    showToast('Nelze dohledat soubor módu pro smazání.', 'error');
+                    showToast('Nelze dohledat soubor pro smazání.', 'error');
                     return;
                 }
                 if (!confirm(`Opravdu chceš smazat "${modTitle}" (${filename}) z profilu?`)) return;
                 delBtn.disabled = true;
                 try {
-                    const res = await window.api.deleteProfileMod(targetProfileId, filename);
+                    const projType = currentModFilter.projectType || 'mod';
+                    let res;
+                    if (projType === 'shader') {
+                        res = await window.api.deleteProfilePack(targetProfileId, 'shaderpacks', filename);
+                    } else if (projType === 'resourcepack') {
+                        res = await window.api.deleteProfilePack(targetProfileId, 'resourcepacks', filename);
+                    } else {
+                        res = await window.api.deleteProfileMod(targetProfileId, filename);
+                    }
+
                     if (res && res.success) {
                         showToast(`${modTitle} byl smazán z profilu.`, 'success');
-                        const pRes = await window.api.getProfileMods(targetProfileId);
-                        if (pRes && pRes.success) {
-                            currentProfileModsList = pRes.mods || [];
-                        }
+                        await loadProfileMods(targetProfileId);
                         renderModCards(lastLoadedCatalogMods);
                     } else {
-                        showToast('Chyba při mazání módu: ' + (res?.error || 'Neznámá chyba'), 'error');
+                        showToast('Chyba při mazání: ' + (res?.error || 'Neznámá chyba'), 'error');
                         delBtn.disabled = false;
                     }
                 } catch (err) {
@@ -3335,11 +3511,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                             renderProfilesList();
                         }
 
-                        // VŽDY synchronizujeme nainstalované módy z disku a překreslíme karty v katalogu
-                        const pRes = await window.api.getProfileMods(targetProfileId);
-                        if (pRes && pRes.success) {
-                            currentProfileModsList = pRes.mods || [];
-                        }
+                        // VŽDY synchronizujeme nainstalované položky z disku a překreslíme karty v katalogu
+                        await loadProfileMods(targetProfileId);
                         renderModCards(lastLoadedCatalogMods);
                         await checkWardenProbe();
                     } else {
@@ -4979,20 +5152,43 @@ document.addEventListener('DOMContentLoaded', async () => {
             const logElem = document.getElementById('crashLogExcerpt');
             const fixTextElem = document.getElementById('btnApplyCrashFixText');
 
-            if (titleElem) titleElem.textContent = crashData.title || 'Analyzátor pádů Minecraftu';
-            if (subElem) subElem.textContent = `Detekován pád hry (Exit kód: ${crashData.exitCode || 1})`;
-            if (badgeElem) badgeElem.textContent = `Kód ${crashData.exitCode || 1}`;
-            if (headElem) headElem.textContent = `Příčina: ${crashData.title || 'Neznámá chyba'}`;
+            const isAutoFixed = !!(crashData.fixed || crashData.autoFixed);
+
+            if (titleElem) {
+                titleElem.textContent = crashData.title || (isAutoFixed ? 'Hra opravena' : 'Pád hry');
+                titleElem.style.color = isAutoFixed ? '#21DE00' : '#f51515';
+            }
+            if (subElem) {
+                subElem.textContent = isAutoFixed
+                    ? 'Nekompatibilní mód byl vyřazen'
+                    : `Chyba při běhu (kód: ${crashData.exitCode || 1})`;
+            }
+            if (badgeElem) {
+                badgeElem.textContent = isAutoFixed ? 'Opraveno' : `Kód ${crashData.exitCode || 1}`;
+                badgeElem.style.background = isAutoFixed ? '#21DE00' : '#f51515';
+                badgeElem.style.color = isAutoFixed ? '#0a0b0e' : '#ffffff';
+            }
+            if (headElem) {
+                headElem.textContent = isAutoFixed ? `Řešení: ${crashData.title || 'Vyřešeno'}` : `Příčina: ${crashData.title || 'Neznámá chyba'}`;
+                headElem.style.color = isAutoFixed ? '#21DE00' : '#f87171';
+            }
             if (descElem) descElem.textContent = crashData.description || '';
             if (recElem) recElem.textContent = crashData.recommendation || '';
             if (logElem) logElem.textContent = crashData.logExcerpt || '';
+
+            if (isAutoFixed && typeof loadInstalledMods === 'function') {
+                loadInstalledMods();
+            }
 
             if (btnApplyCrashFix) {
                 if (crashData.autoFix) {
                     btnApplyCrashFix.style.display = 'inline-flex';
                     if (fixTextElem) {
-                        const cleanLabel = (crashData.autoFix.label || 'Automatická oprava').replace(/^[⚡⚠️🔧\s]+/u, '');
-                        fixTextElem.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold ui-icon-pulse" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> <span>${escapeHtml(cleanLabel)}</span>`;
+                        const cleanLabel = (crashData.autoFix.label || (isAutoFixed ? 'Spustit hru znovu' : 'Automatická oprava')).replace(/^[⚡⚠️🔧\s]+/u, '');
+                        const iconHtml = isAutoFixed
+                            ? '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>'
+                            : '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold ui-icon-pulse" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>';
+                        fixTextElem.innerHTML = `${iconHtml} <span>${escapeHtml(cleanLabel)}</span>`;
                     }
                 } else {
                     btnApplyCrashFix.style.display = 'none';
@@ -5008,13 +5204,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             modalCrashAnalyzer.style.display = 'flex';
-            appendLog(`[CRASH ANALYZER] Zjištěna příčina pádu: ${crashData.title}`);
+            appendLog(`[CRASH ANALYZER] ${isAutoFixed ? 'Automaticky vyřešeno' : 'Zjištěna příčina pádu'}: ${crashData.title}`);
         });
     }
 
     if (btnApplyCrashFix) {
         btnApplyCrashFix.addEventListener('click', async () => {
             if (!currentCrashData || !currentCrashData.autoFix) return;
+            const isRelaunch = currentCrashData.autoFix.id === 'RELAUNCH_GAME' || currentCrashData.fixed || currentCrashData.autoFixed;
             btnApplyCrashFix.disabled = true;
             btnApplyCrashFix.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Aplikuji opravu...</span>';
             try {
@@ -5023,6 +5220,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     showToast(`${res.message}`.replace(/^[✓\s]+/u, ''), 'success');
                     appendLog(`[OPRAVA PÁDU] ${res.message}`);
                     closeCrashModal();
+
+                    if (typeof loadInstalledMods === 'function') {
+                        loadInstalledMods();
+                    }
 
                     // Refresh config and UI
                     const updatedCfg = await window.api.getConfig();
@@ -5035,6 +5236,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (javaPathInput && updatedCfg.javaPath) {
                             javaPathInput.value = updatedCfg.javaPath;
                         }
+                    }
+
+                    if (isRelaunch || res.relaunch) {
+                        setTimeout(() => {
+                            const btnLaunch = document.getElementById('btnLaunchGame');
+                            if (btnLaunch && !btnLaunch.disabled) {
+                                btnLaunch.click();
+                            }
+                        }, 300);
                     }
                 } else {
                     showToast('Chyba: ' + (res?.error || 'Opravu se nepodařilo aplikovat'), 'error');

@@ -266,7 +266,7 @@ async function applyUpdate(assetUrl, onProgress) {
                 applied: true,
                 isDelta: true,
                 targetExe: targetExe,
-                message: 'Blesková delta aktualizace byla úspěšně nainstalována.'
+                message: 'Aktualizace byla úspěšně nainstalována.'
             };
         } finally {
             process.noAsar = prevNoAsar;

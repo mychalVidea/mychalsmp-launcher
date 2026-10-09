@@ -154,7 +154,7 @@ function loadConfig() {
                         p.lastPlayed = null;
                     }
                     if (!p.loader) {
-                        p.loader = 'vanilla';
+                        p.loader = 'fabric';
                     }
                     if (!p.optimizedChosen) {
                         p.optimizedChosen = p.loader === 'fabric' ? 'optimized' : 'vanilla';

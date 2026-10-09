@@ -3637,6 +3637,20 @@ input[type="radio"]:checked::after {
     box-shadow: none;
 }
 
+.mod-status-incompatible {
+    background: rgba(245, 21, 21, 0.12);
+    border: 1px solid rgba(245, 21, 21, 0.3);
+    color: #f87171;
+}
+
+.btn-incompatible-mod {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #64748b !important;
+    cursor: not-allowed !important;
+    opacity: 0.6;
+}
+
 .btn-opt-done {
     background: rgba(33, 222, 0, 0.1) !important;
     border: 1px solid rgba(33, 222, 0, 0.3) !important;
@@ -4387,7 +4401,6 @@ input[type="radio"]:checked::after {
     background: linear-gradient(90deg, #0a67e5, #21DE00);
     border-radius: 999px;
     transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    box-shadow: 0 0 12px rgba(33, 222, 0, 0.45);
 }
 
 /* ── Satisfying Boot Splash Screen ─────────────────────────────────── */

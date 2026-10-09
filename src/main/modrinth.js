@@ -169,6 +169,10 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
         if (type === 'mod' && loader) {
             facets.push([`categories:${loader}`]);
         }
+        // Při procházení katalogu bez vyhledávacího dotazu zobrazujeme pouze položky kompatibilní s verzí
+        if (version && !query.trim()) {
+            facets.push([`versions:${version}`]);
+        }
 
         const params = new URLSearchParams({
             query: query.trim(),
@@ -214,6 +218,9 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
 
             return data.hits.map(h => {
                 const vMeta = versionMap.get(h.latest_version) || versionMap.get(h.project_id) || null;
+                const projectGameVersions = Array.isArray(h.versions) && h.versions.length > 0
+                    ? h.versions
+                    : (vMeta ? vMeta.game_versions : []);
                 return {
                     id: h.slug || h.project_id,
                     slug: h.slug || h.id,
@@ -229,7 +236,8 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
                     loaders: (h.categories || []).filter(c => ['fabric', 'forge', 'neoforge'].includes(c)),
                     latest_version_id: h.latest_version,
                     latest_version_number: vMeta ? vMeta.version_number : null,
-                    latest_game_versions: vMeta ? vMeta.game_versions : (h.game_versions || [])
+                    latest_game_versions: projectGameVersions,
+                    is_compatible: projectGameVersions.length === 0 || projectGameVersions.includes(version)
                 };
             });
         }
@@ -388,6 +396,10 @@ async function downloadModOrPack(options, targetDir) {
     // Prefer match for game version if available in list
     let picked = versions.find(v => Array.isArray(v.game_versions) && v.game_versions.includes(version));
     if (!picked) {
+        if (projectType === 'mod') {
+            const avail = (versions[0]?.game_versions || []).join(', ') || 'jinou verzi';
+            throw new Error(`Mód "${title || id}" není kompatibilní s verzí Minecraftu ${version} (dostupný je pouze pro: ${avail}).`);
+        }
         picked = versions[0];
     }
 

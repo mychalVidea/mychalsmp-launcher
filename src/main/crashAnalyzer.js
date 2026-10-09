@@ -48,14 +48,14 @@ function findLatestCrashReport(gameDir) {
 /**
  * Reads the tail of latest.log
  */
-function readLatestLogTail(gameDir, maxLines = 150) {
+function readLatestLogTail(gameDir, maxLines = 300) {
     try {
         const logPath = path.join(gameDir, 'logs', 'latest.log');
         if (!fs.existsSync(logPath)) return '';
 
         const stat = fs.statSync(logPath);
-        // Only read up to last 128KB
-        const readSize = Math.min(stat.size, 131072);
+        // Read up to last 256KB
+        const readSize = Math.min(stat.size, 262144);
         const buffer = Buffer.alloc(readSize);
         const fd = fs.openSync(logPath, 'r');
         fs.readSync(fd, buffer, 0, readSize, stat.size - readSize);
@@ -67,6 +67,303 @@ function readLatestLogTail(gameDir, maxLines = 150) {
     } catch (e) {
         return '';
     }
+}
+
+/**
+ * Detects incompatible, conflicting, or broken mods, extracts culprit mod IDs and titles,
+ * locates their JAR files in gameDir/mods, and automatically disables them (.jar.disabled)
+ * so that subsequent game launches succeed smoothly without user intervention.
+ */
+function autoResolveIncompatibleMods(gameDir, combinedText) {
+    const modsDir = path.join(gameDir, 'mods');
+    if (!fs.existsSync(modsDir)) {
+        return null;
+    }
+
+    const isIncompatible =
+        /Incompatible mods found!/i.test(combinedText) ||
+        /Some of your mods are incompatible with the game or each other!/i.test(combinedText) ||
+        /Replace mod '[^']+'/i.test(combinedText) ||
+        /Mod '[^']+' \([^)]+\) requires .*? but only the wrong version is present/i.test(combinedText) ||
+        /Mod '[^']+' \([^)]+\) is incompatible with mod/i.test(combinedText) ||
+        /net\.fabricmc\.loader\.impl\.FormattedException/i.test(combinedText) ||
+        /Could not execute entrypoint stage '[^']+' due to errors, provided by '[^']+'/i.test(combinedText) ||
+        /in\s+\[[a-zA-Z0-9_\-]+\.mixins\.json/i.test(combinedText) ||
+        /MissingMandatoryDependenciesException/i.test(combinedText) ||
+        /IncompatibleModException/i.test(combinedText) ||
+        /ModLoadingException/i.test(combinedText);
+
+    if (!isIncompatible) {
+        return null;
+    }
+
+    const culprits = [];
+
+    // 1. Fabric: "Replace mod 'Exordium' (exordium) 2.1.1 with any version that is compatible with: ... - minecraft 26.2"
+    const replaceRegex = /Replace mod '([^']+)' \(([^)]+)\)(?:\s+([0-9a-zA-Z\.\+\-_]+))? with any version that is compatible with:(?:[\s\S]*?- minecraft ([0-9a-zA-Z\.\+\-_]+))?/gi;
+    let m;
+    while ((m = replaceRegex.exec(combinedText)) !== null) {
+        const name = m[1];
+        const id = m[2];
+        const ver = m[3] || '';
+        const targetMc = m[4] || '';
+        if (!culprits.some(c => c.id.toLowerCase() === id.toLowerCase())) {
+            culprits.push({
+                name,
+                id,
+                ver,
+                reason: targetMc ? `vyžaduje verzi kompatibilní s Minecraft ${targetMc}` : 'nekompatibilní verze se hrou'
+            });
+        }
+    }
+
+    // 2. Fabric: "Mod 'Exordium' (exordium) 2.1.1 requires any version between 26.1 ... but only the wrong version is present: 26.2!"
+    const reqMcRegex = /Mod '([^']+)' \(([^)]+)\)(?:\s+([0-9a-zA-Z\.\+\-_]+))? requires (?:any version between ([^\n\r]+) of 'Minecraft'|([^\n\r]+) of 'Minecraft')[^\n\r]*but only the wrong version is present: ([^\n\r!]+)/gi;
+    while ((m = reqMcRegex.exec(combinedText)) !== null) {
+        const name = m[1];
+        const id = m[2];
+        const ver = m[3] || '';
+        const reqVer = m[4] || m[5] || '';
+        const presentVer = (m[6] || '').trim();
+        const existing = culprits.find(c => c.id.toLowerCase() === id.toLowerCase());
+        const reason = `vyžaduje Minecraft ${reqVer}, spouští se ${presentVer}`;
+        if (existing) {
+            existing.reason = reason;
+        } else {
+            culprits.push({ name, id, ver, reason });
+        }
+    }
+
+    // 3. Fabric: "Mod 'A' (a) is incompatible with mod 'B' (b)"
+    const conflictRegex = /Mod '([^']+)' \(([^)]+)\) is incompatible with mod '([^']+)' \(([^)]+)\)/gi;
+    while ((m = conflictRegex.exec(combinedText)) !== null) {
+        const name = m[1];
+        const id = m[2];
+        const otherName = m[3];
+        const otherId = m[4];
+        if (!culprits.some(c => c.id.toLowerCase() === id.toLowerCase())) {
+            culprits.push({
+                name,
+                id,
+                reason: `konflikt s ${otherName} (${otherId})`
+            });
+        }
+    }
+
+    // 4. Fabric missing dependency: "Mod 'A' (a) requires ... of mod 'B' (b), which is missing!"
+    const missingDepRegex = /Mod '([^']+)' \(([^)]+)\)[^\n\r]*requires (?:version [^\n\r]+ of )?mod '([^']+)' \(([^)]+)\), which is missing/gi;
+    while ((m = missingDepRegex.exec(combinedText)) !== null) {
+        const name = m[1];
+        const id = m[2];
+        const depName = m[3];
+        const depId = m[4];
+        if (depId.toLowerCase() !== 'fabric' && depId.toLowerCase() !== 'fabric-api') {
+            if (!culprits.some(c => c.id.toLowerCase() === id.toLowerCase())) {
+                culprits.push({
+                    name,
+                    id,
+                    reason: `vyžaduje chybějící doplněk ${depName} (${depId})`
+                });
+            }
+        }
+    }
+
+    // 5. Entrypoint provider: "Could not execute entrypoint stage 'main' due to errors, provided by 'modid'"
+    const entrypointRegex = /Could not execute entrypoint stage '[^']+' due to errors, provided by '([^']+)'/gi;
+    while ((m = entrypointRegex.exec(combinedText)) !== null) {
+        const id = m[1];
+        if (!['minecraft', 'fabric', 'fabricloader'].includes(id.toLowerCase()) && !culprits.some(c => c.id.toLowerCase() === id.toLowerCase())) {
+            culprits.push({
+                name: id,
+                id,
+                reason: 'chyba při inicializaci vstupního kódu módu'
+            });
+        }
+    }
+
+    // 6. Mixin crash: "in [modid.mixins.json:...]"
+    const mixinRegex = /in\s+\[([a-zA-Z0-9_\-]+)\.mixins\.json/gi;
+    while ((m = mixinRegex.exec(combinedText)) !== null) {
+        const id = m[1];
+        if (!['minecraft', 'fabric', 'fabricloader'].includes(id.toLowerCase()) && !culprits.some(c => c.id.toLowerCase() === id.toLowerCase())) {
+            culprits.push({
+                name: id,
+                id,
+                reason: 'kritická chyba v Mixin transformaci kódu hry'
+            });
+        }
+    }
+
+    // Fallback if generic message exists
+    if (culprits.length === 0) {
+        const genericModMatch = combinedText.match(/Mod '([^']+)' \(([^)]+)\)/i);
+        if (genericModMatch) {
+            culprits.push({
+                name: genericModMatch[1],
+                id: genericModMatch[2],
+                reason: 'nekompatibilita se hrou'
+            });
+        }
+    }
+
+    // Read all jar files in mods directory
+    let files = [];
+    try { files = fs.readdirSync(modsDir); } catch (_) {}
+    const jarFiles = files.filter(f => f.toLowerCase().endsWith('.jar'));
+
+    let metaMap = {};
+    try {
+        const metaFile = path.join(modsDir, '.mod_meta.json');
+        if (fs.existsSync(metaFile)) metaMap = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+    } catch (_) {}
+
+    let AdmZip = null;
+    try { AdmZip = require('adm-zip'); } catch (_) {}
+
+    const modFiles = [];
+    for (const f of jarFiles) {
+        const fullPath = path.join(modsDir, f);
+        const meta = metaMap[f] || metaMap[f.replace(/\.disabled$/i, '')] || {};
+        let modId = (meta.id || '').toLowerCase();
+        let modName = (meta.title || '').toLowerCase();
+
+        if (!modId && AdmZip) {
+            try {
+                const zip = new AdmZip(fullPath);
+                const fabEntry = zip.getEntry('fabric.mod.json');
+                if (fabEntry) {
+                    const fab = JSON.parse(fabEntry.getData().toString('utf8'));
+                    if (fab.id) modId = fab.id.toLowerCase();
+                    if (fab.name) modName = fab.name.toLowerCase();
+                }
+            } catch (_) {}
+        }
+
+        modFiles.push({
+            filename: f,
+            fullPath,
+            modId,
+            modName,
+            cleanName: f.replace(/\.jar$/i, '').toLowerCase()
+        });
+    }
+
+    // Match culprits to jar files on disk
+    const matchedCulprits = [];
+    for (const culprit of culprits) {
+        const cId = (culprit.id || '').toLowerCase();
+        const cName = (culprit.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        let match = modFiles.find(mf => mf.modId && mf.modId === cId);
+        if (!match && cName) {
+            match = modFiles.find(mf => mf.modName && mf.modName.replace(/[^a-z0-9]/g, '') === cName);
+        }
+        if (!match && cId) {
+            match = modFiles.find(mf => mf.cleanName.includes(cId));
+        }
+        if (!match && cName) {
+            match = modFiles.find(mf => mf.cleanName.replace(/[^a-z0-9]/g, '').includes(cName));
+        }
+
+        if (match) {
+            matchedCulprits.push({
+                ...culprit,
+                matchedFile: match.filename,
+                fullPath: match.fullPath
+            });
+        } else {
+            matchedCulprits.push(culprit);
+        }
+    }
+
+    // Automatically disable matched jar files by renaming to .disabled
+    const disabledMods = [];
+    for (const c of matchedCulprits) {
+        if (c.fullPath && fs.existsSync(c.fullPath)) {
+            try {
+                const targetDisabled = c.fullPath + '.disabled';
+                fs.renameSync(c.fullPath, targetDisabled);
+                disabledMods.push({
+                    name: c.name,
+                    id: c.id,
+                    filename: c.matchedFile,
+                    disabledFilename: c.matchedFile + '.disabled',
+                    reason: c.reason
+                });
+            } catch (e) {
+                console.error(`[CRASH ANALYZER] Nelze automaticky přejmenovat mód ${c.matchedFile}:`, e);
+            }
+        }
+    }
+
+    // Extract exact log excerpt around incompatibility
+    let excerpt = '';
+    const incompIdx = combinedText.indexOf('Incompatible mods found!');
+    if (incompIdx !== -1) {
+        excerpt = combinedText.substring(incompIdx, incompIdx + 900).trim();
+    } else {
+        const formattedIdx = combinedText.indexOf('FormattedException:');
+        if (formattedIdx !== -1) {
+            excerpt = combinedText.substring(formattedIdx, formattedIdx + 900).trim();
+        }
+    }
+
+    return {
+        detected: true,
+        fixed: disabledMods.length > 0,
+        culprits: matchedCulprits,
+        disabledMods,
+        logExcerpt: excerpt
+    };
+}
+
+/**
+ * Detects duplicate mods in mods directory and automatically disables the older duplicate
+ */
+function autoResolveDuplicateMods(gameDir, combinedText) {
+    const modsDir = path.join(gameDir, 'mods');
+    if (!fs.existsSync(modsDir)) return null;
+
+    const dupMatch = combinedText.match(/DuplicateModsException[^\n]*|Found duplicate mods[^\n]*|Found multiple mod files providing the same mod:\s*([^\n\r]+)/i);
+    if (!dupMatch) return null;
+
+    let dupKey = (dupMatch[1] || '').trim();
+    let files = [];
+    try { files = fs.readdirSync(modsDir); } catch (_) {}
+    const jarFiles = files.filter(f => f.toLowerCase().endsWith('.jar'));
+
+    const candidateFiles = [];
+    if (dupKey) {
+        for (const f of jarFiles) {
+            if (f.toLowerCase().includes(dupKey.toLowerCase())) {
+                const fullPath = path.join(modsDir, f);
+                try {
+                    const stat = fs.statSync(fullPath);
+                    candidateFiles.push({ filename: f, fullPath, mtime: stat.mtimeMs });
+                } catch (_) {}
+            }
+        }
+    }
+
+    candidateFiles.sort((a, b) => b.mtime - a.mtime);
+
+    let disabledFilename = null;
+    if (candidateFiles.length > 1) {
+        for (let i = 1; i < candidateFiles.length; i++) {
+            try {
+                fs.renameSync(candidateFiles[i].fullPath, candidateFiles[i].fullPath + '.disabled');
+                disabledFilename = candidateFiles[i].filename;
+            } catch (_) {}
+        }
+    }
+
+    return {
+        detected: true,
+        fixed: !!disabledFilename,
+        dupKey: dupKey || 'duplicitní mód',
+        disabledFilename,
+        keptFilename: candidateFiles[0]?.filename || null
+    };
 }
 
 /**
@@ -112,6 +409,81 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
             l.includes('GLFW') || l.includes('GLX') || l.includes('Failed') || l.includes('[GAME]') || l.includes('[STDERR]')
         );
         logExcerpt = errorLines.slice(-15).join('\n') || memLines.slice(-15).join('\n');
+    }
+
+    // ── Diagnostic Rule 0: Incompatible / Conflicting Mods (Smart Auto-Fix) ────
+    const incompResult = autoResolveIncompatibleMods(gameDir, combinedText);
+    if (incompResult && incompResult.detected) {
+        if (incompResult.fixed) {
+            const names = incompResult.disabledMods.map(m => m.name).join(', ');
+            const files = incompResult.disabledMods.map(m => m.filename).join(', ');
+            const reason = incompResult.disabledMods[0]?.reason ? ` (${incompResult.disabledMods[0].reason})` : '';
+
+            return {
+                hasCrash: true,
+                exitCode,
+                reportPath,
+                fixed: true,
+                autoFixed: true,
+                title: 'Hra opravena – Nekompatibilní mód deaktivován',
+                severity: 'warning',
+                description: `Detekován nekompatibilní mód: ${names}${reason}. Soubor ${files} byl automaticky zakázán (.disabled), aby spuštění hry proběhlo hladce.`,
+                recommendation: 'Nekompatibilní modifikace byla vyřazena. Můžeš hru ihned spustit znovu.',
+                disabledMods: incompResult.disabledMods,
+                logExcerpt: incompResult.logExcerpt || logExcerpt,
+                autoFix: {
+                    id: 'RELAUNCH_GAME',
+                    label: 'Spustit hru znovu',
+                    description: 'Spustí instanci s již opravenými a deaktivovanými módy.'
+                }
+            };
+        } else {
+            const culpritNames = incompResult.culprits.map(c => c.name || c.id).join(', ');
+            const filesToDisable = incompResult.culprits.map(c => c.matchedFile).filter(Boolean);
+            return {
+                hasCrash: true,
+                exitCode,
+                reportPath,
+                fixed: false,
+                title: 'Nekompatibilní modifikace',
+                severity: 'critical',
+                description: `V profilu byl nalezen nekompatibilní mód: ${culpritNames}. Vyžaduje jinou verzi Minecraftu nebo jiný zavaděč.`,
+                recommendation: 'Deaktivace problematického módu pro bezproblémové spuštění.',
+                logExcerpt: incompResult.logExcerpt || logExcerpt,
+                autoFix: filesToDisable.length > 0 ? {
+                    id: 'DISABLE_INCOMPATIBLE_MODS',
+                    files: filesToDisable,
+                    label: `Deaktivovat mód (${culpritNames})`,
+                    description: 'Přejmenuje problematický mód na .disabled pro bezpečné spuštění.'
+                } : {
+                    id: 'OPEN_MODS_DIR',
+                    label: 'Otevřít složku módů',
+                    description: 'Otevře složku mods pro správu souborů.'
+                }
+            };
+        }
+    }
+
+    // ── Diagnostic Rule 0b: Duplicate Mods (Smart Auto-Fix) ──────────────────
+    const dupResult = autoResolveDuplicateMods(gameDir, combinedText);
+    if (dupResult && dupResult.detected && dupResult.fixed) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            fixed: true,
+            autoFixed: true,
+            title: 'Hra opravena – Duplicitní mód deaktivován',
+            severity: 'warning',
+            description: `Ve složce mods se nacházely duplicitní soubory pro ${dupResult.dupKey}. Starší soubor (${dupResult.disabledFilename}) byl automaticky deaktivován (.disabled).`,
+            recommendation: 'Duplicita byla vyřešena. Můžeš hru ihned spustit znovu.',
+            logExcerpt: logExcerpt || `Duplicate mods found for: ${dupResult.dupKey}`,
+            autoFix: {
+                id: 'RELAUNCH_GAME',
+                label: 'Spustit hru znovu',
+                description: 'Spustí hru s ponechanou novější verzí módu.'
+            }
+        };
     }
 
     // ── Diagnostic Rule 1: Out of Memory / Insufficient RAM ──────────────────
@@ -610,6 +982,36 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
             return {
                 success: true,
                 message: 'Soubor již byl odstraněn. Můžeš hru spustit znovu.'
+            };
+        }
+
+        case 'RELAUNCH_GAME': {
+            return {
+                success: true,
+                relaunch: true,
+                message: 'Hra byla opravena a je připravena ke spuštění.'
+            };
+        }
+
+        case 'DISABLE_INCOMPATIBLE_MODS': {
+            const modsDir = path.join(gameDir, 'mods');
+            const files = autoFix.files || [];
+            let disabledCount = 0;
+            for (const f of files) {
+                const fullP = path.join(modsDir, f);
+                if (fs.existsSync(fullP)) {
+                    try {
+                        fs.renameSync(fullP, fullP + '.disabled');
+                        disabledCount++;
+                    } catch (e) {
+                        console.error('Chyba při vypínání módu:', e);
+                    }
+                }
+            }
+            return {
+                success: true,
+                relaunch: true,
+                message: `Deaktivováno ${disabledCount} nekompatibilních módů. Hra je připravena ke spuštění.`
             };
         }
 

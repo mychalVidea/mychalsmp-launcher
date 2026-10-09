@@ -1856,7 +1856,7 @@
                         <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
-                        Skvělé, rozumím
+                        Rozumím
                     </span>
                 </button>
             </div>
@@ -2284,7 +2284,7 @@
 
     <!-- AUTO-UPDATE MODAL -->
     <div class="custom-modal-overlay" id="updateModal" style="display: none;">
-        <div class="custom-modal-box" style="max-width: 520px;">
+        <div class="custom-modal-box" style="max-width: 420px;">
             <div class="modal-head">
                 <div class="modal-title-with-icon">
                     <span class="modal-icon">
@@ -2298,8 +2298,7 @@
                         </svg>
                     </span>
                     <div>
-                        <h3 id="updateModalTitle">Dostupná nová verze</h3>
-                        <p class="modal-subtitle" id="updateModalSubtitle">MYCHAL SMP Launcher</p>
+                        <h3 id="updateModalTitle">Aktualizace</h3>
                     </div>
                 </div>
                 <button class="modal-close-x" id="btnCloseUpdateModal">
@@ -2311,21 +2310,18 @@
             </div>
             <div class="modal-body">
                 <p style="font-size: 13px; color: #94a3b8; line-height: 1.5; margin-bottom: 12px;" id="updateModalDesc">
-                    Byla vydána nová verze launcheru. Chceš ji nyní stáhnout a nainstalovat?
+                    K dispozici je nová verze launcheru.
                 </p>
                 <div id="updateReleaseNotes"
                     style="max-height: 140px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; font-size: 12px; color: #cbd5e1; white-space: pre-wrap; display: none;">
                 </div>
 
                 <!-- PROGRESS BAR CONTAINER (zobrazí se při stahování) -->
-                <div id="updateProgressContainer" style="display: none; margin-top: 14px;">
+                <div id="updateProgressContainer" style="display: none; margin-top: 10px;">
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span id="updateProgressText" style="font-size: 13px; font-weight: 600; color: #fff;">Stahuji
-                            aktualizaci... 0
-                            %</span>
-                        <span id="updateProgressSize" style="font-size: 12px; color: #38bdf8; font-family: monospace;">0
-                            MB / 0 MB</span>
+                        <span id="updateProgressText" style="font-size: 13px; font-weight: 500; color: #f8fafc;">Stahuji aktualizaci... 0 %</span>
+                        <span id="updateProgressSize" style="font-size: 12px; color: #94a3b8; font-family: monospace;">0 MB / 0 MB</span>
                     </div>
                     <div class="update-progress-track">
                         <div id="updateProgressBar" class="update-progress-fill" style="width: 0%;"></div>
@@ -2334,17 +2330,14 @@
 
                 <!-- RESTART COUNTDOWN CONTAINER (zobrazí se po instalaci) -->
                 <div id="updateCountdownContainer"
-                    style="display: none; margin-top: 14px; text-align: center; padding: 14px; background: rgba(33, 222, 0, 0.08); border: 1px solid rgba(33, 222, 0, 0.25); border-radius: 10px;">
-                    <div style="margin-bottom: 6px;">
-                        <svg class="ui-icon-svg ui-icon-svg--xl ui-icon-svg--green" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="16 9 10 15 7 12"></polyline>
+                    style="display: none; text-align: center; padding: 16px 8px 6px;">
+                    <div style="width: 42px; height: 42px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(33, 222, 0, 0.12); border: 1px solid rgba(33, 222, 0, 0.25);">
+                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--green" viewBox="0 0 24 24">
+                            <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                     </div>
-                    <strong style="color: #21DE00; font-size: 14px; display: block; margin-bottom: 4px;">Aktualizace nainstalována</strong>
-                    <span style="font-size: 13px; color: #cbd5e1;">Restartuji launcher za <strong
-                            id="updateCountdownSec" style="color: #38bdf8; font-size: 16px;">3</strong>
-                        s...</span>
+                    <div style="color: #f8fafc; font-size: 14px; font-weight: 600; margin-bottom: 4px;">Aktualizace nainstalována</div>
+                    <div style="font-size: 13px; color: #94a3b8;">Restartuji za <strong id="updateCountdownSec" style="color: #0a67e5; font-size: 14px;">3</strong> s...</div>
                 </div>
             </div>
             <div class="modal-foot" id="updateModalFoot">
@@ -2356,7 +2349,7 @@
                             <polyline points="7 10 12 15 17 10"></polyline>
                             <line x1="12" y1="15" x2="12" y2="3"></line>
                         </svg>
-                        Aktualizovat nyní
+                        Aktualizovat
                     </span>
                 </button>
             </div>
