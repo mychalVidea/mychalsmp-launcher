@@ -634,21 +634,44 @@ body {
 
 .mc-btn-quickplay {
     width: 100%;
-    padding: 11px;
-    background: linear-gradient(135deg, var(--brand-blue) 0%, #16a34a 100%);
-    color: #fff;
+    padding: 12px 16px;
+    background: #0a67e5;
+    color: #ffffff;
     font-size: 13px;
     font-weight: 700;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.5px;
     border-radius: 8px;
-    border: none;
-    box-shadow: 0 4px 16px rgba(10, 103, 229, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.18s ease;
+    cursor: pointer;
+}
+
+.mc-btn-quickplay svg,
+.mc-btn-quickplay .btn-quickplay-icon {
+    stroke: #ffffff !important;
+    fill: #ffffff !important;
+    color: #ffffff !important;
+    width: 15px;
+    height: 15px;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+    flex-shrink: 0;
 }
 
 .mc-btn-quickplay:hover {
-    filter: brightness(1.12);
-    box-shadow: 0 6px 22px rgba(10, 103, 229, 0.5);
+    background: #1471f5;
+    border-color: rgba(255, 255, 255, 0.28);
     transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(10, 103, 229, 0.35);
+}
+
+.mc-btn-quickplay:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* ── TAB: PLAY (DASHBOARD SPLIT) ──────────────────────────────────────── */
@@ -1246,7 +1269,7 @@ body {
     background: var(--brand-green);
     color: #0b1509;
     border-color: var(--brand-green);
-    box-shadow: 0 0 16px rgba(33, 222, 0, 0.4);
+    box-shadow: 0 4px 12px rgba(33, 222, 0, 0.25);
     transform: translateY(-1px);
 }
 
@@ -1263,8 +1286,29 @@ body {
 .tracked-server-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: flex-end;
     flex-shrink: 0;
+}
+
+.item-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.item-name-row .item-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.server-play-meta {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 500;
+    margin-left: 4px;
 }
 
 .btn-del-server {
@@ -1300,7 +1344,7 @@ body {
     background: #ef4444;
     border-color: #ef4444;
     color: #fff;
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
 }
 
 .btn-del-server--lg {
@@ -1310,20 +1354,65 @@ body {
     min-height: 38px;
 }
 
-/* Sidebar tracked server item: show delete button only on hover */
+.btn-del-server--inline {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+    margin: 0;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #94a3b8;
+    opacity: 0.6;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-del-server--inline:hover {
+    opacity: 1;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+/* Sidebar tracked server item: clean delete button inline next to server name */
 .tracked-server-item .btn-del-server {
-    display: none;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    margin: 0;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #94a3b8;
+    opacity: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.tracked-server-item .btn-del-server svg {
+    width: 12px;
+    height: 12px;
 }
 
 .tracked-server-item:hover .btn-del-server {
-    display: inline-flex;
-    opacity: 0.9;
+    opacity: 0.55;
+    background: rgba(255, 255, 255, 0.05);
 }
 
-.tracked-server-item:hover .btn-del-server:hover {
+.tracked-server-item .btn-del-server:hover {
     opacity: 1;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.35);
 }
 
 .server-offline-cross-badge {
@@ -1433,6 +1522,18 @@ body {
     color: #ffffff;
 }
 
+.btn-cancel-progress.btn-stop-running {
+    background: rgba(239, 68, 68, 0.22);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.btn-cancel-progress.btn-stop-running:hover {
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #ef4444;
+}
+
 .progress-track {
     width: 100%;
     height: 6px;
@@ -1446,10 +1547,47 @@ body {
     width: 0%;
     background: linear-gradient(90deg, #0a67e5 0%, #21DE00 100%);
     border-radius: 3px;
-    box-shadow: 0 0 10px rgba(33, 222, 0, 0.4);
+    box-shadow: none;
     transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     overflow: hidden;
+}
+
+.progress-bar.is-running {
+    width: 100% !important;
+    background: repeating-linear-gradient(
+        -45deg,
+        #0a67e5 0,
+        #0a67e5 14px,
+        #21DE00 14px,
+        #21DE00 28px
+    ) !important;
+    background-size: 39.6px 100% !important;
+    animation: runningStripeTrack 1s linear infinite !important;
+    box-shadow: none !important;
+}
+
+.global-download-bar.is-running {
+    width: 100% !important;
+    background: repeating-linear-gradient(
+        -45deg,
+        #0a67e5 0,
+        #0a67e5 10px,
+        #21DE00 10px,
+        #21DE00 20px
+    ) !important;
+    background-size: 28.28px 100% !important;
+    animation: runningStripeTrack 1s linear infinite !important;
+    box-shadow: none !important;
+}
+
+@keyframes runningStripeTrack {
+    0% {
+        background-position: 0 0;
+    }
+    100% {
+        background-position: 39.6px 0;
+    }
 }
 
 /* ── Forward Motion Optical Shimmer (Illusion of Velocity) ────────── */
@@ -3411,31 +3549,39 @@ input[type="radio"]:checked::after {
 }
 
 .btn-downloading {
-    background: rgba(10, 103, 229, 0.25) !important;
+    background: rgba(10, 103, 229, 0.18) !important;
     border-color: #38bdf8 !important;
     color: #38bdf8 !important;
     cursor: wait !important;
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    box-shadow: none !important;
 }
 
 .btn-download-success {
-    background: rgba(33, 222, 0, 0.2) !important;
-    border-color: #21de00 !important;
-    color: #86efac !important;
-    box-shadow: 0 0 12px rgba(33, 222, 0, 0.3);
+    background: rgba(33, 222, 0, 0.08) !important;
+    border: 1px solid rgba(33, 222, 0, 0.28) !important;
+    color: #21DE00 !important;
+    box-shadow: none !important;
+    font-weight: 600;
+}
+
+.btn-download-success:hover {
+    background: rgba(33, 222, 0, 0.14) !important;
+    border-color: rgba(33, 222, 0, 0.45) !important;
+    color: #4ade80 !important;
+    box-shadow: none !important;
 }
 
 .btn-update-mod {
-    background: rgba(10, 103, 229, 0.25) !important;
+    background: rgba(10, 103, 229, 0.18) !important;
     border-color: #0a67e5 !important;
     color: #60a5fa !important;
-    box-shadow: 0 0 14px rgba(10, 103, 229, 0.4);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
     font-weight: 700;
 }
 .btn-update-mod:hover {
     background: #0a67e5 !important;
     color: #ffffff !important;
-    box-shadow: 0 0 20px rgba(10, 103, 229, 0.6);
+    box-shadow: 0 4px 12px rgba(10, 103, 229, 0.35);
 }
 
 .mod-card-actions {
@@ -3463,7 +3609,7 @@ input[type="radio"]:checked::after {
     background: #f51515 !important;
     border-color: #f51515 !important;
     color: #ffffff !important;
-    box-shadow: 0 0 14px rgba(245, 21, 21, 0.45);
+    box-shadow: 0 2px 8px rgba(245, 21, 21, 0.25);
     transform: translateY(-1px);
 }
 
@@ -3485,10 +3631,24 @@ input[type="radio"]:checked::after {
 }
 
 .mod-status-update {
-    background: rgba(10, 103, 229, 0.2);
-    border: 1px solid rgba(10, 103, 229, 0.5);
+    background: rgba(10, 103, 229, 0.18);
+    border: 1px solid rgba(10, 103, 229, 0.4);
     color: #60a5fa;
-    box-shadow: 0 0 8px rgba(10, 103, 229, 0.3);
+    box-shadow: none;
+}
+
+.btn-opt-done {
+    background: rgba(33, 222, 0, 0.1) !important;
+    border: 1px solid rgba(33, 222, 0, 0.3) !important;
+    color: #21DE00 !important;
+    cursor: default;
+    box-shadow: none !important;
+}
+
+.btn-opt-done:hover {
+    background: rgba(33, 222, 0, 0.16) !important;
+    border-color: rgba(33, 222, 0, 0.45) !important;
+    color: #4ade80 !important;
 }
 
 /* ── Toast Notifications ── */

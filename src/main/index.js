@@ -816,6 +816,23 @@ ipcMain.handle('login-microsoft', async () => {
     return res;
 });
 
+async function isMinecraftTokenValid(token) {
+    if (!token) return false;
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3500);
+        const resp = await fetch('https://api.minecraftservices.com/minecraft/profile', {
+            headers: { 'Authorization': `Bearer ${token}` },
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+        return resp.ok; // 200 = valid, 401 = expired token
+    } catch (e) {
+        // Offline or connection timeout, assume token might still be valid
+        return true;
+    }
+}
+
 /**
  * Validates and optionally refreshes Microsoft OAuth tokens before Mojang API calls or launch.
  */
@@ -828,9 +845,19 @@ async function getValidMicrosoftSession(forceRefresh = false) {
     const msAcc = config.microsoftAccount;
     const refreshToken = msAcc.refreshToken || msAcc.meta?.refresh;
     const exp = msAcc.meta?.exp;
-    const isExpired = exp ? (Date.now() >= (exp - 60000)) : false;
+    const isExpiredByTime = exp ? (Date.now() >= (exp - 60000)) : false;
 
-    if ((isExpired || forceRefresh) && refreshToken) {
+    // Check token validity if not already known to be expired
+    let isTokenDead = false;
+    if (!isExpiredByTime && !forceRefresh && msAcc.access_token) {
+        const isValid = await isMinecraftTokenValid(msAcc.access_token);
+        if (!isValid) {
+            console.log('[AUTH] Přístupový token je neplatný u Mojang API (401), spouštím obnovení...');
+            isTokenDead = true;
+        }
+    }
+
+    if ((isExpiredByTime || isTokenDead || forceRefresh) && refreshToken) {
         console.log('[AUTH] Obnovuji Microsoft token...');
         const refreshRes = await refreshMicrosoftSession(refreshToken);
         if (refreshRes.success) {
@@ -849,9 +876,15 @@ async function getValidMicrosoftSession(forceRefresh = false) {
                 username: refreshRes.profile.name,
                 microsoftAccount: updatedAccount
             });
+            console.log('[AUTH] Microsoft token úspěšně obnoven.');
             return { success: true, token: updatedAccount.access_token, account: updatedAccount };
         } else {
             console.warn('[AUTH] Automatické obnovení selhalo:', refreshRes.error);
+            return {
+                success: false,
+                sessionExpired: true,
+                error: 'Platnost Microsoft účtu vypršela. Přihlas se prosím znovu ke svému účtu.'
+            };
         }
     }
 
@@ -898,13 +931,33 @@ function saveSessionTick(session) {
                 }
                 return p;
             });
-            saveConfig({ profiles: updated });
+
+            let updatedServers = freshConfig.servers || [];
+            if (session.currentServerIp) {
+                const cleanTarget = session.currentServerIp.toLowerCase().trim();
+                updatedServers = updatedServers.map(s => {
+                    const ip = (s.ip || '').toLowerCase();
+                    const sub = (s.subdomain || '').toLowerCase();
+                    const backup = (s.backupIp || '').toLowerCase();
+                    const isMychal = (cleanTarget.includes('mychalsmp') || cleanTarget === '130.61.89.37') && (s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz');
+                    if (ip === cleanTarget || sub === cleanTarget || backup === cleanTarget || isMychal) {
+                        return {
+                            ...s,
+                            playtimeSeconds: (Number(s.playtimeSeconds) || 0) + elapsedSec
+                        };
+                    }
+                    return s;
+                });
+            }
+
+            saveConfig({ profiles: updated, servers: updatedServers });
 
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('playtime-updated', {
                     profileId: session.profileId,
                     addedSeconds: elapsedSec,
-                    totalPlaytime
+                    totalPlaytime,
+                    serverIp: session.currentServerIp || null
                 });
             }
         } catch (e) {
@@ -913,7 +966,7 @@ function saveSessionTick(session) {
     }
 }
 
-function startSessionTracking(pid, profileId, profileName, instanceDir) {
+function startSessionTracking(pid, profileId, profileName, instanceDir, serverIp) {
     if (activeHeartbeatInterval) {
         clearInterval(activeHeartbeatInterval);
         activeHeartbeatInterval = null;
@@ -926,7 +979,8 @@ function startSessionTracking(pid, profileId, profileName, instanceDir) {
         profileName: profileName || 'Minecraft',
         instanceDir: instanceDir || BASE_DIR,
         startTime: now,
-        lastTickTime: now
+        lastTickTime: now,
+        currentServerIp: serverIp || null
     };
 
     try {
@@ -1080,7 +1134,14 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
 
     if (config.authType === 'microsoft' && config.microsoftAccount) {
         const validMs = await getValidMicrosoftSession(false);
-        authData = validMs.success ? validMs.account : config.microsoftAccount;
+        if (!validMs.success) {
+            return {
+                success: false,
+                sessionExpired: true,
+                error: validMs.error || 'Platnost Microsoft přihlášení vypršela. Přihlas se prosím znovu ke svému účtu.'
+            };
+        }
+        authData = validMs.account;
     } else {
         authData = createOfflineAuth(config.username);
     }
@@ -1100,12 +1161,21 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
         return p;
     });
 
-    // Update server lastJoined if server passed
+    // Update server lastJoined and playCount if server passed
     let updatedServers = config.servers || [];
     if (serverIp) {
+        const cleanTarget = serverIp.toLowerCase().trim();
         updatedServers = updatedServers.map(s => {
-            if (s.ip === serverIp || s.subdomain === serverIp) {
-                return { ...s, lastJoined: Date.now() };
+            const ip = (s.ip || '').toLowerCase();
+            const sub = (s.subdomain || '').toLowerCase();
+            const backup = (s.backupIp || '').toLowerCase();
+            const isMychal = (cleanTarget.includes('mychalsmp') || cleanTarget === '130.61.89.37') && (s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz');
+            if (ip === cleanTarget || sub === cleanTarget || backup === cleanTarget || isMychal) {
+                return {
+                    ...s,
+                    lastJoined: Date.now(),
+                    playCount: (Number(s.playCount) || 0) + 1
+                };
             }
             return s;
         });
@@ -1179,6 +1249,40 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('launch-log', logLine);
                 }
+
+                // Detekce připojení na herní server z konzole Minecraftu
+                const connMatch = logLine.match(/Connecting to\s+([a-zA-Z0-9.-]+)(?:,\s*|\:)(\d+)/i);
+                if (connMatch && connMatch[1]) {
+                    const detectedHost = connMatch[1].toLowerCase().trim();
+                    if (activeSessionData) {
+                        activeSessionData.currentServerIp = detectedHost;
+                    }
+                    try {
+                        const curCfg = loadConfig();
+                        let srvChanged = false;
+                        const srvList = (curCfg.servers || []).map(s => {
+                            const ip = (s.ip || '').toLowerCase();
+                            const sub = (s.subdomain || '').toLowerCase();
+                            const backup = (s.backupIp || '').toLowerCase();
+                            const isMychal = (detectedHost.includes('mychalsmp') || detectedHost === '130.61.89.37') && (s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz');
+                            if (ip === detectedHost || sub === detectedHost || backup === detectedHost || isMychal) {
+                                srvChanged = true;
+                                return {
+                                    ...s,
+                                    lastJoined: Date.now(),
+                                    playCount: (Number(s.playCount) || 0) + 1
+                                };
+                            }
+                            return s;
+                        });
+                        if (srvChanged) {
+                            saveConfig({ servers: srvList });
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                mainWindow.webContents.send('servers-updated', srvList);
+                            }
+                        }
+                    } catch (_) {}
+                }
             },
             (exitCode) => {
                 endSessionTracking(exitCode);
@@ -1215,7 +1319,7 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
         }
 
         if (proc && proc.pid) {
-            startSessionTracking(proc.pid, activeId, profile ? profile.name : 'Minecraft', launchConfig.baseDir);
+            startSessionTracking(proc.pid, activeId, profile ? profile.name : 'Minecraft', launchConfig.baseDir, serverIp);
         }
 
         // Skrytí launcheru do systémové lišty (Tray) pro nulovou zátěž při běhu hry

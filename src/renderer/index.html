@@ -447,7 +447,7 @@
                             </div>
                             <button class="mc-btn mc-btn-quickplay" id="btnQuickPlayMychal">
                                 <span>
-                                    <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
+                                    <svg class="ui-icon-svg ui-icon-svg--sm btn-quickplay-icon" viewBox="0 0 24 24">
                                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                                     </svg>
                                     PŘIPOJIT SE
@@ -487,16 +487,20 @@
                                 <div class="tracked-server-item">
                                     <img src="assets/server-icon.png" class="item-server-icon">
                                     <div class="item-info">
-                                        <div class="item-name">MYCHAL SMP</div>
+                                        <div class="item-name-row">
+                                            <span class="item-name">MYCHAL SMP</span>
+                                        </div>
                                         <div class="item-ip">mychalsmp.xyz</div>
                                     </div>
-                                    <button class="btn-quick-join" data-server="mychalsmp.xyz" title="Rychlé připojení">
-                                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"
-                                            fill="currentColor">
-                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                        </svg>
-                                        Join
-                                    </button>
+                                    <div class="tracked-server-actions">
+                                        <button class="btn-quick-join" data-server="mychalsmp.xyz" title="Připojit se">
+                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"
+                                                fill="currentColor">
+                                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                            </svg>
+                                            Hrát
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1115,8 +1119,7 @@
                                 <input type="checkbox" id="checkDiscordRpc" checked>
                                 <div class="perf-toggle-info">
                                     <span class="perf-toggle-title">Discord Rich Presence</span>
-                                    <span class="perf-toggle-desc">Zobrazovat herní status a nick na profilu
-                                        Discordu.</span>
+                                    <span class="perf-toggle-desc">Zobrazovat stav a nick na profilu Discord.</span>
                                 </div>
                             </label>
 
@@ -1124,8 +1127,7 @@
                                 <input type="checkbox" id="autoConnectCheck">
                                 <div class="perf-toggle-info">
                                     <span class="perf-toggle-title">Automatické připojení</span>
-                                    <span class="perf-toggle-desc">Při kliknutí na Hrát se připojit rovnou na
-                                        server.</span>
+                                    <span class="perf-toggle-desc">Při spuštění připojit přímo na server.</span>
                                 </div>
                             </label>
 
@@ -1835,7 +1837,7 @@
                             <polyline points="16 9 10 15 7 12"></polyline>
                         </svg>
                     </span>
-                    <h3>Upgrade byl úspěšně dokončen!</h3>
+                    <h3>Aktualizace dokončena</h3>
                 </div>
                 <button class="modal-close-btn" id="btnCloseResultModal">
                     <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
@@ -1928,7 +1930,7 @@
                             </svg>
                             <span>Herní optimalizace</span>
                         </div>
-                        <div class="profile-quick-opt-desc">Nainstaluje Sodium, Lithium a Iris pro maximální FPS a plynulost.</div>
+                        <div class="profile-quick-opt-desc" id="profileQuickOptDesc">Nainstaluje Sodium, Lithium a Iris pro maximální FPS a plynulost.</div>
                     </div>
                     <button type="button" class="mc-btn mc-btn-green" id="btnApplyProfileOptimization"
                         style="padding: 7px 14px; font-size: 11.5px; white-space: nowrap;">
@@ -2339,8 +2341,7 @@
                             <polyline points="16 9 10 15 7 12"></polyline>
                         </svg>
                     </div>
-                    <strong style="color: #21DE00; font-size: 14px; display: block; margin-bottom: 4px;">Aktualizace
-                        byla úspěšně nainstalována!</strong>
+                    <strong style="color: #21DE00; font-size: 14px; display: block; margin-bottom: 4px;">Aktualizace nainstalována</strong>
                     <span style="font-size: 13px; color: #cbd5e1;">Restartuji launcher za <strong
                             id="updateCountdownSec" style="color: #38bdf8; font-size: 16px;">3</strong>
                         s...</span>

@@ -738,10 +738,62 @@ document.addEventListener('DOMContentLoaded', async () => {
     function getSortedServers() {
         const servers = currentConfig.servers || [];
         return [...servers].sort((a, b) => {
+            // Pinned servery mají přednost, pokud uživatel server explicitně připnul
             if (a.pinned && !b.pinned) return -1;
             if (!a.pinned && b.pinned) return 1;
-            return (b.lastJoined || 0) - (a.lastJoined || 0);
+
+            // 1. Nejhranější servery podle počtu spuštění / připojení
+            const countA = Number(a.playCount) || 0;
+            const countB = Number(b.playCount) || 0;
+            if (countB !== countA) return countB - countA;
+
+            // 2. Podle odehraného času (sekundy)
+            const timeA = Number(a.playtimeSeconds) || 0;
+            const timeB = Number(b.playtimeSeconds) || 0;
+            if (timeB !== timeA) return timeB - timeA;
+
+            // 3. Podle času posledního připojení
+            const lastA = Number(a.lastJoined) || 0;
+            const lastB = Number(b.lastJoined) || 0;
+            if (lastB !== lastA) return lastB - lastA;
+
+            // 4. Výchozí fallback: Oficiální síť nahoře
+            if (a.id === 'mychalsmp' || a.ip === 'mychalsmp.xyz') return -1;
+            if (b.id === 'mychalsmp' || b.ip === 'mychalsmp.xyz') return 1;
+
+            return 0;
         });
+    }
+
+    async function recordServerJoin(serverIpOrHost) {
+        if (!serverIpOrHost) return;
+        const cleanTarget = serverIpOrHost.toLowerCase().trim();
+        const servers = currentConfig.servers || [];
+        let matched = false;
+
+        for (const s of servers) {
+            const ip = (s.ip || '').toLowerCase();
+            const sub = (s.subdomain || '').toLowerCase();
+            const backup = (s.backupIp || '').toLowerCase();
+            const isMychal = (cleanTarget.includes('mychalsmp') || cleanTarget === '130.61.89.37') && (s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz');
+
+            if (ip === cleanTarget || sub === cleanTarget || backup === cleanTarget || isMychal) {
+                s.playCount = (Number(s.playCount) || 0) + 1;
+                s.lastJoined = Date.now();
+                matched = true;
+                break;
+            }
+        }
+
+        if (matched) {
+            try {
+                await window.api.saveConfig({ servers });
+                renderServerTracker();
+                renderServersFullTab();
+            } catch (e) {
+                console.warn('[SERVER TRACKER] Nelze uložit statistiku serveru:', e);
+            }
+        }
     }
 
     function renderServerTracker() {
@@ -754,6 +806,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const offlineCross = (!isMychal && s.online === false)
                 ? '<span class="server-offline-cross-badge" title="Server neodpovídá / je offline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span>'
                 : '';
+            const playCount = Number(s.playCount) || 0;
+            const playMeta = playCount > 0 ? `<span class="server-play-meta">• ${playCount}× hráno</span>` : '';
 
             return `
                 <div class="tracked-server-item">
@@ -762,15 +816,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                         ${offlineCross}
                     </div>
                     <div class="item-info">
-                        <div class="item-name">${escapeHtml(s.name)}</div>
-                        <div class="item-ip">${escapeHtml(s.ip)}</div>
+                        <div class="item-name-row">
+                            <span class="item-name">${escapeHtml(s.name)}</span>
+                            ${!isMychal ? `<button class="btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Odebrat server"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
+                        </div>
+                        <div class="item-ip">${escapeHtml(s.ip)} ${playMeta}</div>
                     </div>
                     <div class="tracked-server-actions">
                         <button class="btn-quick-join" data-server="${escapeHtml(s.ip)}" title="Připojit se">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                            <span>Join</span>
+                            <span>Hrát</span>
                         </button>
-                        ${!isMychal ? `<button class="btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Odstranit server"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
                     </div>
                 </div>
             `;
@@ -780,6 +836,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         trackedServersList.querySelectorAll('.btn-quick-join').forEach(btn => {
             btn.addEventListener('click', () => {
                 const srv = btn.dataset.server;
+                recordServerJoin(srv);
                 startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
             });
         });
@@ -809,6 +866,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 : (isMychal
                     ? '<span class="server-status-pill official">Oficiální síť</span>'
                     : (s.online ? '<span class="server-status-pill online"><span class="status-dot online"></span> Online</span>' : ''));
+            const playCount = Number(s.playCount) || 0;
+            const playMeta = playCount > 0 ? `<span class="server-play-meta">• ${playCount}× hráno</span>` : '';
 
             return `
                 <div class="server-full-card">
@@ -820,15 +879,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="server-full-name-row">
                             <span class="server-full-name">${escapeHtml(s.name)}</span>
                             ${statusHtml}
+                            ${!isMychal ? `<button class="btn-del-server btn-del-server--inline" data-server-id="${escapeHtml(s.id)}" title="Odstranit server"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
                         </div>
-                        <div class="server-full-ip">${escapeHtml(s.ip)}</div>
+                        <div class="server-full-ip">${escapeHtml(s.ip)} ${playMeta}</div>
                     </div>
                     <div class="server-full-actions">
                         <button class="btn-quick-join btn-quick-join--lg" data-server="${escapeHtml(s.ip)}" title="Připojit se na server">
                             <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                            <span>Join</span>
+                            <span>Hrát</span>
                         </button>
-                        ${!isMychal ? `<button class="btn-del-server btn-del-server--lg" data-server-id="${escapeHtml(s.id)}" title="Odstranit server"><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
                     </div>
                 </div>
             `;
@@ -838,6 +897,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         fullList.querySelectorAll('.btn-quick-join').forEach(btn => {
             btn.addEventListener('click', () => {
                 const srv = btn.dataset.server;
+                recordServerJoin(srv);
                 startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
             });
         });
@@ -1049,7 +1109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnConfirmAddServer.addEventListener('click', async () => {
             const rawIp = newServerIpInput?.value?.trim() || '';
             if (!rawIp) {
-                showToast('Zadej prosím IP adresu nebo doménu serveru.', 'error');
+                showToast('Zadej IP adresu serveru.', 'error');
                 return;
             }
 
@@ -1072,7 +1132,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 pinned: isPinned,
                 icon: currentDetectedServerIcon || null,
                 online: currentDetectedServerOnline,
-                lastJoined: Date.now()
+                lastJoined: null,
+                playCount: 0,
+                playtimeSeconds: 0
             };
 
             const existing = currentConfig.servers || [];
@@ -1082,7 +1144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             closeAddServerModal();
             renderServerTracker();
             renderServersFullTab();
-            showToast(`Server "${rawName}" byl úspěšně přidán${isPinned ? ' a připnut' : ''}!`, 'success');
+            showToast(`Server "${rawName}" přidán${isPinned ? ' a připnut' : ''}.`, 'success');
         });
     }
 
@@ -1190,7 +1252,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnCleanIllegalMods.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Zakazuji módy...</span>';
             try {
                 const res = await window.api.disableIllegalMods(currentConfig.activeProfileId, null);
-                showToast(`Všechny nepovolené módy (${res.disabledCount}) byly přejmenovány na .disabled!`, 'success');
+                showToast(`Nepovolené módy (${res.disabledCount}) deaktivovány.`, 'success');
                 appendLog(`Zakázáno ${res.disabledCount} nepovolených módů z profilu.`);
                 closeWardenModal();
                 await checkWardenProbe();
@@ -1198,7 +1260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showToast('Chyba: ' + e.message, 'error');
             } finally {
                 btnCleanIllegalMods.disabled = false;
-                btnCleanIllegalMods.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg> Zakázat tyto módy a odemknout Quick Play</span>';
+                btnCleanIllegalMods.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg> Deaktivovat módy</span>';
             }
         });
     }
@@ -1207,10 +1269,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnQuickPlayMychal) {
         btnQuickPlayMychal.addEventListener('click', async () => {
             if (currentIllegalMods.length > 0) {
-                showToast('Quick Play zablokován: Nalezeny nepovolené módy v profilu!', 'error');
+                showToast('Quick Play zablokován: Nalezeny nepovolené módy.', 'error');
                 openWardenModal();
                 return;
             }
+            recordServerJoin('mychalsmp.xyz');
             startLaunch('minecraft-26.2', 'mychalsmp.xyz');
         });
     }
@@ -1679,6 +1742,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnCancelDownload = document.getElementById('btnCancelDownload');
     if (btnCancelDownload) {
         btnCancelDownload.addEventListener('click', async () => {
+            if (isRunning) {
+                appendLog('[LAUNCHER] Ukončuji běžící instanci Minecraftu...');
+                if (progressText) progressText.textContent = 'Ukončuji Minecraft...';
+                try {
+                    await window.api.killGame();
+                } catch (err) {
+                    console.error('Kill error:', err);
+                }
+                resetPlayState();
+                return;
+            }
             appendLog('[LAUNCHER] Stahování / instalace byla zrušena uživatelem. Čistím stažené soubory...');
             if (progressText) progressText.textContent = 'Ruším instalaci a mažu stažená data...';
             try {
@@ -1687,7 +1761,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.error('Cancel error:', err);
             }
             resetPlayState();
-            appendLog('[LAUNCHER] Instalace byla úspěšně zrušena a nekompletní soubory byly smazány.');
+            appendLog('[LAUNCHER] Instalace byla zrušena a dočasné soubory smazány.');
         });
     }
 
@@ -1701,6 +1775,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnCancelGlobalDownload) {
         btnCancelGlobalDownload.addEventListener('click', async (e) => {
             e.stopPropagation();
+            if (isRunning) {
+                appendLog('[LAUNCHER] Ukončuji běžící Minecraft z horní lišty...');
+                try {
+                    await window.api.killGame();
+                } catch (err) {
+                    console.error('Kill error:', err);
+                }
+                resetPlayState();
+                return;
+            }
             appendLog('[LAUNCHER] Stahování / instalace byla zrušena z horní lišty.');
             if (progressText) progressText.textContent = 'Ruším instalaci a mažu stažená data...';
             if (globalDownloadText) globalDownloadText.textContent = 'Ruším...';
@@ -1710,7 +1794,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.error('Cancel error:', err);
             }
             resetPlayState();
-            appendLog('[LAUNCHER] Instalace byla úspěšně zrušena a nekompletní soubory byly smazány.');
+            appendLog('[LAUNCHER] Instalace byla zrušena a dočasné soubory smazány.');
         });
     }
 
@@ -1823,11 +1907,41 @@ document.addEventListener('DOMContentLoaded', async () => {
                         btn.classList.add('mc-btn-red');
                     }
                 }
-                if (sideConsoleStatus) sideConsoleStatus.textContent = 'Hra úspěšně běží!';
-                appendLog('[LAUNCHER] Instance Minecraftu byla úspěšně spuštěna.');
+                if (sideConsoleStatus) sideConsoleStatus.textContent = 'Hra běží.';
+                appendLog('[LAUNCHER] Instance Minecraftu byla spuštěna.');
+
+                // Live running state on progress container
+                if (progressContainer) {
+                    progressContainer.style.display = 'flex';
+                    if (progressBar) {
+                        progressBar.style.width = '100%';
+                        progressBar.classList.add('is-running');
+                    }
+                    if (progressPercent) progressPercent.textContent = 'Spuštěno';
+                    if (progressText) progressText.textContent = 'Hra spuštěna';
+                    if (btnCancelDownload) {
+                        btnCancelDownload.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Ukončit';
+                        btnCancelDownload.classList.add('btn-stop-running');
+                        btnCancelDownload.title = 'Ukončit Minecraft';
+                    }
+                }
+                if (globalDownloadChip) {
+                    globalDownloadChip.style.display = 'inline-flex';
+                    if (globalDownloadBar) {
+                        globalDownloadBar.style.width = '100%';
+                        globalDownloadBar.classList.add('is-running');
+                    }
+                    if (globalDownloadText) globalDownloadText.textContent = 'Minecraft běží';
+                }
+            } else if (res && res.sessionExpired) {
+                appendLog(`[AUTH] ${res.error}`);
+                showToast(res.error || 'Platnost Microsoft účtu vypršela.', 'error');
+                alert(res.error || 'Platnost Microsoft účtu vypršela.\nPřihlas se prosím znovu ke svému účtu v launcheru.');
+                resetPlayState();
+                return;
             } else if (res && res.blockedByWarden) {
                 appendLog(`[BEZPEČNOST] ${res.error}`);
-                showToast('Quick Play na MYCHAL SMP zablokován: Nalezeny nepovolené módy.', 'error');
+                showToast('Quick Play zablokován: Nalezeny nepovolené módy.', 'error');
                 openWardenModal();
                 resetPlayState();
                 return;
@@ -1934,6 +2048,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         isLaunching = false;
         lastProgressData = null;
         maxRenderedProgress = 0;
+        if (progressBar) progressBar.classList.remove('is-running');
+        if (globalDownloadBar) globalDownloadBar.classList.remove('is-running');
+        if (btnCancelDownload) {
+            btnCancelDownload.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Zrušit';
+            btnCancelDownload.classList.remove('btn-stop-running');
+            btnCancelDownload.title = 'Zrušit stahování / spuštění';
+        }
         if (progressContainer) {
             progressContainer.style.display = 'none';
         }
@@ -2093,7 +2214,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 temporaryButtonText(btnCopyProfileSeed, '<span>Zkopírováno</span>', 1500);
             } catch (err) {
                 profileSeedExportInput.select();
-                showToast('Stiskni Ctrl+C pro zkopírování', 'info');
+                showToast('Kód vybrán ke zkopírování.', 'info');
             }
         });
     }
@@ -2175,7 +2296,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const res = await window.api.importProfileSeed(profId, seedVal);
                 if (res && res.success) {
-                    showToast('Balíček byl úspěšně stažen', 'success');
+                    showToast('Balíček stažen.', 'success');
                     if (profileSeedProgressBarFill) {
                         profileSeedProgressBarFill.style.width = '100%';
                         profileSeedProgressBarFill.style.background = '#21DE00';
@@ -3047,7 +3168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                     }
 
-                    showToast(`Úspěšně aktualizováno ${successCount} z ${total} módů!`, 'success');
+                    showToast(`Aktualizováno ${successCount} z ${total} módů.`, 'success');
                     btnUpdateAll.disabled = false;
                     btnUpdateAll.style.display = 'none';
 
@@ -3184,8 +3305,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         const sub = res.subfolder || 'mods';
                         const toastMsg = isUpdate
-                            ? `${title} byl úspěšně aktualizován na novou verzi!`
-                            : `${title} byl úspěšně stažen do ${sub}/!`;
+                            ? `${title} byl aktualizován.`
+                            : `${title} byl stažen.`;
                         showToast(toastMsg, 'success');
                         appendLog(`[DOWNLOAD] ${title} (${res.filename}) ${isUpdate ? 'aktualizován' : 'stažen'} do ${sub}/ v profilu ${targetProfileId}.`);
 
@@ -3206,8 +3327,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                             };
                             const niceNew = loaderLabels[res.newLoader] || res.newLoader;
                             const nicePrev = loaderLabels[res.prevLoader] || res.prevLoader || 'Vanilla';
-                            showToast(`Profil byl automaticky přepnut na ${niceNew} loader!`, 'info');
-                            appendLog(`[LOADER] Profil "${pObj ? pObj.name : targetProfileId}" byl automaticky přepnut z ${nicePrev} na ${niceNew} pro spuštění módů.`);
+                            showToast(`Profil přepnut na ${niceNew}.`, 'info');
+                            appendLog(`[LOADER] Profil "${pObj ? pObj.name : targetProfileId}" přepnut z ${nicePrev} na ${niceNew}.`);
 
                             renderModsProfileDropdown();
                             refreshVersionStatuses();
@@ -3937,7 +4058,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         showToast('Nastavuji plášť na Mojang účtu...', 'info');
                         const equipRes = await window.api.setMojangCape(capeId);
                         if (equipRes && equipRes.success) {
-                            showToast('Plášť byl úspěšně aktivován na tvém Mojang účtu!', 'success');
+                            showToast('Plášť aktivován na Mojang účtu.', 'success');
                             await loadMojangCapes();
                         } else {
                             showToast('Chyba při nastavování pláště: ' + (equipRes.error || 'Neznámá chyba'), 'error');
@@ -4040,8 +4161,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const res = await window.api.uploadMojangSkin(filePath, variant);
                 if (res && res.success) {
-                    showToast('Skin byl úspěšně nahrán a uložen na tvůj oficiální Mojang účet!', 'success');
-                    appendLog('[MOJANG] Skin byl úspěšně aktualizován na Mojang serverech.');
+                    showToast('Skin nahrán na Mojang účet.', 'success');
+                    appendLog('[MOJANG] Skin aktualizován na serverech Mojang.');
                     if (res.skin && res.skin.url) {
                         currentConfig.customSkinPath = filePath;
                         drawSkinToCanvas(res.skin.url, variant === 'slim');
@@ -4253,8 +4374,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     currentConfig.customSkinVariant = res.profile.skinVariant.toLowerCase() === 'slim' ? 'slim' : 'classic';
                 }
                 updateUserUI(res.profile.name, 'microsoft', res.profile.skinUrl);
-                appendLog(`[AUTH] Úspěšné přihlášení Microsoft účtu: ${res.profile.name}`);
-                showToast(`Úspěšně přihlášen Microsoft účet: ${res.profile.name}`, 'success');
+                appendLog(`[AUTH] Microsoft účet přihlášen: ${res.profile.name}`);
+                showToast(`Microsoft účet přihlášen: ${res.profile.name}`, 'success');
             } else {
                 appendLog(`[AUTH] Přihlášení k Microsoft účtu: ${res.error || 'Zrušeno'}`);
                 showToast(res.error || 'Přihlášení bylo zrušeno', 'error');
@@ -4462,8 +4583,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnSaveSettings.addEventListener('click', async () => {
             await autoSaveSettings(true);
             appendLog('[CONFIG] Nastavení bylo uloženo.');
-            temporaryButtonText(btnSaveSettings, '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span>Nastavení uloženo!</span>');
-            showToast('Nastavení klienta bylo uloženo!', 'success');
+            temporaryButtonText(btnSaveSettings, '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span>Nastavení uloženo</span>');
+            showToast('Nastavení uloženo.', 'success');
         });
     }
 
@@ -4474,7 +4595,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (jvmInput) {
                 jvmInput.value = '-XX:+UseZGC -XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC';
                 autoSaveSettings(true);
-                showToast('Nastaveny doporučené parametry ZGC (Java 25)!', 'info');
+                showToast('Nastaveny parametry ZGC.', 'info');
             }
         });
     }
@@ -4486,7 +4607,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (jvmInput) {
                 jvmInput.value = '-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch';
                 autoSaveSettings(true);
-                showToast('Nastaveny standardní parametry G1GC.', 'info');
+                showToast('Nastaveny parametry G1GC.', 'info');
             }
         });
     }
@@ -4599,14 +4720,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Live Playtime & Session Updates
     if (window.api && window.api.onPlaytimeUpdated) {
         window.api.onPlaytimeUpdated((data) => {
-            if (!data || !data.profileId) return;
-            if (currentConfig && Array.isArray(currentConfig.profiles)) {
+            if (!data) return;
+            if (data.profileId && currentConfig && Array.isArray(currentConfig.profiles)) {
                 const targetProf = currentConfig.profiles.find(p => p.id === data.profileId);
                 if (targetProf) {
                     targetProf.playtimeSeconds = data.totalPlaytime || ((targetProf.playtimeSeconds || 0) + (data.addedSeconds || 0));
                     targetProf.lastPlayed = Date.now();
                     renderProfilesList();
                 }
+            }
+
+            if (data.serverIp && currentConfig && Array.isArray(currentConfig.servers)) {
+                const cleanSrv = data.serverIp.toLowerCase().trim();
+                const matchedSrv = currentConfig.servers.find(s => {
+                    const ip = (s.ip || '').toLowerCase();
+                    const sub = (s.subdomain || '').toLowerCase();
+                    const backup = (s.backupIp || '').toLowerCase();
+                    const isM = (cleanSrv.includes('mychalsmp') || cleanSrv === '130.61.89.37') && (s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz');
+                    return ip === cleanSrv || sub === cleanSrv || backup === cleanSrv || isM;
+                });
+                if (matchedSrv) {
+                    matchedSrv.playtimeSeconds = (Number(matchedSrv.playtimeSeconds) || 0) + (data.addedSeconds || 0);
+                    renderServerTracker();
+                    renderServersFullTab();
+                }
+            }
+        });
+    }
+
+    if (window.api && window.api.onServersUpdated) {
+        window.api.onServersUpdated((newServers) => {
+            if (Array.isArray(newServers)) {
+                currentConfig.servers = newServers;
+                renderServerTracker();
+                renderServersFullTab();
             }
         });
     }
@@ -5090,7 +5237,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnConfirmCreateProfile.addEventListener('click', async () => {
             const rawName = newProfileNameInput?.value?.trim() || '';
             if (!rawName) {
-                showToast('Zadej prosím název nového profilu.', 'error');
+                showToast('Zadej název profilu.', 'error');
                 return;
             }
 
@@ -5123,7 +5270,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             closeCreateProfileModal();
             renderProfilesList();
-            showToast(`Profil "${rawName}" byl úspěšně vytvořen!`, 'success');
+            showToast(`Profil "${rawName}" vytvořen.`, 'success');
         });
     }
 
@@ -5221,11 +5368,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 const res = await window.api.confirmImportProfile(importPayload);
                 if (res.success) {
-                    appendLog(`[IMPORT] Profil ${res.profile.name} byl úspěšně importován (${res.importedModCount} módů).`);
+                    appendLog(`[IMPORT] Profil ${res.profile.name} byl importován (${res.importedModCount} módů).`);
                     closeImportModal();
                     await loadConfiguration();
                     renderProfilesList();
-                    alert(`Profil byl úspěšně importován!\nPřeneseno ${res.importedModCount} módů a veškerá herní nastavení.`);
+                    alert(`Profil byl importován (${res.importedModCount} módů).`);
                 } else {
                     alert('Chyba při importu: ' + res.error);
                 }
@@ -5315,14 +5462,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                             upgradeResultSummaryText.innerHTML = `
                                 <strong>Vytvořen nový profil:</strong> ${escapeHtml(res.profile.name)}<br>
                                 <strong>Převedeno:</strong> Herní options.txt, konfigurace módů (config/) a texture packy.<br>
-                                <strong>Módy z Modrinthu:</strong> Úspěšně staženo a aktualizováno ${res.upgradedMods.length} módů pro verzi ${targetVer}.
+                                <strong>Módy z Modrinthu:</strong> Staženo ${res.upgradedMods.length} módů pro verzi ${targetVer}.
                             `;
                         }
 
                         if (upgradeResultModsList) {
                             let html = '';
                             if (res.upgradedMods && res.upgradedMods.length > 0) {
-                                html += `<div style="display:flex; align-items:center; gap:6px; font-weight:700; color:#86efac; margin-top:8px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Automaticky aktualizované módy (${res.upgradedMods.length}):</div>`;
+                                html += `<div style="display:flex; align-items:center; gap:6px; font-weight:700; color:#86efac; margin-top:8px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Aktualizované módy (${res.upgradedMods.length}):</div>`;
                                 html += res.upgradedMods.map(m => `
                                     <div class="result-mod-tag" style="display:flex; align-items:center; gap:6px; background:#132a1e; color:#86efac;">
                                         <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> ${escapeHtml(m.newFile)} (v${escapeHtml(m.version)})
@@ -5412,6 +5559,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         if (modalProfileSettings) modalProfileSettings.style.display = 'flex';
+
+        // Check if Sodium and Lithium are already installed in this profile
+        (async () => {
+            try {
+                const optStatus = await window.api.checkOptimizationStatus(pid);
+                const btnApplyOpt = document.getElementById('btnApplyProfileOptimization');
+                const profileQuickOptDesc = document.getElementById('profileQuickOptDesc');
+                if (optStatus && (optStatus.hasSodium || (optStatus.hasSodium && optStatus.hasLithium))) {
+                    if (btnApplyOpt) {
+                        btnApplyOpt.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Optimalizováno</span>';
+                        btnApplyOpt.classList.add('btn-opt-done');
+                        btnApplyOpt.classList.remove('mc-btn-green');
+                        btnApplyOpt.title = 'Sodium a Lithium jsou již v profilu nainstalovány.';
+                    }
+                    if (profileQuickOptDesc) {
+                        profileQuickOptDesc.textContent = 'Sodium a Lithium jsou aktivní. Profil je plně optimalizován.';
+                    }
+                } else {
+                    if (btnApplyOpt) {
+                        btnApplyOpt.innerHTML = '<span>⚡ Optimalizovat</span>';
+                        btnApplyOpt.classList.remove('btn-opt-done');
+                        btnApplyOpt.classList.add('mc-btn-green');
+                        btnApplyOpt.title = 'Nainstaluje doporučené optimalizační módy';
+                    }
+                    if (profileQuickOptDesc) {
+                        profileQuickOptDesc.textContent = 'Nainstaluje Sodium, Lithium a Iris pro maximální FPS a plynulost.';
+                    }
+                }
+            } catch (e) {
+                console.warn('Nelze ověřit stav optimalizace:', e);
+            }
+        })();
     }
 
     // Interaktivní klikání na karty loaderu v nastavení profilu
@@ -5435,21 +5614,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const res = await window.api.applyProfileOptimization(activeSettingsProfileId);
                 if (res && res.success) {
-                    showToast('Profil byl optimalizován (Fabric, Sodium, Iris, GUI scale 2)!', 'success');
+                    showToast('Profil byl optimalizován.', 'success');
                     const loaderSelect = document.getElementById('profileSettingsLoaderSelect');
                     if (loaderSelect) loaderSelect.value = 'fabric';
                     document.querySelectorAll('#loaderCardsContainer .loader-card').forEach(c => {
                         if (c.dataset.loader === 'fabric') c.classList.add('active');
                         else c.classList.remove('active');
                     });
+                    btnApplyOpt.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Optimalizováno</span>';
+                    btnApplyOpt.classList.add('btn-opt-done');
+                    btnApplyOpt.classList.remove('mc-btn-green');
+                    const profileQuickOptDesc = document.getElementById('profileQuickOptDesc');
+                    if (profileQuickOptDesc) {
+                        profileQuickOptDesc.textContent = 'Sodium a Lithium jsou aktivní. Profil je plně optimalizován.';
+                    }
                 } else {
                     showToast(res?.error || 'Optimalizace selhala.', 'error');
+                    btnApplyOpt.innerHTML = '<span>⚡ Optimalizovat</span>';
                 }
             } catch (e) {
                 showToast('Chyba: ' + e.message, 'error');
+                btnApplyOpt.innerHTML = '<span>⚡ Optimalizovat</span>';
             } finally {
                 btnApplyOpt.disabled = false;
-                btnApplyOpt.innerHTML = '<span>⚡ Optimalizovat</span>';
                 await loadConfiguration();
                 renderProfilesList();
             }
@@ -5488,7 +5675,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 loader: newLoader
             });
 
-            showToast('Nastavení profilu bylo uloženo!', 'success');
+            showToast('Nastavení profilu uloženo.', 'success');
             closeProfileSettingsModal();
             await loadConfiguration();
             renderProfilesList();
@@ -5536,7 +5723,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     setTimeout(async () => {
                         await loadConfiguration();
                         renderProfilesList();
-                        alert('Data launcheru byla úspěšně smazána a nastavení bylo resetováno.');
+                        alert('Data launcheru byla smazána.');
                     }, 500);
                 } else {
                     alert('Chyba při mazání dat: ' + (res.error || 'Neznámá chyba'));

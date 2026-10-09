@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld('api', {
     onPlaytimeUpdated: (callback) => {
         ipcRenderer.on('playtime-updated', (event, data) => callback(data));
     },
+    onServersUpdated: (callback) => {
+        ipcRenderer.on('servers-updated', (event, data) => callback(data));
+    },
 
     // Window controls
     minimizeWindow: () => ipcRenderer.send('window-minimize'),
