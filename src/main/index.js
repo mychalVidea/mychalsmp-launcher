@@ -85,8 +85,18 @@ function setupTray() {
                     }
                 }
             ]);
-            appTray.setToolTip('SMPClient 26.x');
+            appTray.setToolTip('SMPClient');
             appTray.setContextMenu(contextMenu);
+            appTray.on('click', () => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    if (mainWindow.isVisible()) {
+                        mainWindow.hide();
+                    } else {
+                        mainWindow.show();
+                        mainWindow.focus();
+                    }
+                }
+            });
             appTray.on('double-click', () => {
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     if (mainWindow.isVisible()) {
@@ -974,11 +984,11 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
             return { success: false, cancelled: true };
         }
 
-        // Tray minimalizace a nulová zátěž launcheru při běhu hry
+        // Skrytí launcheru do systémové lišty (Tray) pro nulovou zátěž při běhu hry
         setupTray();
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('game-started');
-            mainWindow.minimize();
+            mainWindow.hide();
         }
 
         return { success: true };

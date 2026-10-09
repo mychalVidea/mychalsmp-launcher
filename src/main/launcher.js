@@ -12,6 +12,42 @@ let activeMinecraftProcess = null;
 let activeLauncherClient = null;
 let currentLaunchInfo = null;
 
+function verifyFileSha1(filePath, expectedSha1) {
+    if (!expectedSha1) return true;
+    try {
+        if (!fs.existsSync(filePath)) return false;
+        const data = fs.readFileSync(filePath);
+        const actualSha1 = crypto.createHash('sha1').update(data).digest('hex');
+        return actualSha1.toLowerCase() === expectedSha1.toLowerCase();
+    } catch (e) {
+        return false;
+    }
+}
+
+function isJarFileValid(filePath) {
+    try {
+        if (!fs.existsSync(filePath)) return false;
+        const stats = fs.statSync(filePath);
+        if (stats.size < 22) return false;
+        const fd = fs.openSync(filePath, 'r');
+        try {
+            const headBuf = Buffer.alloc(4);
+            fs.readSync(fd, headBuf, 0, 4, 0);
+            if (headBuf[0] !== 0x50 || headBuf[1] !== 0x4b) {
+                return false;
+            }
+            const tailLen = Math.min(stats.size, 65557);
+            const tailBuf = Buffer.alloc(tailLen);
+            fs.readSync(fd, tailBuf, 0, tailLen, stats.size - tailLen);
+            return tailBuf.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+        } finally {
+            fs.closeSync(fd);
+        }
+    } catch (e) {
+        return false;
+    }
+}
+
 // Intercept Handler.prototype.downloadAsync:
 // Bleskurychlý downloader postavený na nativním Node fetch (HTTP/2 multiplexing, nulová socket starvation,
 // 10s inactivity timeout namísto zamrzání na 50 sekund a paměťový buffer pro malé assety).
@@ -95,6 +131,10 @@ Handler.prototype.downloadAsync = async function(url, directory, name, retry = t
             cleanup();
             if (this.client && this.client._isCancelled) return false;
             await fs.promises.writeFile(fullPath, Buffer.from(arrayBuf));
+            if (name.endsWith('.jar') && !isJarFileValid(fullPath)) {
+                try { if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath); } catch (e) {}
+                throw new Error(`Poškozený stažený archiv JAR: ${name}`);
+            }
             this.client.emit('download', name);
             return { failed: false, asset: null };
         }
@@ -122,6 +162,16 @@ Handler.prototype.downloadAsync = async function(url, directory, name, retry = t
         });
 
         await pipeline(nodeStream, fileStream);
+
+        if (totalBytes > 0 && receivedBytes < totalBytes) {
+            try { if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath); } catch (e) {}
+            throw new Error(`Neúplné stažení souboru ${name}: ${receivedBytes}/${totalBytes} B`);
+        }
+
+        if (name.endsWith('.jar') && !isJarFileValid(fullPath)) {
+            try { if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath); } catch (e) {}
+            throw new Error(`Poškozený stažený archiv JAR: ${name}`);
+        }
 
         cleanup();
         this.client.emit('download', name);
@@ -349,14 +399,20 @@ Handler.prototype.downloadToDirectory = async function(directory, libraries, eve
 
         const destFile = path.join(jarPath, name);
 
-        // 1. Zkontrolovat, zda soubor existuje a má platnou velikost
+        // 1. Zkontrolovat, zda soubor existuje a má platnou velikost i platný obsah
         let exists = false;
         try {
             if (fs.existsSync(destFile) && fs.statSync(destFile).size > 0) {
                 if (library.downloads && library.downloads.artifact && library.downloads.artifact.sha1) {
-                    exists = this.checkSum(library.downloads.artifact.sha1, destFile);
+                    exists = verifyFileSha1(destFile, library.downloads.artifact.sha1);
+                } else if (name.endsWith('.jar')) {
+                    exists = isJarFileValid(destFile);
                 } else {
                     exists = true;
+                }
+                // Pokud soubor existuje ale je poškozený, okamžitě jej smažeme pro čisté přestažení
+                if (!exists) {
+                    try { fs.unlinkSync(destFile); } catch (e) {}
                 }
             }
         } catch (e) {
@@ -369,7 +425,10 @@ Handler.prototype.downloadToDirectory = async function(directory, libraries, eve
                 const candLib = path.join(cand, 'libraries', relPath);
                 if (fs.existsSync(candLib)) {
                     try {
-                        if (!library.downloads?.artifact?.sha1 || this.checkSum(library.downloads.artifact.sha1, candLib)) {
+                        const candValid = library.downloads?.artifact?.sha1
+                            ? verifyFileSha1(candLib, library.downloads.artifact.sha1)
+                            : (name.endsWith('.jar') ? isJarFileValid(candLib) : fs.statSync(candLib).size > 0);
+                        if (candValid) {
                             fs.mkdirSync(jarPath, { recursive: true });
                             fs.copyFileSync(candLib, destFile);
                             exists = true;
@@ -394,8 +453,17 @@ Handler.prototype.downloadToDirectory = async function(directory, libraries, eve
             try {
                 fs.mkdirSync(jarPath, { recursive: true });
                 await this.downloadAsync(downloadUrl, jarPath, name, true, eventName);
-                if (fs.existsSync(destFile) && fs.statSync(destFile).size > 0) {
-                    exists = true;
+                if (fs.existsSync(destFile)) {
+                    if (library.downloads?.artifact?.sha1) {
+                        exists = verifyFileSha1(destFile, library.downloads.artifact.sha1);
+                    } else if (name.endsWith('.jar')) {
+                        exists = isJarFileValid(destFile);
+                    } else {
+                        exists = fs.statSync(destFile).size > 0;
+                    }
+                    if (!exists) {
+                        try { fs.unlinkSync(destFile); } catch (e) {}
+                    }
                 }
             } catch (err) {
                 this.client.emit('debug', `[MCLC]: Knihovnu ${name} nelze stáhnout z ${downloadUrl}, zkouším Mojang Maven...`);
@@ -405,8 +473,17 @@ Handler.prototype.downloadToDirectory = async function(directory, libraries, eve
             if (!exists && !downloadUrl.includes('libraries.minecraft.net')) {
                 try {
                     await this.downloadAsync(`https://libraries.minecraft.net/${relPath}`, jarPath, name, true, eventName);
-                    if (fs.existsSync(destFile) && fs.statSync(destFile).size > 0) {
-                        exists = true;
+                    if (fs.existsSync(destFile)) {
+                        if (library.downloads?.artifact?.sha1) {
+                            exists = verifyFileSha1(destFile, library.downloads.artifact.sha1);
+                        } else if (name.endsWith('.jar')) {
+                            exists = isJarFileValid(destFile);
+                        } else {
+                            exists = fs.statSync(destFile).size > 0;
+                        }
+                        if (!exists) {
+                            try { fs.unlinkSync(destFile); } catch (e) {}
+                        }
                     }
                 } catch (e) {}
             }
@@ -419,7 +496,7 @@ Handler.prototype.downloadToDirectory = async function(directory, libraries, eve
             total: libraries.length
         });
 
-        if (exists || fs.existsSync(destFile)) {
+        if (exists) {
             libs.push(destFile);
         } else {
             this.client.emit('debug', `[MCLC]: ⚠ Knihovna ${library.name} nebyla nalezena (${destFile})`);

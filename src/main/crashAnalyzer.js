@@ -311,6 +311,38 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
             }
         };
     }
+
+    // ── Diagnostic Rule 9: Corrupted Library / Mod JAR (ZipException) ────────
+    if (
+        /ZipException/i.test(combinedText) ||
+        /invalid CEN header/i.test(combinedText) ||
+        /error reading\s+[^\n\r]+\.jar/i.test(combinedText)
+    ) {
+        let corruptJarPath = null;
+        const jarMatch = combinedText.match(/error reading\s+([^\n\r\t]+\.jar)/i) ||
+                         combinedText.match(/reading\s+([^\n\r\t\s]+\.jar)/i);
+        if (jarMatch && jarMatch[1]) {
+            corruptJarPath = jarMatch[1].trim();
+        }
+
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Poškozený soubor knihovny JAR (ZipException)',
+            severity: 'critical',
+            description: `Byl detekován neúplný nebo poškozený soubor knihovny ${corruptJarPath ? path.basename(corruptJarPath) : 'JAR'}. K tomu dochází při přerušeném stahování z internetu.`,
+            recommendation: 'Klikni na tlačítko níže pro automatické smazání poškozeného souboru. Launcher jej při dalším spuštění stáhne čistě.',
+            logExcerpt: logExcerpt || (corruptJarPath ? `IOException: error reading ${corruptJarPath}` : 'ZipException: invalid CEN header'),
+            autoFix: corruptJarPath ? {
+                id: 'DELETE_CORRUPT_JAR',
+                filePath: corruptJarPath,
+                label: `🧹 Odstranit poškozený ${path.basename(corruptJarPath)}`,
+                description: 'Odstraní poškozený soubor z disku, aby jej launcher mohl stáhnout znovu a v pořádku.'
+            } : null
+        };
+    }
+
     return {
         hasCrash: true,
         exitCode,
@@ -523,6 +555,25 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                 success: true,
                 message: 'Vynucení diskrétní GPU bylo úspěšně vypnuto. Hra nyní použije standardní grafický adaptér.',
                 updatedConfig: { enableDiscreteGpu: false }
+            };
+        }
+
+        case 'DELETE_CORRUPT_JAR': {
+            const targetFile = autoFix.filePath;
+            if (targetFile && fs.existsSync(targetFile)) {
+                try {
+                    fs.unlinkSync(targetFile);
+                    return {
+                        success: true,
+                        message: `Poškozený soubor ${path.basename(targetFile)} byl úspěšně odstraněn. Při příštím spuštění jej launcher stáhne čistě.`
+                    };
+                } catch (delErr) {
+                    throw new Error(`Nepodařilo se odstranit soubor: ${delErr.message}`);
+                }
+            }
+            return {
+                success: true,
+                message: 'Soubor již byl odstraněn. Můžeš hru spustit znovu.'
             };
         }
 
