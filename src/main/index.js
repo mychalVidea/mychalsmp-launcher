@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { loadConfig, saveConfig, BASE_DIR } = require('./config');
@@ -42,6 +42,61 @@ const { discordRpc } = require('./discordRpc');
 
 let mainWindow = null;
 let splashWindow = null;
+let appTray = null;
+
+function setupTray() {
+    if (appTray && !appTray.isDestroyed()) return appTray;
+    try {
+        const iconPath = path.join(__dirname, '../renderer/assets/logo.png');
+        if (fs.existsSync(iconPath)) {
+            const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+            appTray = new Tray(icon);
+            const contextMenu = Menu.buildFromTemplate([
+                { label: 'SMPClient', enabled: false },
+                { type: 'separator' },
+                {
+                    label: 'Zobrazit launcher',
+                    click: () => {
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.show();
+                            mainWindow.focus();
+                        }
+                    }
+                },
+                {
+                    label: 'Minimalizovat',
+                    click: () => {
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.minimize();
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Ukončit aplikaci',
+                    click: () => {
+                        app.quit();
+                    }
+                }
+            ]);
+            appTray.setToolTip('SMPClient 26.x');
+            appTray.setContextMenu(contextMenu);
+            appTray.on('double-click', () => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    if (mainWindow.isVisible()) {
+                        mainWindow.hide();
+                    } else {
+                        mainWindow.show();
+                        mainWindow.focus();
+                    }
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Chyba při vytváření Tray:', e);
+    }
+    return appTray;
+}
 
 function createSplashWindow() {
     splashWindow = new BrowserWindow({
@@ -204,7 +259,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
     try {
         discordRpc.shutdown();
-    } catch (e) {}
+    } catch (e) { }
 });
 
 // ── IPC Handlers ─────────────────────────────────────────────────────────────
@@ -227,7 +282,7 @@ ipcMain.handle('save-config', (event, newConfig) => {
                 isPlaying: false
             });
         }
-    } catch (e) {}
+    } catch (e) { }
     return saved;
 });
 
@@ -299,7 +354,7 @@ function getCachedModMetadata(jarPath, mtimeMs) {
     let meta = null;
     try {
         let AdmZip;
-        try { AdmZip = require('adm-zip'); } catch (_) {}
+        try { AdmZip = require('adm-zip'); } catch (_) { }
         if (AdmZip && fs.existsSync(jarPath)) {
             const zip = new AdmZip(jarPath);
             let name = null;
@@ -326,7 +381,7 @@ function getCachedModMetadata(jarPath, mtimeMs) {
                             iconDataUrl = `data:image/png;base64,${iEntry.getData().toString('base64')}`;
                         }
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
 
             // 2. Quilt descriptor
@@ -345,7 +400,7 @@ function getCachedModMetadata(jarPath, mtimeMs) {
                                 iconDataUrl = `data:image/png;base64,${iEntry.getData().toString('base64')}`;
                             }
                         }
-                    } catch (_) {}
+                    } catch (_) { }
                 }
             }
 
@@ -366,7 +421,7 @@ function getCachedModMetadata(jarPath, mtimeMs) {
                                 iconDataUrl = `data:image/png;base64,${lEntry.getData().toString('base64')}`;
                             }
                         }
-                    } catch (_) {}
+                    } catch (_) { }
                 }
             }
 
@@ -377,7 +432,7 @@ function getCachedModMetadata(jarPath, mtimeMs) {
                     if (iconEntry) {
                         iconDataUrl = `data:image/png;base64,${iconEntry.getData().toString('base64')}`;
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
 
             // 5. Fallback z názvu souboru: např. sodium-fabric-0.5.11+mc1.20.4.jar
@@ -399,7 +454,7 @@ function getCachedModMetadata(jarPath, mtimeMs) {
 
             meta = { modId, name, version, iconDataUrl };
         }
-    } catch (_) {}
+    } catch (_) { }
 
     modMetadataCache.set(cacheKey, meta);
     return meta;
@@ -422,7 +477,7 @@ ipcMain.handle('get-profile-mods', async (event, profileId) => {
             if (fs.existsSync(metaFile)) {
                 metaMap = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
             }
-        } catch (_) {}
+        } catch (_) { }
 
         const files = fs.readdirSync(modsDir);
         const mods = [];
@@ -456,7 +511,30 @@ ipcMain.handle('get-profile-mods', async (event, profileId) => {
             }
         }
         mods.sort((a, b) => (a.name || a.cleanName).localeCompare(b.name || b.cleanName));
-        return { success: true, mods, modsDir, profileName: profile?.name || profileId };
+
+        // Detekce kolizí a duplicitních verzí módů
+        const enabledMods = mods.filter(m => m.enabled);
+        const byKey = {};
+        for (const m of enabledMods) {
+            const normKey = (m.modId && m.modId.length > 2)
+                ? m.modId.toLowerCase()
+                : m.cleanName.toLowerCase().replace(/[-_]v?\d+[\d.\w+-]*/g, '');
+            if (!byKey[normKey]) byKey[normKey] = [];
+            byKey[normKey].push(m);
+        }
+        const collisions = [];
+        for (const [key, group] of Object.entries(byKey)) {
+            if (group.length > 1) {
+                collisions.push({
+                    modKey: key,
+                    name: group[0].name || key,
+                    files: group.map(x => x.filename),
+                    count: group.length
+                });
+            }
+        }
+
+        return { success: true, mods, collisions, modsDir, profileName: profile?.name || profileId };
     } catch (e) {
         return { success: false, error: e.message, mods: [] };
     }
@@ -525,7 +603,7 @@ ipcMain.handle('delete-profile-mod', async (event, profileId, filename) => {
                     }
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
 
         return { success: true, filename };
     } catch (e) {
@@ -543,6 +621,121 @@ ipcMain.handle('toggle-mod', (event, modId) => {
     }
     saveConfig({ installedMods: mods });
     return mods;
+});
+
+// Mod Collisions Resolver
+ipcMain.handle('resolve-mod-collisions', async (event, profileId) => {
+    const config = loadConfig();
+    const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+    const gameDir = profile?.gameDir || BASE_DIR;
+    const modsDir = path.join(gameDir, 'mods');
+    if (!fs.existsSync(modsDir)) return { success: true, resolved: 0 };
+    try {
+        const files = fs.readdirSync(modsDir);
+        const jarFiles = files.filter(f => f.toLowerCase().endsWith('.jar'));
+        const byKey = {};
+        for (const f of jarFiles) {
+            const stat = fs.statSync(path.join(modsDir, f));
+            const normKey = f.toLowerCase().replace(/[-_]v?\d+[\d.\w+-]*/g, '').replace(/\.jar$/, '');
+            if (!byKey[normKey]) byKey[normKey] = [];
+            byKey[normKey].push({ filename: f, mtime: stat.mtimeMs });
+        }
+        let resolvedCount = 0;
+        for (const [key, group] of Object.entries(byKey)) {
+            if (group.length > 1) {
+                group.sort((a, b) => b.mtime - a.mtime);
+                for (let i = 1; i < group.length; i++) {
+                    const oldPath = path.join(modsDir, group[i].filename);
+                    const disabledPath = path.join(modsDir, group[i].filename + '.disabled');
+                    try {
+                        fs.renameSync(oldPath, disabledPath);
+                        resolvedCount++;
+                    } catch (_) { }
+                }
+            }
+        }
+        return { success: true, resolved: resolvedCount };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+// Resource Packs & Shaders Management
+ipcMain.handle('get-profile-packs', async (event, profileId, packType) => {
+    const config = loadConfig();
+    const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+    const gameDir = profile?.gameDir || BASE_DIR;
+    const targetFolder = packType === 'shaderpacks' ? 'shaderpacks' : 'resourcepacks';
+    const folderPath = path.join(gameDir, targetFolder);
+    if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+        return { success: true, packs: [], folderPath };
+    }
+    try {
+        const files = fs.readdirSync(folderPath);
+        const packs = [];
+        for (const file of files) {
+            const lower = file.toLowerCase();
+            const fullPath = path.join(folderPath, file);
+            const stat = fs.statSync(fullPath);
+            if (lower.endsWith('.zip') || lower.endsWith('.zip.disabled') || stat.isDirectory()) {
+                const isEnabled = !lower.endsWith('.disabled');
+                const cleanName = file.replace(/\.disabled$/i, '').replace(/\.zip$/i, '');
+                packs.push({
+                    filename: file,
+                    cleanName,
+                    enabled: isEnabled,
+                    sizeFormatted: stat.isDirectory() ? 'Složka' : (stat.size / (1024 * 1024)).toFixed(1) + ' MB',
+                    mtime: stat.mtimeMs,
+                    isDirectory: stat.isDirectory()
+                });
+            }
+        }
+        packs.sort((a, b) => a.cleanName.localeCompare(b.cleanName));
+        return { success: true, packs, folderPath };
+    } catch (e) {
+        return { success: false, error: e.message, packs: [] };
+    }
+});
+
+ipcMain.handle('toggle-profile-pack', async (event, profileId, packType, filename) => {
+    const config = loadConfig();
+    const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+    const gameDir = profile?.gameDir || BASE_DIR;
+    const targetFolder = packType === 'shaderpacks' ? 'shaderpacks' : 'resourcepacks';
+    const folderPath = path.join(gameDir, targetFolder);
+    const srcPath = path.join(folderPath, filename);
+    if (!fs.existsSync(srcPath)) return { success: false, error: 'Soubor nenalezen' };
+    const isCurrentlyDisabled = filename.toLowerCase().endsWith('.disabled');
+    const targetFilename = isCurrentlyDisabled ? filename.replace(/\.disabled$/i, '') : filename + '.disabled';
+    const destPath = path.join(folderPath, targetFilename);
+    try {
+        fs.renameSync(srcPath, destPath);
+        return { success: true, oldFilename: filename, newFilename: targetFilename, enabled: isCurrentlyDisabled };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('delete-profile-pack', async (event, profileId, packType, filename) => {
+    const config = loadConfig();
+    const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+    const gameDir = profile?.gameDir || BASE_DIR;
+    const targetFolder = packType === 'shaderpacks' ? 'shaderpacks' : 'resourcepacks';
+    const folderPath = path.join(gameDir, targetFolder);
+    const targetPath = path.join(folderPath, filename);
+    try {
+        if (fs.existsSync(targetPath)) {
+            if (fs.statSync(targetPath).isDirectory()) {
+                fs.rmSync(targetPath, { recursive: true, force: true });
+            } else {
+                fs.unlinkSync(targetPath);
+            }
+        }
+        return { success: true, filename };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
 });
 
 ipcMain.handle('login-offline', (event, username) => {
@@ -673,7 +866,7 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
                 startTime: gameSessionStart
             });
         }
-    } catch (e) {}
+    } catch (e) { }
 
     try {
         const proc = await launchGame(
@@ -724,15 +917,18 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
                             isPlaying: false
                         });
                     }
-                } catch (e) {}
+                } catch (e) { }
 
                 if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('game-stopped');
                     mainWindow.webContents.send('launch-exit', {
                         exitCode,
                         profileId: activeId,
                         sessionSeconds: durationSec,
                         totalPlaytime
                     });
+                    mainWindow.show();
+                    mainWindow.focus();
                 }
 
                 // Trigger Intelligent Crash Analyzer on non-zero exit code
@@ -751,6 +947,14 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
         if (!proc) {
             return { success: false, cancelled: true };
         }
+
+        // Tray minimalizace a nulová zátěž launcheru při běhu hry
+        setupTray();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('game-started');
+            mainWindow.minimize();
+        }
+
         return { success: true };
     } catch (err) {
         if (err && err.message === 'LAUNCH_CANCELLED') {
@@ -870,6 +1074,205 @@ ipcMain.handle('reset-launcher-data', async () => {
     }
 });
 
+// ── Profile Mod/Pack Seed System (Export & Import konfigurace profilu) ──────
+ipcMain.handle('generate-profile-seed', async (event, profileId) => {
+    try {
+        const config = loadConfig();
+        const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+        const gameDir = profile?.gameDir || BASE_DIR;
+
+        const items = [];
+
+        // 1. Mods
+        const modsDir = path.join(gameDir, 'mods');
+        if (fs.existsSync(modsDir)) {
+            let metaMap = {};
+            const metaFile = path.join(modsDir, '.mod_meta.json');
+            if (fs.existsSync(metaFile)) {
+                try { metaMap = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch (_) { }
+            }
+            const files = fs.readdirSync(modsDir);
+            for (const f of files) {
+                if (f.toLowerCase().endsWith('.jar')) {
+                    const cleanName = f.replace(/\.jar$/i, '');
+                    const meta = metaMap[f] || {};
+                    items.push({
+                        id: meta.id || cleanName.toLowerCase(),
+                        title: meta.title || cleanName,
+                        type: 'mod',
+                        filename: f,
+                        version: meta.version || null,
+                        loader: meta.loader || profile?.loader || 'fabric',
+                        downloadUrl: meta.downloadUrl || null
+                    });
+                }
+            }
+        }
+
+        // 2. Resource Packs
+        const rpDir = path.join(gameDir, 'resourcepacks');
+        if (fs.existsSync(rpDir)) {
+            let metaMap = {};
+            const metaFile = path.join(rpDir, '.mod_meta.json');
+            if (fs.existsSync(metaFile)) {
+                try { metaMap = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch (_) { }
+            }
+            const files = fs.readdirSync(rpDir);
+            for (const f of files) {
+                if (f.toLowerCase().endsWith('.zip')) {
+                    const cleanName = f.replace(/\.zip$/i, '');
+                    const meta = metaMap[f] || {};
+                    items.push({
+                        id: meta.id || cleanName.toLowerCase(),
+                        title: meta.title || cleanName,
+                        type: 'resourcepack',
+                        filename: f,
+                        downloadUrl: meta.downloadUrl || null
+                    });
+                }
+            }
+        }
+
+        // 3. Shaders
+        const shaderDir = path.join(gameDir, 'shaderpacks');
+        if (fs.existsSync(shaderDir)) {
+            let metaMap = {};
+            const metaFile = path.join(shaderDir, '.mod_meta.json');
+            if (fs.existsSync(metaFile)) {
+                try { metaMap = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch (_) { }
+            }
+            const files = fs.readdirSync(shaderDir);
+            for (const f of files) {
+                if (f.toLowerCase().endsWith('.zip')) {
+                    const cleanName = f.replace(/\.zip$/i, '');
+                    const meta = metaMap[f] || {};
+                    items.push({
+                        id: meta.id || cleanName.toLowerCase(),
+                        title: meta.title || cleanName,
+                        type: 'shader',
+                        filename: f,
+                        downloadUrl: meta.downloadUrl || null
+                    });
+                }
+            }
+        }
+
+        const payload = {
+            v: 1,
+            profileName: profile?.name || 'Profil',
+            mc: profile?.version || '26.2',
+            loader: profile?.loader || 'fabric',
+            items
+        };
+
+        const jsonStr = JSON.stringify(payload);
+        const base64 = Buffer.from(jsonStr, 'utf8').toString('base64');
+        const seed = `SMP-PACK:${base64}`;
+
+        return {
+            success: true,
+            seed,
+            count: items.length,
+            itemsCount: {
+                mods: items.filter(i => i.type === 'mod').length,
+                resourcepacks: items.filter(i => i.type === 'resourcepack').length,
+                shaders: items.filter(i => i.type === 'shader').length
+            }
+        };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('import-profile-seed', async (event, profileId, seedString) => {
+    try {
+        if (!seedString || typeof seedString !== 'string') {
+            return { success: false, error: 'Zadej platný kód balíčku.' };
+        }
+        let cleaned = seedString.trim();
+        if (cleaned.startsWith('SMP-PACK:')) {
+            cleaned = cleaned.slice(9).trim();
+        } else if (cleaned.startsWith('SMP-SEED:')) {
+            cleaned = cleaned.slice(9).trim();
+        }
+        const base64Part = cleaned;
+        let payload;
+        try {
+            const decoded = Buffer.from(base64Part, 'base64').toString('utf8');
+            payload = JSON.parse(decoded);
+        } catch (_) {
+            return { success: false, error: 'Formát kódu balíčku je poškozený nebo neplatný.' };
+        }
+
+        if (!payload || !Array.isArray(payload.items) || payload.items.length === 0) {
+            return { success: false, error: 'Balíček neobsahuje žádné módy ani doplňky.' };
+        }
+
+        const config = loadConfig();
+        const targetProfile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+        const targetDir = targetProfile?.gameDir || BASE_DIR;
+
+        // Pokud profil běží na Vanilla a seed je pro Fabric/Forge, nastavíme loader profilu
+        if (payload.loader && payload.loader !== 'vanilla') {
+            const updatedProfiles = (config.profiles || []).map(p => {
+                if (p.id === targetProfile.id && p.loader === 'vanilla') {
+                    return { ...p, loader: payload.loader };
+                }
+                return p;
+            });
+            saveConfig({ profiles: updatedProfiles });
+        }
+
+        const total = payload.items.length;
+        let installedCount = 0;
+        let failedCount = 0;
+        const failedItems = [];
+
+        for (let idx = 0; idx < total; idx++) {
+            const it = payload.items[idx];
+            event.sender.send('profile-seed-progress', {
+                current: idx + 1,
+                total,
+                percent: Math.round(((idx + 1) / total) * 100),
+                title: it.title || it.id
+            });
+
+            try {
+                const res = await downloadModOrPack({
+                    id: it.id,
+                    title: it.title,
+                    projectType: it.type || 'mod',
+                    version: payload.mc || targetProfile?.version || '26.2',
+                    loader: it.loader || payload.loader || 'fabric',
+                    filename: it.filename,
+                    directUrl: it.downloadUrl
+                }, targetDir);
+
+                if (res && res.success) {
+                    installedCount++;
+                } else {
+                    failedCount++;
+                    failedItems.push(it.title || it.id);
+                }
+            } catch (err) {
+                console.warn(`[SEED-IMPORT] Položku "${it.title || it.id}" se nepodařilo stáhnout:`, err.message);
+                failedCount++;
+                failedItems.push(it.title || it.id);
+            }
+        }
+
+        return {
+            success: true,
+            total,
+            installedCount,
+            failedCount,
+            failedItems
+        };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
 // ── Minecraft Hudba & Zvuky (DLC) IPC Handlers ──────────────────────────────
 ipcMain.handle('check-audio-dlc', async () => {
     try {
@@ -943,7 +1346,7 @@ ipcMain.handle('save-offline-skin', async (event, skinData) => {
     const cfg = saveConfig(updates);
     try {
         setupOfflineCustomSkinAndCape(BASE_DIR, cfg, (m) => console.log(m));
-    } catch (e) {}
+    } catch (e) { }
     return { success: true, config: cfg };
 });
 
@@ -1039,7 +1442,7 @@ ipcMain.handle('apply-update', async (event, assetUrl) => {
     return await applyUpdate(assetUrl, (data) => {
         try {
             event.sender.send('update-progress', data);
-        } catch (e) {}
+        } catch (e) { }
     });
 });
 
@@ -1225,13 +1628,143 @@ ipcMain.handle('get-system-info', async () => {
     const os = require('os');
     const totalBytes = os.totalmem();
     const totalRamGB = Math.round(totalBytes / (1024 * 1024 * 1024));
-    // Up to 80% of total system RAM
     const maxAllowedRamGB = Math.max(4, Math.floor((totalBytes * 0.8) / (1024 * 1024 * 1024)));
+
+    // Chytrý RAM asistent podle HW v PC (Windows + Linux)
+    let recommendedRamGB = 4;
+    if (totalRamGB <= 4) recommendedRamGB = 2;
+    else if (totalRamGB <= 8) recommendedRamGB = 4;
+    else if (totalRamGB <= 16) recommendedRamGB = 6;
+    else if (totalRamGB <= 32) recommendedRamGB = 8;
+    else recommendedRamGB = 10;
+
+    // Detekce grafické karty a diskrétního GPU
+    let gpuName = 'Standardní grafický adaptér';
+    let isDedicatedGpu = false;
+    if (process.platform === 'win32') {
+        try {
+            const { execSync } = require('child_process');
+            const out = execSync('powershell -NoProfile -Command "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"', { timeout: 2500, encoding: 'utf8' });
+            const lines = out.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+            if (lines.length > 0) {
+                const dedicated = lines.find(l => /nvidia|geforce|rtx|gtx|radeon|amd/i.test(l));
+                if (dedicated) {
+                    gpuName = dedicated;
+                    isDedicatedGpu = true;
+                } else {
+                    gpuName = lines[0];
+                    isDedicatedGpu = !/intel|basic|microsoft/i.test(lines[0]);
+                }
+            }
+        } catch (_) { }
+    } else if (process.platform === 'linux') {
+        try {
+            const { execSync } = require('child_process');
+            const out = execSync('lspci | grep -i "vga\\|3d\\|display"', { timeout: 2000, encoding: 'utf8' });
+            const lines = out.split('\n').map(s => s.trim()).filter(Boolean);
+            if (lines.length > 0) {
+                const dedicated = lines.find(l => /nvidia|geforce|radeon|amd/i.test(l));
+                if (dedicated) {
+                    gpuName = dedicated.replace(/^[^:]+:\s*/, '');
+                    isDedicatedGpu = true;
+                } else {
+                    gpuName = lines[0].replace(/^[^:]+:\s*/, '');
+                    isDedicatedGpu = !/intel/i.test(lines[0]);
+                }
+            }
+        } catch (_) { }
+    }
+
     return {
         platform: process.platform,
         arch: process.arch,
         totalRamGB: totalRamGB,
-        maxAllowedRamGB: maxAllowedRamGB
+        recommendedRamGB: recommendedRamGB,
+        maxAllowedRamGB: maxAllowedRamGB,
+        gpuName: gpuName,
+        isDedicatedGpu: isDedicatedGpu
     };
+});
+
+// Screenshots Gallery IPC Handlers
+ipcMain.handle('get-profile-screenshots', async (event, profileId) => {
+    const config = loadConfig();
+    const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
+    const gameDir = profile?.gameDir || BASE_DIR;
+    const scDir = path.join(gameDir, 'screenshots');
+    if (!fs.existsSync(scDir)) {
+        return { success: true, screenshots: [], dirPath: scDir };
+    }
+    try {
+        const files = fs.readdirSync(scDir);
+        const screenshots = [];
+        for (const file of files) {
+            if (file.toLowerCase().endsWith('.png')) {
+                const fullPath = path.join(scDir, file);
+                const stat = fs.statSync(fullPath);
+                screenshots.push({
+                    filename: file,
+                    fullPath,
+                    thumbUrl: `file://${fullPath}`,
+                    sizeFormatted: (stat.size / (1024 * 1024)).toFixed(2) + ' MB',
+                    mtime: stat.mtimeMs,
+                    dateFormatted: new Date(stat.mtimeMs).toLocaleString('cs-CZ')
+                });
+            }
+        }
+        screenshots.sort((a, b) => b.mtime - a.mtime);
+        return { success: true, screenshots, dirPath: scDir };
+    } catch (e) {
+        return { success: false, error: e.message, screenshots: [] };
+    }
+});
+
+ipcMain.handle('copy-screenshot-to-clipboard', async (event, fullPath) => {
+    try {
+        if (!fs.existsSync(fullPath)) return { success: false, error: 'Soubor neexistuje' };
+        const img = nativeImage.createFromPath(fullPath);
+        clipboard.writeImage(img);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('delete-screenshot', async (event, fullPath) => {
+    try {
+        if (fs.existsSync(fullPath)) {
+            fs.unlinkSync(fullPath);
+        }
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('open-file-path', async (event, fullPath) => {
+    try {
+        if (fs.existsSync(fullPath)) {
+            shell.openPath(fullPath);
+            return { success: true };
+        }
+        return { success: false, error: 'Soubor neexistuje' };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+// Drag & Drop Skin Handler
+ipcMain.handle('save-dragged-skin', async (event, filePath) => {
+    try {
+        if (!fs.existsSync(filePath)) return { success: false, error: 'Soubor neexistuje' };
+        const dest = path.join(BASE_DIR, 'offline_skin.png');
+        fs.copyFileSync(filePath, dest);
+        const buf = fs.readFileSync(dest);
+        const dataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+        saveConfig({ customSkinPath: dest });
+        return { success: true, customSkinPath: dest, skinDataUrl: dataUrl };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
 });
 

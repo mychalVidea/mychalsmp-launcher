@@ -38,6 +38,11 @@ contextBridge.exposeInMainWorld('api', {
     updateProfileSettings: (profileId, updates) => ipcRenderer.invoke('update-profile-settings', profileId, updates),
     deleteProfile: (profileId) => ipcRenderer.invoke('delete-profile', profileId),
     resetLauncherData: () => ipcRenderer.invoke('reset-launcher-data'),
+    generateProfileSeed: (profileId) => ipcRenderer.invoke('generate-profile-seed', profileId),
+    importProfileSeed: (profileId, seedString) => ipcRenderer.invoke('import-profile-seed', profileId, seedString),
+    onProfileSeedProgress: (callback) => {
+        ipcRenderer.on('profile-seed-progress', (event, data) => callback(data));
+    },
     onUpgradeProgress: (callback) => {
         ipcRenderer.on('upgrade-progress', (event, data) => callback(data));
     },
@@ -91,5 +96,28 @@ contextBridge.exposeInMainWorld('api', {
     openUrl: (url) => ipcRenderer.send('open-url', url),
     onAuthStatus: (callback) => {
         ipcRenderer.on('auth-status', (event, status) => callback(status));
+    },
+
+    // Screenshots Gallery
+    getProfileScreenshots: (profileId) => ipcRenderer.invoke('get-profile-screenshots', profileId),
+    copyScreenshotToClipboard: (fullPath) => ipcRenderer.invoke('copy-screenshot-to-clipboard', fullPath),
+    deleteScreenshot: (fullPath) => ipcRenderer.invoke('delete-screenshot', fullPath),
+    openFilePath: (fullPath) => ipcRenderer.invoke('open-file-path', fullPath),
+
+    // Resource Packs & Shaders
+    getProfilePacks: (profileId, packType) => ipcRenderer.invoke('get-profile-packs', profileId, packType),
+    toggleProfilePack: (profileId, packType, filename) => ipcRenderer.invoke('toggle-profile-pack', profileId, packType, filename),
+    deleteProfilePack: (profileId, packType, filename) => ipcRenderer.invoke('delete-profile-pack', profileId, packType, filename),
+
+    // Mod Collisions & Drag Skin
+    resolveModCollisions: (profileId) => ipcRenderer.invoke('resolve-mod-collisions', profileId),
+    saveDraggedSkin: (filePath) => ipcRenderer.invoke('save-dragged-skin', filePath),
+
+    // Game lifecycle events for background pause
+    onGameStarted: (callback) => {
+        ipcRenderer.on('game-started', () => callback());
+    },
+    onGameStopped: (callback) => {
+        ipcRenderer.on('game-stopped', () => callback());
     }
 });

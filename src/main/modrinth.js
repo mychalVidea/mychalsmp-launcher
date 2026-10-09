@@ -253,8 +253,60 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
  * Downloads a mod, resourcepack, or shader from Modrinth directly into the profile's directory.
  */
 async function downloadModOrPack(options, targetDir) {
-    const { id, title, projectType = 'mod', version = '26.2', loader = 'fabric', oldFilename } = options;
+    const { id, title, projectType = 'mod', version = '26.2', loader = 'fabric', oldFilename, directUrl } = options;
     const normLoader = (loader && loader !== 'vanilla') ? loader.toLowerCase() : null;
+
+    // 0. Pokud máme přímou URL ke stažení ze Seedu, zkusíme nejprve bleskové přímé stažení
+    if (directUrl) {
+        try {
+            const subfolder = projectType === 'shader' ? 'shaderpacks' :
+                              projectType === 'resourcepack' ? 'resourcepacks' : 'mods';
+            const destDir = path.join(targetDir, subfolder);
+            if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+
+            let outFilename = options.filename;
+            if (!outFilename) {
+                try {
+                    outFilename = path.basename(new URL(directUrl).pathname);
+                } catch (_) {
+                    outFilename = `${id}.jar`;
+                }
+            }
+            const destPath = path.join(destDir, outFilename);
+            const dlRes = await fetch(directUrl, {
+                headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
+            });
+            if (dlRes.ok) {
+                const buffer = await dlRes.arrayBuffer();
+                fs.writeFileSync(destPath, Buffer.from(buffer));
+                const metaPath = path.join(destDir, '.mod_meta.json');
+                let metaObj = {};
+                if (fs.existsSync(metaPath)) {
+                    try { metaObj = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (_) {}
+                }
+                metaObj[outFilename] = {
+                    id: id || outFilename,
+                    slug: options.slug || id,
+                    title: title || id,
+                    version: options.version || null,
+                    loader: normLoader,
+                    projectType: projectType,
+                    downloadUrl: directUrl,
+                    downloadedAt: Date.now()
+                };
+                fs.writeFileSync(metaPath, JSON.stringify(metaObj, null, 2), 'utf8');
+                return {
+                    success: true,
+                    filename: outFilename,
+                    subfolder,
+                    destPath,
+                    resolvedLoader: normLoader
+                };
+            }
+        } catch (e) {
+            console.warn(`[DIRECT-DL] Přímé stažení selhalo, zkouším Modrinth API:`, e.message);
+        }
+    }
 
     let versions = [];
 
@@ -369,6 +421,7 @@ async function downloadModOrPack(options, targetDir) {
             version: picked.version_number,
             loader: resolvedLoader,
             projectType: projectType,
+            downloadUrl: file.url,
             downloadedAt: Date.now()
         };
         fs.writeFileSync(metaPath, JSON.stringify(metaObj, null, 2), 'utf8');

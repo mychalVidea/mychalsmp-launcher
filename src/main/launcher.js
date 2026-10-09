@@ -1552,11 +1552,8 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             }
         }
 
-        // MangoHud Overlay
-        if (config.enableMangoHud) {
-            setGameEnv('MANGOHUD', '1');
-            onLog('[VÝKON] MangoHud aktivován (MANGOHUD=1)');
-        }
+        // MangoHud Overlay (deaktivováno - nepodporováno)
+        // config.enableMangoHud je trvale vypnuto na žádost uživatele
 
         // Discrete GPU (NVIDIA & AMD Prime Offloading)
         if (config.enableDiscreteGpu) {

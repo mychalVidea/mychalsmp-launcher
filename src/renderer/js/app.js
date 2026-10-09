@@ -216,8 +216,47 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (newProfRam) newProfRam.max = maxRam;
 
                 renderRamSliderMarks(maxRam);
+
+                // Chytrý RAM asistent podle HW v PC (Windows + Linux)
+                const ramTotalText = document.getElementById('ramTotalText');
+                const ramRecommendedVal = document.getElementById('ramRecommendedVal');
+                const btnApplyRecommendedRam = document.getElementById('btnApplyRecommendedRam');
+                if (ramTotalText && sysInfo?.totalRamGB) {
+                    ramTotalText.textContent = `${sysInfo.totalRamGB} GB RAM`;
+                }
+                if (ramRecommendedVal && sysInfo?.recommendedRamGB) {
+                    ramRecommendedVal.textContent = `${sysInfo.recommendedRamGB} GB`;
+                }
+                if (btnApplyRecommendedRam && sysInfo?.recommendedRamGB) {
+                    btnApplyRecommendedRam.style.display = 'inline-flex';
+                    btnApplyRecommendedRam.onclick = () => {
+                        if (ramSlider && ramValueBadge) {
+                            ramSlider.value = sysInfo.recommendedRamGB;
+                            ramValueBadge.textContent = `${sysInfo.recommendedRamGB} GB`;
+                            currentConfig.ramMax = sysInfo.recommendedRamGB;
+                            autoSaveSettings(true);
+                            showToast(`Nastavena optimální paměť: ${sysInfo.recommendedRamGB} GB RAM`, 'success');
+                        }
+                    };
+                }
+
+                // Auto-Detekce dedikované grafiky (Windows i Linux)
+                const gpuNameText = document.getElementById('gpuNameText');
+                const gpuDedicatedBadge = document.getElementById('gpuDedicatedBadge');
+                if (gpuNameText) {
+                    gpuNameText.textContent = sysInfo?.gpuName || 'Standardní grafický adaptér';
+                }
+                if (gpuDedicatedBadge) {
+                    gpuDedicatedBadge.style.display = sysInfo?.isDedicatedGpu ? 'inline-block' : 'none';
+                }
+
+                // Na Windows schovat čistě linuxová nastavení (co dělají bordel na Windows)
+                const linuxPerfGroup = document.getElementById('linuxPerfGroup');
+                if (linuxPerfGroup) {
+                    linuxPerfGroup.style.display = (sysInfo?.platform === 'win32') ? 'none' : 'block';
+                }
             } catch (sysErr) {
-                console.warn('Detekce hardware RAM selhala:', sysErr);
+                console.warn('Detekce hardware RAM/GPU selhala:', sysErr);
                 renderRamSliderMarks(16);
             }
 
@@ -540,34 +579,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         trackedServersList.innerHTML = servers.map(s => {
             const isMychal = s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz';
-            const isPinned = !!s.pinned;
-            const backupBadge = isMychal ? '<span class="server-backup-badge" title="Záložní číselná IP při výpadku DNS: 130.61.89.37:25565">Záloha: 130.61.89.37</span>' : '';
             const iconSrc = isMychal ? 'assets/server-icon.png' : (s.icon || 'assets/server-icon.png');
             const offlineCross = (!isMychal && s.online === false)
                 ? '<span class="server-offline-cross-badge" title="Server neodpovídá / je offline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span>'
                 : '';
 
             return `
-                <div class="tracked-server-item ${isPinned ? 'is-pinned' : ''}">
+                <div class="tracked-server-item">
                     <div style="position: relative; flex-shrink: 0;">
                         <img src="${escapeHtml(iconSrc)}" class="item-server-icon" onerror="this.src='assets/server-icon.png'">
                         ${offlineCross}
                     </div>
                     <div class="item-info">
-                        <div class="item-name">
-                            ${escapeHtml(s.name)}
-                            ${isPinned ? '<span title="Připnutý server" style="margin-left: 4px; display: inline-flex;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg></span>' : ''}
-                        </div>
-                        <div class="item-ip">${escapeHtml(s.ip)}${backupBadge}</div>
+                        <div class="item-name">${escapeHtml(s.name)}</div>
+                        <div class="item-ip">${escapeHtml(s.ip)}</div>
                     </div>
                     <div class="tracked-server-actions">
-                        <button class="btn-pin-server ${isPinned ? 'pinned' : ''}" data-server-id="${escapeHtml(s.id)}" title="${isPinned ? 'Odepnout server' : 'Připnout server na začátek'}">
-                            <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg>
+                        <button class="btn-quick-join" data-server="${escapeHtml(s.ip)}" title="Připojit se">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            <span>Join</span>
                         </button>
-                        <button class="btn-quick-join" data-server="${escapeHtml(s.ip)}" title="Rychlé připojení">
-                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Join
-                        </button>
-                        ${!isMychal ? `<button class="btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Smazat server"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
+                        ${!isMychal ? `<button class="btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Odstranit server"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
                     </div>
                 </div>
             `;
@@ -578,15 +610,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             btn.addEventListener('click', () => {
                 const srv = btn.dataset.server;
                 startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
-            });
-        });
-
-        // Bind pin buttons
-        trackedServersList.querySelectorAll('.btn-pin-server').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const sid = btn.dataset.serverId;
-                togglePinServer(sid);
             });
         });
 
@@ -610,46 +633,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             const isPinned = !!s.pinned;
             const port = s.port || 25565;
             const iconSrc = isMychal ? 'assets/server-icon.png' : (s.icon || 'assets/server-icon.png');
-            const offlineBadge = (!isMychal && s.online === false)
-                ? '<span class="server-offline-badge-pill" style="margin-left: 8px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Offline</span>'
-                : (isMychal ? '' : (s.online ? '<span style="color: #21DE00; font-size: 12px; margin-left: 8px; display: inline-flex; align-items: center; gap: 4px;"><span class="status-dot online"></span> Online</span>' : ''));
-
-            const extraInfo = isMychal
-                ? `<div class="server-full-telemetry" style="color: var(--brand-blue);">
-                    Oficiální síťová infrastruktura MYCHAL SMP • Port: ${port}
-                    <br><span style="color: #94a3b8; font-size: 12px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> Záložní IP (Unknown host fallback): <strong style="color: #fff;">130.61.89.37:25565</strong></span>
-                   </div>`
-                : `<div class="server-full-telemetry">Vlastní přidaný server • Port: ${port} ${offlineBadge}</div>`;
-
-            const backupJoinBtn = isMychal ? `
-                <button class="mc-btn mc-btn-secondary btn-quick-join-backup" data-server="130.61.89.37:25565" title="Připojit se přímo přes číselnou záložní IP">
-                    <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> Záložní IP</span>
-                </button>
-            ` : '';
+            const statusHtml = (!isMychal && s.online === false)
+                ? '<span class="server-status-pill offline"><span class="status-dot offline"></span> Offline</span>'
+                : (isMychal
+                    ? '<span class="server-status-pill official">Oficiální síť</span>'
+                    : (s.online ? '<span class="server-status-pill online"><span class="status-dot online"></span> Online</span>' : ''));
 
             return `
-                <div class="server-full-card ${isPinned ? 'is-pinned-card' : ''}">
+                <div class="server-full-card">
                     <div style="position: relative; flex-shrink: 0;">
                         <img src="${escapeHtml(iconSrc)}" class="server-full-icon" onerror="this.src='assets/server-icon.png'">
                         ${(!isMychal && s.online === false) ? '<span class="server-offline-cross-badge"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span>' : ''}
                     </div>
                     <div class="server-full-info">
-                        <div class="server-full-name">
-                            ${escapeHtml(s.name)}
-                            ${isPinned ? '<span title="Připnutý server" style="margin-left: 6px; display: inline-flex;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg></span>' : ''}
+                        <div class="server-full-name-row">
+                            <span class="server-full-name">${escapeHtml(s.name)}</span>
+                            ${statusHtml}
                         </div>
                         <div class="server-full-ip">${escapeHtml(s.ip)}</div>
-                        ${extraInfo}
                     </div>
-                    <div class="server-full-actions" style="display: flex; align-items: center; gap: 8px;">
-                        <button class="btn-pin-server ${isPinned ? 'pinned' : ''}" data-server-id="${escapeHtml(s.id)}" title="${isPinned ? 'Odepnout server' : 'Připnout server na začátek'}" style="padding: 6px 10px;">
-                            <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg>
+                    <div class="server-full-actions">
+                        <button class="btn-quick-join btn-quick-join--lg" data-server="${escapeHtml(s.ip)}" title="Připojit se na server">
+                            <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            <span>Join</span>
                         </button>
-                        ${backupJoinBtn}
-                        <button class="mc-btn mc-btn-green btn-quick-join" data-server="${escapeHtml(s.ip)}">
-                            <span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-pulse" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Quick Play</span>
-                        </button>
-                        ${!isMychal ? `<button class="mc-btn mc-btn-secondary btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Smazat server" style="color: #ef4444;"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
+                        ${!isMychal ? `<button class="btn-del-server btn-del-server--lg" data-server-id="${escapeHtml(s.id)}" title="Odstranit server"><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
                     </div>
                 </div>
             `;
@@ -660,24 +668,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             btn.addEventListener('click', () => {
                 const srv = btn.dataset.server;
                 startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
-            });
-        });
-
-        // Bind backup quick join buttons
-        fullList.querySelectorAll('.btn-quick-join-backup').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const srv = btn.dataset.server;
-                appendLog('[SÍŤ] Spouštím Quick Play přímo přes záložní číselnou IP 130.61.89.37:25565...');
-                startLaunch(currentConfig.activeProfileId || 'minecraft-26.2', srv);
-            });
-        });
-
-        // Bind pin buttons
-        fullList.querySelectorAll('.btn-pin-server').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const sid = btn.dataset.serverId;
-                togglePinServer(sid);
             });
         });
 
@@ -1671,7 +1661,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── Správa Módů v Profilech & Modrinth Katalog ──────────────────────────
     let selectedModsProfileId = null;
+    let currentInstalledTab = 'mods'; // 'mods' | 'resourcepacks' | 'shaderpacks'
     let currentProfileModsList = [];
+    let currentProfileResourcePacksList = [];
+    let currentProfileShadersList = [];
 
     // Profile selector dropdown for mods
     function renderModsProfileDropdown() {
@@ -1723,6 +1716,130 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // ── Profile Seed (Export / Import / Synchronizace konfigurace módů a balíčků) ──
+    const modalProfileSeed = document.getElementById('modalProfileSeed');
+    const btnOpenProfileSeedModal = document.getElementById('btnOpenProfileSeedModal');
+    const btnCloseProfileSeedModal = document.getElementById('btnCloseProfileSeedModal');
+    const btnCloseProfileSeedFooter = document.getElementById('btnCloseProfileSeedFooter');
+    const profileSeedExportInput = document.getElementById('profileSeedExportInput');
+    const profileSeedSummary = document.getElementById('profileSeedSummary');
+    const btnCopyProfileSeed = document.getElementById('btnCopyProfileSeed');
+    const profileSeedImportInput = document.getElementById('profileSeedImportInput');
+    const btnApplyProfileSeed = document.getElementById('btnApplyProfileSeed');
+    const profileSeedImportStatus = document.getElementById('profileSeedImportStatus');
+
+    function closeProfileSeedModal() {
+        if (modalProfileSeed) modalProfileSeed.style.display = 'none';
+        if (profileSeedImportStatus) profileSeedImportStatus.textContent = '';
+    }
+
+    if (btnCloseProfileSeedModal) btnCloseProfileSeedModal.addEventListener('click', closeProfileSeedModal);
+    if (btnCloseProfileSeedFooter) btnCloseProfileSeedFooter.addEventListener('click', closeProfileSeedModal);
+
+    if (btnOpenProfileSeedModal) {
+        btnOpenProfileSeedModal.addEventListener('click', async () => {
+            const profId = selectedModsProfileId || currentConfig.activeProfileId;
+            if (!profId) {
+                showToast('Není vybrán žádný profil.', 'error');
+                return;
+            }
+            if (modalProfileSeed) modalProfileSeed.style.display = 'flex';
+            if (profileSeedExportInput) profileSeedExportInput.value = 'Generuji...';
+            if (profileSeedSummary) profileSeedSummary.textContent = '';
+            if (profileSeedImportStatus) profileSeedImportStatus.textContent = '';
+            if (profileSeedImportInput) profileSeedImportInput.value = '';
+
+            try {
+                const res = await window.api.generateProfileSeed(profId);
+                if (res && res.success) {
+                    if (profileSeedExportInput) profileSeedExportInput.value = res.seed;
+                    if (profileSeedSummary) {
+                        profileSeedSummary.textContent = `${res.count} položek`;
+                    }
+                } else {
+                    if (profileSeedExportInput) profileSeedExportInput.value = 'Chyba';
+                    if (profileSeedSummary) profileSeedSummary.textContent = res?.error || 'Chyba';
+                }
+            } catch (err) {
+                if (profileSeedExportInput) profileSeedExportInput.value = 'Chyba';
+                if (profileSeedSummary) profileSeedSummary.textContent = err.message;
+            }
+        });
+    }
+
+    if (btnCopyProfileSeed) {
+        btnCopyProfileSeed.addEventListener('click', async () => {
+            if (!profileSeedExportInput || !profileSeedExportInput.value || profileSeedExportInput.value.startsWith('Generuji') || profileSeedExportInput.value.startsWith('Chyba')) {
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(profileSeedExportInput.value);
+                showToast('Kód zkopírován', 'success');
+                temporaryButtonText(btnCopyProfileSeed, '<span>Zkopírováno</span>', 1500);
+            } catch (err) {
+                profileSeedExportInput.select();
+                showToast('Stiskni Ctrl+C pro zkopírování', 'info');
+            }
+        });
+    }
+
+    if (window.api && window.api.onProfileSeedProgress) {
+        window.api.onProfileSeedProgress((data) => {
+            if (profileSeedImportStatus) {
+                profileSeedImportStatus.innerHTML = `<span style="color: #60a5fa;">Stahování: ${data.current} z ${data.total}</span>`;
+            }
+        });
+    }
+
+    if (btnApplyProfileSeed) {
+        btnApplyProfileSeed.addEventListener('click', async () => {
+            const profId = selectedModsProfileId || currentConfig.activeProfileId;
+            if (!profId) {
+                showToast('Není vybrán žádný profil.', 'error');
+                return;
+            }
+            const seedVal = profileSeedImportInput ? profileSeedImportInput.value.trim() : '';
+            if (!seedVal) {
+                showToast('Zadej kód balíčku.', 'error');
+                return;
+            }
+
+            btnApplyProfileSeed.disabled = true;
+            const originalBtnContent = btnApplyProfileSeed.innerHTML;
+            btnApplyProfileSeed.innerHTML = '<span>Stahuji...</span>';
+            if (profileSeedImportStatus) profileSeedImportStatus.textContent = 'Příprava stahování...';
+
+            try {
+                const res = await window.api.importProfileSeed(profId, seedVal);
+                if (res && res.success) {
+                    showToast('Balíček byl úspěšně stažen', 'success');
+                    if (profileSeedImportStatus) {
+                        if (res.failedCount > 0) {
+                            profileSeedImportStatus.innerHTML = `<span style="color: #f59e0b;">Staženo: ${res.installedCount}, selhalo: ${res.failedCount}</span>`;
+                        } else {
+                            profileSeedImportStatus.innerHTML = '<span style="color: #21DE00;">Hotovo</span>';
+                        }
+                    }
+                    // Refresh mods & packs list in UI
+                    loadProfileMods(profId);
+                } else {
+                    showToast(res?.error || 'Chyba při stahování', 'error');
+                    if (profileSeedImportStatus) {
+                        profileSeedImportStatus.innerHTML = `<span style="color: #f51515;">${escapeHtml(res?.error || 'Chyba')}</span>`;
+                    }
+                }
+            } catch (err) {
+                showToast(err.message, 'error');
+                if (profileSeedImportStatus) {
+                    profileSeedImportStatus.innerHTML = `<span style="color: #f51515;">${escapeHtml(err.message)}</span>`;
+                }
+            } finally {
+                btnApplyProfileSeed.disabled = false;
+                btnApplyProfileSeed.innerHTML = originalBtnContent;
+            }
+        });
+    }
+
     // Subview switcher: Installed mods vs Modrinth catalog
     const btnSwitchInstalledMods = document.getElementById('btnSwitchInstalledMods');
     const btnSwitchCatalogMods = document.getElementById('btnSwitchCatalogMods');
@@ -1762,7 +1879,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Load installed mods for selected profile
+    // Load installed mods, resource packs, and shaders for selected profile
     async function loadProfileMods(profileId) {
         const listEl = document.getElementById('installedModsList');
         const countEl = document.getElementById('installedModsCount');
@@ -1775,17 +1892,37 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        listEl.innerHTML = `<div class="mods-loading">Načítám nainstalované módy profilu...</div>`;
+        listEl.innerHTML = `<div class="mods-loading">Načítám nainstalované položky profilu...</div>`;
 
         try {
             const res = await window.api.getProfileMods(profId);
             if (!res || !res.success) {
-                listEl.innerHTML = `<div class="empty-mods-state"><p>Nepodařilo se načíst módy: ${escapeHtml(res?.error || 'Neznámá chyba')}</p></div>`;
+                listEl.innerHTML = `<div class="empty-mods-state"><p>Nepodařilo se načíst položky: ${escapeHtml(res?.error || 'Neznámá chyba')}</p></div>`;
                 return;
             }
 
             currentProfileModsList = res.mods || [];
+
+            // Načtení Resource Packů a Shaderů
+            try {
+                const rpRes = await window.api.getProfilePacks(profId, 'resourcepacks');
+                currentProfileResourcePacksList = rpRes?.packs || [];
+            } catch (_) { currentProfileResourcePacksList = []; }
+
+            try {
+                const shRes = await window.api.getProfilePacks(profId, 'shaderpacks');
+                currentProfileShadersList = shRes?.packs || [];
+            } catch (_) { currentProfileShadersList = []; }
+
+            // Aktualizace číselných odznaků
             if (countEl) countEl.textContent = currentProfileModsList.length;
+            const subModsCount = document.getElementById('installedModsCountSub');
+            if (subModsCount) subModsCount.textContent = currentProfileModsList.length;
+            const rpCountEl = document.getElementById('installedRpCount');
+            if (rpCountEl) rpCountEl.textContent = currentProfileResourcePacksList.length;
+            const shCountEl = document.getElementById('installedShaderCount');
+            if (shCountEl) shCountEl.textContent = currentProfileShadersList.length;
+
             if (summaryEl) {
                 const activeCount = currentProfileModsList.filter(m => m.enabled).length;
                 const pObj = (currentConfig.profiles || []).find(p => p.id === profId);
@@ -1794,7 +1931,41 @@ document.addEventListener('DOMContentLoaded', async () => {
                 summaryEl.innerHTML = `Profil: <strong>${escapeHtml(res.profileName || profId)}</strong> • Zavaděč: <strong style="color: ${ldrColor};">${ldr}</strong> • Aktivních: <strong>${activeCount}/${currentProfileModsList.length}</strong>`;
             }
 
-            renderFilteredInstalledMods();
+            // Detekce kolizí a duplicitních verzí módů
+            const modCollisionBanner = document.getElementById('modCollisionBanner');
+            const modCollisionDescText = document.getElementById('modCollisionDescText');
+            const btnResolveModCollisions = document.getElementById('btnResolveModCollisions');
+            if (modCollisionBanner) {
+                if (res.collisions && res.collisions.length > 0) {
+                    const extraDups = res.collisions.reduce((acc, c) => acc + (c.count - 1), 0);
+                    modCollisionBanner.style.display = 'flex';
+                    if (modCollisionDescText) {
+                        modCollisionDescText.textContent = `Nalezeno ${res.collisions.length} módů s duplicitními verzemi (${extraDups} duplikátů). Automaticky zachová nejnovější verzi a starší bezpečně deaktivuje.`;
+                    }
+                    if (btnResolveModCollisions) {
+                        btnResolveModCollisions.onclick = async () => {
+                            btnResolveModCollisions.disabled = true;
+                            btnResolveModCollisions.textContent = 'Řeším kolize...';
+                            try {
+                                const rRes = await window.api.resolveModCollisions(profId);
+                                if (rRes && rRes.success) {
+                                    showToast(`Kolize vyřešeny: ${rRes.resolved} starších verzí deaktivováno.`, 'success');
+                                }
+                                await loadProfileMods(profId);
+                            } catch (err) {
+                                showToast('Chyba při řešení kolizí: ' + err.message, 'error');
+                            } finally {
+                                btnResolveModCollisions.disabled = false;
+                                btnResolveModCollisions.textContent = 'Automaticky vyřešit';
+                            }
+                        };
+                    }
+                } else {
+                    modCollisionBanner.style.display = 'none';
+                }
+            }
+
+            renderFilteredInstalledItems();
             // VŽDY aktualizujeme i karty v katalogu, aby se okamžitě projevil smazaný mód
             if (lastLoadedCatalogMods && lastLoadedCatalogMods.length > 0) {
                 renderModCards(lastLoadedCatalogMods);
@@ -1941,10 +2112,179 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // Render filtered installed Resource Packs and Shaders
+    function renderFilteredInstalledPacks(packType) {
+        const listEl = document.getElementById('installedModsList');
+        const searchInput = document.getElementById('installedModsSearchInput');
+        const summaryEl = document.getElementById('installedModsSummary');
+        if (!listEl) return;
+
+        const isShader = packType === 'shaderpacks';
+        const rawList = isShader ? currentProfileShadersList : currentProfileResourcePacksList;
+        const typeLabel = isShader ? 'shader' : 'texture pack';
+        const typeLabelPlural = isShader ? 'Shadery' : 'Texture Packy';
+        const folderName = isShader ? 'shaderpacks' : 'resourcepacks';
+
+        const filterText = (searchInput?.value || '').trim().toLowerCase();
+        const filtered = rawList.filter(p => {
+            if (!filterText) return true;
+            return p.cleanName.toLowerCase().includes(filterText) || p.filename.toLowerCase().includes(filterText);
+        });
+
+        if (summaryEl) {
+            const activeCount = rawList.filter(p => p.enabled).length;
+            summaryEl.innerHTML = `${typeLabelPlural}: <strong>${activeCount}/${rawList.length} aktivních</strong>`;
+        }
+
+        if (filtered.length === 0) {
+            if (rawList.length === 0) {
+                listEl.innerHTML = `
+                    <div class="empty-mods-state">
+                        <div class="empty-mods-icon">
+                            <svg class="ui-icon-svg ui-icon-svg--xl" viewBox="0 0 24 24">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                        </div>
+                        <div class="empty-mods-title">V tomto profilu zatím nejsou žádné ${escapeHtml(typeLabelPlural.toLowerCase())}</div>
+                        <p class="empty-mods-desc">Vlož .zip soubory do složky ${escapeHtml(folderName)} nebo si je stáhni v katalogu.</p>
+                        <div class="empty-mods-actions">
+                            <button type="button" class="mc-btn mc-btn-secondary" id="btnEmptyOpenPackFolder">
+                                <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Otevřít složku ${escapeHtml(folderName)}</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                const btnOpen = document.getElementById('btnEmptyOpenPackFolder');
+                if (btnOpen) {
+                    btnOpen.onclick = () => {
+                        const profId = selectedModsProfileId || currentConfig.activeProfileId;
+                        if (profId) window.api.openProfileFolder(profId, folderName);
+                    };
+                }
+            } else {
+                listEl.innerHTML = `<div class="empty-mods-state"><p>Hledání neodpovídá žádný ${escapeHtml(typeLabel)} v profilu.</p></div>`;
+            }
+            return;
+        }
+
+        const profId = selectedModsProfileId || currentConfig.activeProfileId;
+        listEl.innerHTML = filtered.map(p => {
+            const initial = (p.cleanName || 'P').charAt(0).toUpperCase();
+            return `
+            <div class="installed-mod-row ${p.enabled ? 'mod-enabled' : 'mod-disabled'}" data-filename="${escapeHtml(p.filename)}">
+                <div class="mod-row-left">
+                    <div class="mod-avatar-wrapper">
+                        <div class="mod-avatar-fallback">${escapeHtml(initial)}</div>
+                    </div>
+                    <div class="mod-row-info">
+                        <div class="mod-row-title-line">
+                            <span class="mod-row-name" title="${escapeHtml(p.cleanName)}">${escapeHtml(p.cleanName)}</span>
+                            <span class="mod-row-badge ${p.enabled ? 'badge-enabled' : 'badge-disabled'}">
+                                ${p.enabled ? '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Aktivní' : 'Vypnuto'}
+                            </span>
+                        </div>
+                        <div class="mod-row-file-meta">
+                            <span class="mod-file-name" title="${escapeHtml(p.filename)}">${escapeHtml(p.filename)}</span>
+                            <span>•</span>
+                            <span class="mod-file-size">${escapeHtml(p.sizeFormatted)}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="mod-row-actions">
+                    <button type="button" class="btn-pack-toggle mc-btn btn-sm ${p.enabled ? 'mc-btn-secondary' : 'mc-btn-primary'}"
+                        data-filename="${escapeHtml(p.filename)}"
+                        data-pack-type="${escapeHtml(packType)}"
+                        title="${p.enabled ? 'Deaktivovat' : 'Aktivovat'}">
+                        <span>${p.enabled ? 'Vypnout' : 'Zapnout'}</span>
+                    </button>
+                    <button type="button" class="btn-pack-delete mc-btn btn-sm"
+                        data-filename="${escapeHtml(p.filename)}"
+                        data-pack-type="${escapeHtml(packType)}"
+                        style="color: #f51515;"
+                        title="Smazat soubor">
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Smazat</span>
+                    </button>
+                </div>
+            </div>
+            `;
+        }).join('');
+
+        // Bind toggle pack
+        listEl.querySelectorAll('.btn-pack-toggle').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const fn = btn.dataset.filename;
+                const pt = btn.dataset.packType;
+                btn.disabled = true;
+                try {
+                    const res = await window.api.toggleProfilePack(profId, pt, fn);
+                    if (res && res.success) {
+                        showToast(res.enabled ? 'Aktivováno' : 'Deaktivováno', 'info');
+                        await loadProfileMods(profId);
+                    } else {
+                        showToast('Chyba: ' + (res?.error || 'Neznámá chyba'), 'error');
+                    }
+                } catch (err) {
+                    showToast('Chyba: ' + err.message, 'error');
+                }
+            };
+        });
+
+        // Bind delete pack
+        listEl.querySelectorAll('.btn-pack-delete').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const fn = btn.dataset.filename;
+                const pt = btn.dataset.packType;
+                if (!confirm(`Opravdu chceš smazat "${fn}" z profilu?`)) return;
+                btn.disabled = true;
+                try {
+                    const res = await window.api.deleteProfilePack(profId, pt, fn);
+                    if (res && res.success) {
+                        showToast('Soubor byl smazán.', 'success');
+                        await loadProfileMods(profId);
+                    } else {
+                        showToast('Chyba: ' + (res?.error || 'Neznámá chyba'), 'error');
+                    }
+                } catch (err) {
+                    showToast('Chyba: ' + err.message, 'error');
+                }
+            };
+        });
+    }
+
+    // Render filtered installed items according to active subtab
+    function renderFilteredInstalledItems() {
+        if (currentInstalledTab === 'mods') {
+            renderFilteredInstalledMods();
+        } else {
+            renderFilteredInstalledPacks(currentInstalledTab);
+        }
+    }
+
+    // Subtabs: Módy vs Texture Packy vs Shadery
+    const tabInstalledMods = document.getElementById('tabInstalledMods');
+    const tabInstalledResourcePacks = document.getElementById('tabInstalledResourcePacks');
+    const tabInstalledShaders = document.getElementById('tabInstalledShaders');
+
+    [tabInstalledMods, tabInstalledResourcePacks, tabInstalledShaders].forEach(tabBtn => {
+        if (!tabBtn) return;
+        tabBtn.addEventListener('click', () => {
+            [tabInstalledMods, tabInstalledResourcePacks, tabInstalledShaders].forEach(b => {
+                if (b) b.classList.remove('active');
+            });
+            tabBtn.classList.add('active');
+            currentInstalledTab = tabBtn.dataset.packType || 'mods';
+            renderFilteredInstalledItems();
+        });
+    });
+
     const installedModsSearchInput = document.getElementById('installedModsSearchInput');
     if (installedModsSearchInput) {
         installedModsSearchInput.addEventListener('input', () => {
-            renderFilteredInstalledMods();
+            renderFilteredInstalledItems();
         });
     }
 
@@ -2158,7 +2498,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 btnHtml = `
                     <div class="mod-card-actions">
                         <button class="mc-btn btn-update-mod btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="update" data-old-file="${escapeHtml(installedMod?.filename || '')}" title="Aktualizovat na novější verzi v${escapeHtml(latestVer)}">
-                            <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> AKTUALIZOVAT</span>
+                            <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> Aktualizovat</span>
                         </button>
                         <button class="mc-btn btn-catalog-delete-mod" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
                             <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span>
@@ -2170,7 +2510,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 btnHtml = `
                     <div class="mod-card-actions">
                         <button class="mc-btn btn-download-success btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="installed" title="Již nainstalováno v profilu">
-                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> NAINSTALOVÁNO</span>
+                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Nainstalováno</span>
                         </button>
                         <button class="mc-btn btn-catalog-delete-mod" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
                             <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span>
@@ -2180,7 +2520,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 btnHtml = `
                     <button class="mc-btn mc-btn-green btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="download" title="Stáhnout do profilu">
-                        <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> STÁHNOUT</span>
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Stáhnout</span>
                     </button>
                 `;
             }
@@ -3225,6 +3565,61 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // Drag & Drop Skin Upload Support
+    const skinWrapper = document.getElementById('skinCanvasWrapper');
+    const skinDropHint = document.getElementById('skinDropHint');
+    if (skinWrapper) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+            skinWrapper.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (skinDropHint) skinDropHint.style.display = 'flex';
+            });
+        });
+
+        ['dragleave', 'dragend'].forEach(eventName => {
+            skinWrapper.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.relatedTarget && skinWrapper.contains(e.relatedTarget)) return;
+                if (skinDropHint) skinDropHint.style.display = 'none';
+            });
+        });
+
+        skinWrapper.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (skinDropHint) skinDropHint.style.display = 'none';
+
+            const files = e.dataTransfer?.files;
+            if (!files || files.length === 0) return;
+
+            const file = files[0];
+            if (!file.name.toLowerCase().endsWith('.png')) {
+                showToast('Soubor skinu musí být ve formátu .png', 'error');
+                return;
+            }
+
+            try {
+                const res = await window.api.saveDraggedSkin(file.path);
+                if (res && res.success) {
+                    currentConfig.customSkinPath = res.customSkinPath;
+                    await window.api.saveOfflineSkin({
+                        skinPath: res.customSkinPath,
+                        variant: currentConfig.customSkinVariant || 'classic'
+                    });
+                    updateUserUI(currentConfig.username, currentConfig.authType || 'offline', res.customSkinPath);
+                    showToast('Skin byl úspěšně nahrán přetažením myší!', 'success');
+                    appendLog(`[SKIN] Skin úspěšně nahrán přes Drag & Drop: ${file.name}`);
+                } else {
+                    showToast('Chyba při ukládání skinu: ' + (res?.error || 'Neznámá chyba'), 'error');
+                }
+            } catch (err) {
+                showToast('Chyba při přetahování skinu: ' + err.message, 'error');
+            }
+        });
+    }
+
     // Offline / Warez: Select local custom cape (.png)
     const btnSelectCapeFile = document.getElementById('btnSelectCapeFile');
     if (btnSelectCapeFile) {
@@ -3612,6 +4007,188 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }, 2000);
     });
+
+    // Zero-overhead during gameplay & background pause (Tray restore)
+    if (window.api && window.api.onGameStarted) {
+        window.api.onGameStarted(() => {
+            appendLog('[VÝKON] Hra spuštěna – launcher minimalizován do Tray lišty, pozastaveno 3D vykreslování pro 0% zátěž CPU/GPU.');
+            if (heroSkinViewer) heroSkinViewer.renderPaused = true;
+            if (skinViewer) skinViewer.renderPaused = true;
+        });
+    }
+
+    if (window.api && window.api.onGameStopped) {
+        window.api.onGameStopped(() => {
+            appendLog('[VÝKON] Hra ukončena – okno launcheru obnoveno ze systémové lišty.');
+            const curTab = document.querySelector('.nav-btn.active')?.dataset?.tab || 'play';
+            if (heroSkinViewer) heroSkinViewer.renderPaused = (curTab !== 'play');
+            if (skinViewer) skinViewer.renderPaused = (curTab !== 'character');
+        });
+    }
+
+    // ── Screenshots Gallery Modal ───────────────────────────────────────────
+    const modalScreenshotsGallery = document.getElementById('modalScreenshotsGallery');
+    const btnOpenScreenshotsModal = document.getElementById('btnOpenScreenshotsModal');
+    const btnCloseScreenshotsModal = document.getElementById('btnCloseScreenshotsModal');
+    const btnOpenScreenshotsFolder = document.getElementById('btnOpenScreenshotsFolder');
+    const screenshotsGridContainer = document.getElementById('screenshotsGridContainer');
+
+    async function loadScreenshotsGallery() {
+        if (!screenshotsGridContainer) return;
+        screenshotsGridContainer.innerHTML = '<div class="mods-loading">Načítám snímky obrazovky...</div>';
+        try {
+            const profId = currentConfig.activeProfileId;
+            const res = await window.api.getProfileScreenshots(profId);
+            if (!res || !res.success) {
+                screenshotsGridContainer.innerHTML = `<div class="empty-mods-state"><p>Chyba při načítání screenshotů: ${escapeHtml(res?.error || 'Neznámá chyba')}</p></div>`;
+                return;
+            }
+
+            const items = res.screenshots || [];
+            if (items.length === 0) {
+                screenshotsGridContainer.innerHTML = `
+                    <div class="empty-mods-state" style="grid-column: 1 / -1; padding: 40px 20px;">
+                        <div class="empty-mods-icon">
+                            <svg class="ui-icon-svg ui-icon-svg--xl" viewBox="0 0 24 24">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                        </div>
+                        <div class="empty-mods-title">Zatím žádné snímky obrazovky</div>
+                        <p class="empty-mods-desc">Stiskni během hry klávesu <strong>F2</strong> pro pořízení screenshotu. Zde se ti okamžitě zobrazí pro bleskové sdílení na Discord.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            screenshotsGridContainer.innerHTML = items.map(sc => `
+                <div class="screenshot-card" data-path="${escapeHtml(sc.fullPath)}">
+                    <div class="screenshot-thumb-box" title="Kliknutím otevřít v plné velikosti">
+                        <img src="${sc.thumbUrl}" alt="${escapeHtml(sc.filename)}" class="screenshot-thumb-img" loading="lazy">
+                        <div class="screenshot-overlay">
+                            <button type="button" class="btn-screenshot-copy" data-path="${escapeHtml(sc.fullPath)}" title="Zkopírovat obrázek do schránky (Ctrl+V na Discord)">
+                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                                <span>Kopírovat</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="screenshot-info">
+                        <div class="screenshot-name" title="${escapeHtml(sc.filename)}">${escapeHtml(sc.filename)}</div>
+                        <div class="screenshot-meta">
+                            <span>${escapeHtml(sc.dateFormatted)}</span>
+                            <span>•</span>
+                            <span>${escapeHtml(sc.sizeFormatted)}</span>
+                        </div>
+                        <div class="screenshot-actions">
+                            <button type="button" class="mc-btn mc-btn-secondary btn-sm btn-open-single-sc" data-path="${escapeHtml(sc.fullPath)}" title="Otevřít v systémovém prohlížeči">
+                                Otevřít
+                            </button>
+                            <button type="button" class="mc-btn btn-sm btn-delete-single-sc" data-path="${escapeHtml(sc.fullPath)}" style="color: #f51515;" title="Smazat snímek">
+                                <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Bind Copy to Clipboard
+            screenshotsGridContainer.querySelectorAll('.btn-screenshot-copy').forEach(btn => {
+                btn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const fullPath = btn.dataset.path;
+                    try {
+                        const cRes = await window.api.copyScreenshotToClipboard(fullPath);
+                        if (cRes && cRes.success) {
+                            showToast('Screenshot zkopírován do schránky! Můžeš vložit (Ctrl+V) na Discord.', 'success');
+                        } else {
+                            showToast('Chyba při kopírování: ' + (cRes?.error || 'Neznámá'), 'error');
+                        }
+                    } catch (err) {
+                        showToast('Chyba: ' + err.message, 'error');
+                    }
+                };
+            });
+
+            // Bind Open File
+            screenshotsGridContainer.querySelectorAll('.btn-open-single-sc').forEach(btn => {
+                btn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const fullPath = btn.dataset.path;
+                    await window.api.openFilePath(fullPath);
+                };
+            });
+
+            // Clicking thumbnail opens file too
+            screenshotsGridContainer.querySelectorAll('.screenshot-thumb-box').forEach(box => {
+                box.onclick = async () => {
+                    const card = box.closest('.screenshot-card');
+                    if (card?.dataset?.path) {
+                        await window.api.openFilePath(card.dataset.path);
+                    }
+                };
+            });
+
+            // Bind Delete
+            screenshotsGridContainer.querySelectorAll('.btn-delete-single-sc').forEach(btn => {
+                btn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const fullPath = btn.dataset.path;
+                    if (!confirm('Opravdu chceš smazat tento snímek obrazovky?')) return;
+                    try {
+                        const dRes = await window.api.deleteScreenshot(fullPath);
+                        if (dRes && dRes.success) {
+                            showToast('Snímek byl smazán.', 'info');
+                            loadScreenshotsGallery();
+                        } else {
+                            showToast('Chyba při mazání: ' + (dRes?.error || 'Neznámá chyba'), 'error');
+                        }
+                    } catch (err) {
+                        showToast('Chyba: ' + err.message, 'error');
+                    }
+                };
+            });
+
+        } catch (e) {
+            screenshotsGridContainer.innerHTML = `<div class="empty-mods-state"><p>Chyba při načítání galerie: ${escapeHtml(e.message)}</p></div>`;
+        }
+    }
+
+    if (btnOpenScreenshotsModal) {
+        btnOpenScreenshotsModal.addEventListener('click', () => {
+            if (modalScreenshotsGallery) {
+                modalScreenshotsGallery.style.display = 'flex';
+                loadScreenshotsGallery();
+            }
+        });
+    }
+
+    if (btnCloseScreenshotsModal) {
+        btnCloseScreenshotsModal.addEventListener('click', () => {
+            if (modalScreenshotsGallery) modalScreenshotsGallery.style.display = 'none';
+        });
+    }
+
+    if (btnOpenScreenshotsFolder) {
+        btnOpenScreenshotsFolder.addEventListener('click', async () => {
+            const profId = currentConfig.activeProfileId;
+            await window.api.openProfileFolder(profId, 'screenshots');
+        });
+    }
+
+    if (modalScreenshotsGallery) {
+        modalScreenshotsGallery.addEventListener('click', (e) => {
+            if (e.target === modalScreenshotsGallery) {
+                modalScreenshotsGallery.style.display = 'none';
+            }
+        });
+    }
 
     // ── Intelligent Crash Analyzer ──────────────────────────────────────────
     let currentCrashData = null;
