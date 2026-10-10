@@ -1528,8 +1528,18 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
 
                 // Trigger Intelligent Crash Analyzer on non-zero exit code
                 if (exitCode !== 0) {
+                    // Kód 4294967288 (0xFFFFFFF8 / -8) je interní watchdog Minecraftu při zavření hry
+                    if (exitCode === 4294967288 || exitCode === -8) {
+                        console.log('[LAUNCHER] Detekováno běžné ukončení hry (Client shutdown watchdog 4294967288), ignoruji.');
+                        return;
+                    }
+
                     try {
                         const crashData = analyzeCrash(launchConfig.baseDir, exitCode, recentGameLogs);
+                        if (crashData && (crashData.isCleanShutdown || crashData.hasCrash === false)) {
+                            console.log('[LAUNCHER] Detekováno běžné ukončení hry (post-main watchdog), neotevírám dialog pádu.');
+                            return;
+                        }
                         if (mainWindow && !mainWindow.isDestroyed()) {
                             mainWindow.webContents.send('launch-crash', crashData);
                         }

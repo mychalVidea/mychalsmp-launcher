@@ -411,6 +411,26 @@ function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = []) {
         logExcerpt = errorLines.slice(-15).join('\n') || memLines.slice(-15).join('\n');
     }
 
+    // ── Diagnostic Rule: Normal Game Shutdown Watchdog (False Positive) ───────
+    if (
+        combinedText.includes('Client shutdown from post-main') ||
+        combinedText.includes('ClientShutdownWatchdog') ||
+        combinedText.includes('Description: Client shutdown from post-main') ||
+        exitCode === 4294967288 ||
+        exitCode === -8
+    ) {
+        return {
+            hasCrash: false,
+            isCleanShutdown: true,
+            exitCode,
+            reportPath: null,
+            title: 'Hra ukončena',
+            severity: 'info',
+            description: 'Minecraft byl hráčem úspěšně ukončen.',
+            recommendation: ''
+        };
+    }
+
     // ── Diagnostic Rule 0: Incompatible / Conflicting Mods (Smart Auto-Fix) ────
     const incompResult = autoResolveIncompatibleMods(gameDir, combinedText);
     if (incompResult && incompResult.detected) {
