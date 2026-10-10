@@ -46,6 +46,13 @@ const { analyzeCrash, executeCrashFix } = require('./crashAnalyzer');
 const { scanLauncherCache, cleanLauncherCache } = require('./cleaner');
 const { discordRpc } = require('./discordRpc');
 
+// ⚡ Optimalizace hardwarové akcelerace Electronu (hladký 144Hz+ rendering rozhraní bez záseků CPU)
+try {
+    app.commandLine.appendSwitch('enable-gpu-rasterization');
+    app.commandLine.appendSwitch('enable-zero-copy');
+    app.commandLine.appendSwitch('ignore-gpu-blocklist');
+} catch (_) {}
+
 let mainWindow = null;
 let splashWindow = null;
 let appTray = null;
@@ -1939,7 +1946,7 @@ ipcMain.handle('save-offline-skin', async (event, skinData) => {
     if (skinData.capePath !== undefined) updates.customCapePath = skinData.capePath;
     const cfg = saveConfig(updates);
     try {
-        setupOfflineCustomSkinAndCape(BASE_DIR, cfg, (m) => console.log(m));
+        await setupOfflineCustomSkinAndCape(BASE_DIR, cfg, (m) => console.log(m), cfg.version);
     } catch (e) { }
     return { success: true, config: cfg };
 });
@@ -2416,7 +2423,10 @@ ipcMain.handle('save-dragged-skin', async (event, filePath) => {
         fs.copyFileSync(filePath, dest);
         const buf = fs.readFileSync(dest);
         const dataUrl = `data:image/png;base64,${buf.toString('base64')}`;
-        saveConfig({ customSkinPath: dest });
+        const cfg = saveConfig({ customSkinPath: dest });
+        try {
+            await setupOfflineCustomSkinAndCape(BASE_DIR, cfg, (m) => console.log(m), cfg.version);
+        } catch (_) {}
         return { success: true, customSkinPath: dest, skinDataUrl: dataUrl };
     } catch (e) {
         return { success: false, error: e.message };

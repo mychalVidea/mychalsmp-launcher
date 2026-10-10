@@ -23,7 +23,11 @@ function ensureOptionsGuiScale(gameDir, scale = 2) {
         }
 
         const scaleRegex = /^guiScale:\s*\d+/m;
-        if (scaleRegex.test(content)) {
+        const currentMatch = content.match(scaleRegex);
+        if (currentMatch && currentMatch[0] === `guiScale:${scale}`) {
+            return true; // Již nastaveno, ušetříme synchronní diskový zápis
+        }
+        if (currentMatch) {
             content = content.replace(scaleRegex, `guiScale:${scale}`);
         } else {
             content = (content ? content.trimEnd() + '\n' : '') + `guiScale:${scale}\n`;

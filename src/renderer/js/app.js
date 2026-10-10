@@ -1540,32 +1540,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (foundPref) return foundPref.id;
         }
 
-        const playedProfiles = profiles.filter(p => typeof p.lastPlayed === 'number' && p.lastPlayed > 0);
-        const mostRecentPlayed = playedProfiles.length > 0
-            ? [...playedProfiles].sort((a, b) => b.lastPlayed - a.lastPlayed)[0]
-            : null;
-
-        // Pokud uživatel ručně vybral profil v UI launcheru, má to přednost
-        if (hasUserManuallySelectedProfile && currentConfig.activeProfileId) {
-            const activeProf = profiles.find(p => p.id === currentConfig.activeProfileId);
-            if (activeProf) return activeProf.id;
-        }
-
-        // Pokud aktivní profil nebyl ještě nikdy hrán, ale existuje naposledy hraný profil, použijeme naposledy hraný
-        if (mostRecentPlayed) {
-            const activeProf = profiles.find(p => p.id === currentConfig.activeProfileId);
-            if (!activeProf || !activeProf.lastPlayed) {
-                return mostRecentPlayed.id;
-            }
-        }
-
-        // Standardně vybraný profil v konfiguraci
+        // 1. Profil, který má uživatel vybraný v launcheru (aktivní profil)
         if (currentConfig.activeProfileId) {
             const activeProf = profiles.find(p => p.id === currentConfig.activeProfileId);
             if (activeProf) return activeProf.id;
         }
 
-        if (mostRecentPlayed) return mostRecentPlayed.id;
+        // 2. Profil, který uživatel naposledy hrál
+        const playedProfiles = profiles.filter(p => typeof p.lastPlayed === 'number' && p.lastPlayed > 0);
+        if (playedProfiles.length > 0) {
+            const mostRecentPlayed = [...playedProfiles].sort((a, b) => b.lastPlayed - a.lastPlayed)[0];
+            if (mostRecentPlayed) return mostRecentPlayed.id;
+        }
 
         return profiles[0].id;
     }
@@ -3162,6 +3148,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         const targetProfile = (currentConfig.profiles || []).find(p => p.id === (selectedModsProfileId || currentConfig.activeProfileId));
         const targetMcVersion = targetProfile?.version || currentModFilter.version || '26.2';
 
+        // Pokud je vybrána verze hry, zobrazujeme v katalogu pouze kompatibilní mody pro danou verzi
+        const displayMods = mods.filter(m => {
+            if (!targetMcVersion) return true;
+            if (!m.latest_game_versions || m.latest_game_versions.length === 0) return true;
+            return m.latest_game_versions.includes(targetMcVersion);
+        });
+
+        if (displayMods.length === 0) {
+            modsCardsList.innerHTML = `<div class="mods-loading">Žádné položky odpovídající verzi MC ${escapeHtml(targetMcVersion)}.</div>`;
+            const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
+            if (btnUpdateAll) btnUpdateAll.style.display = 'none';
+            return;
+        }
+
         const updateableMods = [];
 
         // Vybereme správný seznam nainstalovaných položek podle aktivního typu projektu
@@ -3169,7 +3169,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ? currentProfileShadersList
             : (currentModFilter.projectType === 'resourcepack' ? currentProfileResourcePacksList : currentProfileModsList);
 
-        modsCardsList.innerHTML = mods.map(m => {
+        modsCardsList.innerHTML = displayMods.map(m => {
             const installedMod = findInstalledModForCatalog(m, activeInstalledList);
             // Zásadní oprava: Zda je položka nainstalována, závisí VÝHRADNĚ na tom, zda skutečně existuje v profilu!
             const isInstalled = !!installedMod;

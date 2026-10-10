@@ -169,8 +169,8 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
         if (type === 'mod' && loader) {
             facets.push([`categories:${loader}`]);
         }
-        // Při procházení katalogu bez vyhledávacího dotazu zobrazujeme pouze položky kompatibilní s verzí
-        if (version && !query.trim()) {
+        // Pokud je zvolena verze hry, VŽDY filtrujeme podle ní (při procházení i vyhledávání dotazem)
+        if (version) {
             facets.push([`versions:${version}`]);
         }
 
@@ -193,8 +193,12 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
         const data = await res.json();
 
         if (data.hits && data.hits.length > 0) {
+            const rawHits = version
+                ? data.hits.filter(h => !Array.isArray(h.versions) || h.versions.length === 0 || h.versions.includes(version))
+                : data.hits;
+
             // Získáme verze pro jednotlivé hity pro spolehlivou detekci verzí
-            const versionIds = data.hits.map(h => h.latest_version).filter(Boolean);
+            const versionIds = rawHits.map(h => h.latest_version).filter(Boolean);
             const versionMap = new Map();
             if (versionIds.length > 0) {
                 try {
@@ -216,7 +220,7 @@ async function searchModrinth(query = '', version = '26.2', loader = 'fabric', c
                 } catch (_) {}
             }
 
-            return data.hits.map(h => {
+            return rawHits.map(h => {
                 const vMeta = versionMap.get(h.latest_version) || versionMap.get(h.project_id) || null;
                 const projectGameVersions = Array.isArray(h.versions) && h.versions.length > 0
                     ? h.versions

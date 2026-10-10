@@ -243,8 +243,18 @@ Handler.prototype.getJar = async function() {
         if (isUpToDate && expectedSha1) {
             const actualSha1 = getFileSha1(targetJarPath);
             if (actualSha1 && actualSha1 !== expectedSha1) {
-                isUpToDate = false;
-                this.client.emit('debug', `[AKTUALIZACE]: Lokální hash ${actualSha1} neodpovídá ${expectedSha1}. Stahuji aktualizovaný klient jar...`);
+                const vanillaBackup = targetJarPath.replace(/\.jar$/, '.vanilla.jar');
+                const sigPath = `${targetJarPath}.skin_sig`;
+                const hasValidVanillaBackup = fs.existsSync(vanillaBackup) && isJarFileValid(vanillaBackup);
+                const hasSkinSig = fs.existsSync(sigPath);
+
+                if (hasSkinSig || hasValidVanillaBackup) {
+                    // Cílový JAR má aplikovaný náš RAW skin offline postavy, není poškozený
+                    this.client.emit('debug', `[POSTAVA]: Herní klient ${jarName} má aplikovaný RAW offline skin postavy.`);
+                } else {
+                    isUpToDate = false;
+                    this.client.emit('debug', `[AKTUALIZACE]: Lokální hash ${actualSha1} neodpovídá ${expectedSha1}. Stahuji aktualizovaný klient jar...`);
+                }
             }
         }
         if (isUpToDate) {
@@ -319,6 +329,19 @@ Handler.prototype.getJar = async function() {
 
     try { fs.writeFileSync(targetJsonPath, JSON.stringify(this.version, null, 4)); } catch (e) {}
     this.client.emit('debug', `[MCLC]: Herní klient ${jarName} je připraven.`);
+
+    // Pokud je aktivní offline režim, aplikujeme RAW skin ihned po přípravě JARu
+    if (this.options.config && this.options.config.authType !== 'microsoft') {
+        try {
+            await setupOfflineCustomSkinAndCape(
+                this.options.overrides?.gameDirectory || this.options.directory,
+                this.options.config,
+                (msg) => this.client.emit('debug', msg),
+                this.options.version.number,
+                this.options.version
+            );
+        } catch (_) {}
+    }
 };
 
 /**
@@ -431,17 +454,22 @@ Handler.prototype.downloadToDirectory = async function(directory, libraries, eve
         // 1. Zkontrolovat, zda soubor existuje a má platnou velikost i platný obsah
         let exists = false;
         try {
-            if (fs.existsSync(destFile) && fs.statSync(destFile).size > 0) {
-                if (library.downloads && library.downloads.artifact && library.downloads.artifact.sha1) {
-                    exists = verifyFileSha1(destFile, library.downloads.artifact.sha1);
-                } else if (name.endsWith('.jar')) {
-                    exists = isJarFileValid(destFile);
-                } else {
-                    exists = true;
-                }
-                // Pokud soubor existuje ale je poškozený, okamžitě jej smažeme pro čisté přestažení
-                if (!exists) {
-                    try { fs.unlinkSync(destFile); } catch (e) {}
+            if (fs.existsSync(destFile)) {
+                const stat = fs.statSync(destFile);
+                if (stat.size > 0) {
+                    // ⚡ Blesková kontrola velikosti: namísto drahého čtení a SHA1 hešování desítek JARů při každém spuštění
+                    if (library.downloads?.artifact?.size && stat.size === library.downloads.artifact.size) {
+                        exists = true;
+                    } else if (library.downloads?.artifact?.sha1) {
+                        exists = verifyFileSha1(destFile, library.downloads.artifact.sha1);
+                    } else if (name.endsWith('.jar')) {
+                        exists = isJarFileValid(destFile);
+                    } else {
+                        exists = true;
+                    }
+                    if (!exists) {
+                        try { fs.unlinkSync(destFile); } catch (e) {}
+                    }
                 }
             }
         } catch (e) {
@@ -1105,44 +1133,249 @@ function getInstalledVersions(baseDir) {
 }
 
 /**
- * 🎭 Nastavení vlastního offline skinu a pláště pro warez / offline hráče.
- * Automaticky vytvoří/aktualizuje vestavěný resource pack v resourcepacks/mychalsmp-character
- * a mychalsmp-character.zip s formátem plně kompatibilním s Minecraft 26.x a aktivuje jej v options.txt.
- * Pokud offline hráč nemá nastavený lokální soubor skinu, automaticky stáhne skin pro jeho nick.
+ * Vyčistí staré resource packy postav z předchozích verzí a odstraní je z options.txt,
+ * aby hráč neměl žádný nechtěný texture pack.
  */
-async function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log) {
-    if (config.authType === 'microsoft') {
-        return; // Pro oficiální účty se skin spravuje přes Mojang API
+function cleanupLegacyCharacterPacks(gameDir, baseDir) {
+    const dirs = [gameDir, baseDir].filter(Boolean);
+    for (const d of new Set(dirs)) {
+        try {
+            const rpDir = path.join(d, 'resourcepacks');
+            const legacyZip = path.join(rpDir, 'mychalsmp-character.zip');
+            const legacyDir = path.join(rpDir, 'mychalsmp-character');
+            if (fs.existsSync(legacyZip)) { try { fs.unlinkSync(legacyZip); } catch (_) {} }
+            if (fs.existsSync(legacyDir)) { try { fs.rmSync(legacyDir, { recursive: true, force: true }); } catch (_) {} }
+
+            const optFile = path.join(d, 'options.txt');
+            if (fs.existsSync(optFile)) {
+                let content = fs.readFileSync(optFile, 'utf8');
+                if (content.includes('mychalsmp-character')) {
+                    content = content.replace(/resourcePacks:\[(.*?)\]/, (match, inner) => {
+                        let packs = [];
+                        try { packs = JSON.parse(`[${inner}]`); } catch (_) { packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean); }
+                        packs = packs.filter(p => !p.includes('mychalsmp-character'));
+                        return `resourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
+                    });
+                    content = content.replace(/incompatibleResourcePacks:\[(.*?)\]/, (match, inner) => {
+                        let packs = [];
+                        try { packs = JSON.parse(`[${inner}]`); } catch (_) { packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean); }
+                        packs = packs.filter(p => !p.includes('mychalsmp-character'));
+                        return `incompatibleResourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
+                    });
+                    fs.writeFileSync(optFile, content, 'utf8');
+                }
+            }
+        } catch (_) {}
+    }
+}
+
+/**
+ * RAW injekce offline skinu a pláště přímo do JAR souboru herního jádra.
+ * Přepíše výchozí textury Steva, Alex a 7 dalších defaultních postav v wide i slim modelech.
+ */
+function injectRawSkinIntoJar(jarPath, activeSkinPath, activeCapePath, onLog = console.log) {
+    if (!fs.existsSync(jarPath) || !isJarFileValid(jarPath)) return false;
+
+    const backupPath = jarPath.replace(/\.jar$/, '.vanilla.jar');
+    const sigPath = `${jarPath}.skin_sig`;
+
+    // 1. Zajištění čisté vanilla zálohy JARu před jakoukoliv úpravou
+    if (!fs.existsSync(backupPath)) {
+        try {
+            fs.copyFileSync(jarPath, backupPath);
+            onLog(`[POSTAVA] 📦 Vytvořena vanilla záloha jádra: ${path.basename(backupPath)}`);
+        } catch (e) {
+            onLog(`[POSTAVA] ⚠ Nelze vytvořit zálohu jádra: ${e.message}`);
+        }
     }
 
-    const username = config.offlineUsername || config.username || 'Hrac';
+    if (!activeSkinPath || !fs.existsSync(activeSkinPath)) {
+        return false;
+    }
+
+    // 2. Kontrola cache podpisu (0ms start pokud se skin nezměnil)
+    const crypto = require('crypto');
+    let skinHash = '';
+    try {
+        skinHash = crypto.createHash('sha1').update(fs.readFileSync(activeSkinPath)).digest('hex');
+    } catch (_) { return false; }
+
+    let capeHash = 'nocape';
+    if (activeCapePath && fs.existsSync(activeCapePath)) {
+        try {
+            capeHash = crypto.createHash('sha1').update(fs.readFileSync(activeCapePath)).digest('hex');
+        } catch (_) {}
+    }
+    const targetSig = `${skinHash}:${capeHash}`;
+
+    if (fs.existsSync(sigPath)) {
+        try {
+            const currentSig = fs.readFileSync(sigPath, 'utf8').trim();
+            if (currentSig === targetSig) {
+                // Skin v tomto JARu je již identický - bleskový 0ms start
+                return true;
+            }
+        } catch (_) {}
+    }
+
+    // 3. Přímé RAW přepsání textur v herním JAR souboru
+    onLog(`[POSTAVA] ⚡ RAW aplikace skinu do ${path.basename(jarPath)} (Steve, Alex a modely postav)...`);
+    const skinBuf = fs.readFileSync(activeSkinPath);
+    const capeBuf = (activeCapePath && fs.existsSync(activeCapePath)) ? fs.readFileSync(activeCapePath) : null;
+
+    const playerModels = ['alex', 'ari', 'efe', 'kai', 'makena', 'noor', 'steve', 'sunny', 'zuri'];
+    const entriesToUpdate = [];
+
+    for (const model of playerModels) {
+        entriesToUpdate.push({ path: `assets/minecraft/textures/entity/player/wide/${model}.png`, buf: skinBuf });
+        entriesToUpdate.push({ path: `assets/minecraft/textures/entity/player/slim/${model}.png`, buf: skinBuf });
+    }
+    entriesToUpdate.push({ path: 'assets/minecraft/textures/entity/player/steve.png', buf: skinBuf });
+    entriesToUpdate.push({ path: 'assets/minecraft/textures/entity/player/alex.png', buf: skinBuf });
+    entriesToUpdate.push({ path: 'assets/minecraft/textures/entity/steve.png', buf: skinBuf });
+    entriesToUpdate.push({ path: 'assets/minecraft/textures/entity/alex.png', buf: skinBuf });
+
+    if (capeBuf) {
+        entriesToUpdate.push({ path: 'assets/minecraft/textures/entity/equipment/wings/elytra.png', buf: capeBuf });
+        entriesToUpdate.push({ path: 'assets/minecraft/textures/entity/elytra.png', buf: capeBuf });
+        entriesToUpdate.push({ path: 'assets/minecraft/textures/entity/cape/cape.png', buf: capeBuf });
+    }
+
+    let success = false;
+
+    // A) Nativní 'zip' CLI (bleskurychlé in-place zpracování v Linuxu/macOS)
+    try {
+        const { execFileSync } = require('child_process');
+        const os = require('os');
+        const tmpDir = path.join(os.tmpdir(), `mychalsmp_skin_${Date.now()}`);
+        fs.mkdirSync(path.join(tmpDir, 'assets/minecraft/textures/entity/player/wide'), { recursive: true });
+        fs.mkdirSync(path.join(tmpDir, 'assets/minecraft/textures/entity/player/slim'), { recursive: true });
+        if (capeBuf) {
+            fs.mkdirSync(path.join(tmpDir, 'assets/minecraft/textures/entity/equipment/wings'), { recursive: true });
+        }
+
+        for (const entry of entriesToUpdate) {
+            const destFile = path.join(tmpDir, entry.path);
+            fs.mkdirSync(path.dirname(destFile), { recursive: true });
+            fs.writeFileSync(destFile, entry.buf);
+        }
+
+        const relativePaths = entriesToUpdate.map(e => e.path);
+        execFileSync('zip', ['-u', jarPath, ...relativePaths], { cwd: tmpDir, stdio: 'ignore' });
+
+        try {
+            execFileSync('zip', ['-d', jarPath, 'META-INF/MOJANGCS.SF', 'META-INF/MOJANGCS.RSA', 'META-INF/MOJANG_C.SF', 'META-INF/MOJANG_C.RSA'], { stdio: 'ignore' });
+        } catch (_) {}
+
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+        success = true;
+    } catch (cliErr) {
+        // B) Multiplatformní fallback (AdmZip)
+        try {
+            const AdmZip = require('adm-zip');
+            const zip = new AdmZip(jarPath);
+            try { zip.deleteFile('META-INF/MOJANGCS.SF'); } catch (_) {}
+            try { zip.deleteFile('META-INF/MOJANGCS.RSA'); } catch (_) {}
+            try { zip.deleteFile('META-INF/MOJANG_C.SF'); } catch (_) {}
+            try { zip.deleteFile('META-INF/MOJANG_C.RSA'); } catch (_) {}
+
+            for (const entry of entriesToUpdate) {
+                zip.addFile(entry.path, entry.buf);
+            }
+            zip.writeZip(jarPath);
+            success = true;
+        } catch (admErr) {
+            onLog(`[POSTAVA] ⚠ RAW injekce do ${path.basename(jarPath)} selhala: ${admErr.message}`);
+        }
+    }
+
+    if (success && isJarFileValid(jarPath)) {
+        try { fs.writeFileSync(sigPath, targetSig, 'utf8'); } catch (_) {}
+        onLog(`[POSTAVA] ✓ Textury skinu hráče RAW přepsány přímo v jádru hry (${path.basename(jarPath)}). Žádný texture pack ani mód není potřeba!`);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Obnoví výchozí nemodifikované vanilla JARy ze zálohy .vanilla.jar.
+ */
+function restoreVanillaJars(baseDir, targetVer, onLog = console.log) {
+    const versionsDir = path.join(baseDir, 'versions');
+    if (!fs.existsSync(versionsDir)) return;
+    try {
+        const dirs = fs.readdirSync(versionsDir);
+        for (const d of dirs) {
+            if (!targetVer || d.includes(targetVer)) {
+                const jarPath = path.join(versionsDir, d, `${d}.jar`);
+                const backupPath = path.join(versionsDir, d, `${d}.vanilla.jar`);
+                const sigPath = `${jarPath}.skin_sig`;
+                if (fs.existsSync(backupPath) && fs.existsSync(sigPath) && isJarFileValid(backupPath)) {
+                    try {
+                        fs.copyFileSync(backupPath, jarPath);
+                        fs.unlinkSync(sigPath);
+                        onLog(`[POSTAVA] 🔄 Obnoveno výchozí vanilla jádro bez úprav: ${d}.jar`);
+                    } catch (_) {}
+                }
+            }
+        }
+    } catch (_) {}
+}
+
+/**
+ * 🎭 Nastavení vlastního offline skinu a pláště pro warez / offline hráče.
+ * RAW přepisuje textury Steva, Alex a dalších postav přímo v jádru hry (JAR).
+ * Nevytváří ŽÁDNÝ resource pack, neupravuje options.txt a nevyžaduje žádné mody!
+ */
+async function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.log, targetVersion = null, versionOpts = null) {
+    const baseDir = BASE_DIR;
+    const targetGameDir = gameDir || baseDir;
+    const targetVer = targetVersion || config?.version || '26.2';
+
+    // Vždy vyčistíme staré resource packy postav z předchozích verzí launcheru
+    cleanupLegacyCharacterPacks(targetGameDir, baseDir);
+
+    if (config?.authType === 'microsoft') {
+        restoreVanillaJars(baseDir, targetVer, onLog);
+        return; // Pro oficiální účty se skin spravuje přes Mojang servery
+    }
+
+    const username = config?.offlineUsername || config?.username || 'Hrac';
     const skinCandidates = [
-        config.customSkinPath,
-        path.join(gameDir, 'custom_skin.png'),
-        path.join(gameDir, 'skins', 'skin.png'),
-        path.join(BASE_DIR, 'custom_skin.png')
+        config?.customSkinPath,
+        path.join(targetGameDir, 'custom_skin.png'),
+        path.join(targetGameDir, 'skins', 'skin.png'),
+        path.join(baseDir, 'custom_skin.png'),
+        path.join(baseDir, 'offline_skin.png')
     ].filter(Boolean);
 
     let activeSkin = skinCandidates.find(p => fs.existsSync(p));
 
     // Pokud skin na disku neexistuje, automaticky stáhneme oficiální skin odpovídající zvolenému nicku
     if (!activeSkin) {
-        try {
-            const dest = path.join(BASE_DIR, 'custom_skin.png');
-            const resp = await fetch(`https://minotar.net/skin/${encodeURIComponent(username)}`, {
-                headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
-            });
-            if (resp.ok) {
-                const buf = await resp.arrayBuffer();
-                if (buf.byteLength > 100) {
-                    fs.writeFileSync(dest, Buffer.from(buf));
-                    activeSkin = dest;
-                    config.customSkinPath = dest;
-                    onLog(`[POSTAVA] 🎨 Automaticky stažen skin pro nick "${username}" z Minotaru.`);
+        const skinUrls = [
+            `https://minotar.net/skin/${encodeURIComponent(username)}`,
+            `https://crafatar.com/skins/${encodeURIComponent(username)}`,
+            `https://mc-heads.net/skin/${encodeURIComponent(username)}`
+        ];
+        for (const url of skinUrls) {
+            try {
+                const dest = path.join(baseDir, 'custom_skin.png');
+                const resp = await fetch(url, {
+                    headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' },
+                    signal: AbortSignal.timeout(3000)
+                });
+                if (resp.ok) {
+                    const buf = await resp.arrayBuffer();
+                    if (buf.byteLength > 100) {
+                        fs.writeFileSync(dest, Buffer.from(buf));
+                        activeSkin = dest;
+                        config.customSkinPath = dest;
+                        onLog(`[POSTAVA] 🎨 Automaticky stažen skin pro nick "${username}".`);
+                        break;
+                    }
                 }
-            }
-        } catch (e) {
-            onLog(`[POSTAVA] Minotar stažení skinu selhalo: ${e.message}`);
+            } catch (_) {}
         }
     }
 
@@ -1152,9 +1385,10 @@ async function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.lo
     if (hasExplicitCape) {
         if (config.customCapePath.startsWith('http://') || config.customCapePath.startsWith('https://')) {
             try {
-                const destCape = path.join(BASE_DIR, 'custom_cape.png');
+                const destCape = path.join(baseDir, 'custom_cape.png');
                 const resp = await fetch(config.customCapePath, {
-                    headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
+                    headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' },
+                    signal: AbortSignal.timeout(3000)
                 });
                 if (resp.ok) {
                     const buf = await resp.arrayBuffer();
@@ -1172,127 +1406,43 @@ async function setupOfflineCustomSkinAndCape(gameDir, config, onLog = console.lo
     }
 
     if (!activeSkin && !activeCape) {
+        restoreVanillaJars(baseDir, targetVer, onLog);
         return;
     }
 
     try {
-        const rpDir = path.join(gameDir, 'resourcepacks');
-        fs.mkdirSync(rpDir, { recursive: true });
+        // Cílové JARy k RAW přepsání textur
+        const jarsToPatch = new Set();
 
-        const packDir = path.join(rpDir, 'mychalsmp-character');
-        if (fs.existsSync(packDir)) {
-            try { fs.rmSync(packDir, { recursive: true, force: true }); } catch (_) {}
-        }
-        const wideDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player', 'wide');
-        const slimDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player', 'slim');
-        const playerRoot = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'player');
-        const entityDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity');
-        const wingsDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'equipment', 'wings');
-        const armorDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'models', 'armor');
-        const capeDir = path.join(packDir, 'assets', 'minecraft', 'textures', 'entity', 'cape');
+        // 1. Základní vanilla JAR (např. 26.2.jar)
+        const vanillaJar = path.join(baseDir, 'versions', targetVer, `${targetVer}.jar`);
+        if (fs.existsSync(vanillaJar)) jarsToPatch.add(vanillaJar);
 
-        fs.mkdirSync(wideDir, { recursive: true });
-        fs.mkdirSync(slimDir, { recursive: true });
-        fs.mkdirSync(playerRoot, { recursive: true });
-        fs.mkdirSync(entityDir, { recursive: true });
-        fs.mkdirSync(wingsDir, { recursive: true });
-        fs.mkdirSync(armorDir, { recursive: true });
-        fs.mkdirSync(capeDir, { recursive: true });
-
-        // 1. pack.mcmeta (Plná kompatibilita s Minecraft 26.x - formát 34 s rozsahem 1 až 999)
-        const mcmeta = {
-            pack: {
-                pack_format: 34,
-                supported_formats: { min_inclusive: 1, max_inclusive: 999 },
-                description: "MYCHAL SMP Vlastní Offline Postava"
-            }
-        };
-        fs.writeFileSync(path.join(packDir, 'pack.mcmeta'), JSON.stringify(mcmeta, null, 2), 'utf8');
-
-        // 2. Aplikace vlastního skinu
-        if (activeSkin) {
-            const playerModels = ['alex', 'ari', 'efe', 'kai', 'makena', 'noor', 'steve', 'sunny', 'zuri'];
-            for (const name of playerModels) {
-                fs.copyFileSync(activeSkin, path.join(wideDir, `${name}.png`));
-                fs.copyFileSync(activeSkin, path.join(slimDir, `${name}.png`));
-            }
-            fs.copyFileSync(activeSkin, path.join(playerRoot, 'steve.png'));
-            fs.copyFileSync(activeSkin, path.join(playerRoot, 'alex.png'));
-            fs.copyFileSync(activeSkin, path.join(entityDir, 'steve.png'));
-            fs.copyFileSync(activeSkin, path.join(entityDir, 'alex.png'));
-            onLog(`[POSTAVA] 🎨 Vlastní offline skin aplikován (${path.basename(activeSkin)}) pro modely postav.`);
+        // 2. Custom JAR (např. Fabric profil)
+        if (versionOpts?.custom) {
+            const customJar = path.join(baseDir, 'versions', versionOpts.custom, `${versionOpts.custom}.jar`);
+            if (fs.existsSync(customJar)) jarsToPatch.add(customJar);
         }
 
-        // 3. Aplikace vlastního pláště (pouze pokud si hráč explicitně nastavil cape)
-        if (activeCape) {
-            fs.copyFileSync(activeCape, path.join(entityDir, 'elytra.png'));
-            fs.copyFileSync(activeCape, path.join(wingsDir, 'elytra.png'));
-            fs.copyFileSync(activeCape, path.join(armorDir, 'elytra.png'));
-            const capeTypes = ['mojang', 'migrator', 'vanilla', 'cherry', 'follower', 'experience', '15th_anniversary', 'cape'];
-            for (const c of capeTypes) {
-                fs.copyFileSync(activeCape, path.join(capeDir, `${c}.png`));
-            }
-            fs.copyFileSync(activeCape, path.join(playerRoot, 'cape.png'));
-            fs.copyFileSync(activeCape, path.join(entityDir, 'cape.png'));
-            onLog(`[POSTAVA] 🧥 Vlastní offline plášť aplikován (${path.basename(activeCape)}) pro plášť i elytru.`);
-        }
-
-        // 4. Zabalení do zip archivu mychalsmp-character.zip pro 100% kompatibilitu s moderním Minecraftem
-        try {
-            const AdmZip = require('adm-zip');
-            const zip = new AdmZip();
-            zip.addLocalFolder(packDir);
-            const zipPath = path.join(rpDir, 'mychalsmp-character.zip');
-            zip.writeZip(zipPath);
-        } catch (zErr) {
-            // fallback k adresářovému resource packu
-        }
-
-        // 5. Automatická aktivace v options.txt (jak v herním profilu, tak v BASE_DIR)
-        const targetOptionsFiles = [
-            path.join(gameDir, 'options.txt'),
-            path.join(BASE_DIR, 'options.txt')
-        ];
-
-        for (const optionsFile of new Set(targetOptionsFiles)) {
-            const packId = 'file/mychalsmp-character.zip';
-            if (fs.existsSync(optionsFile)) {
-                let content = fs.readFileSync(optionsFile, 'utf8');
-                if (content.includes('resourcePacks:')) {
-                    content = content.replace(/resourcePacks:\[(.*?)\]/, (match, inner) => {
-                        let packs = [];
-                        try {
-                            packs = JSON.parse(`[${inner}]`);
-                        } catch (e) {
-                            packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
-                        }
-                        if (!packs.includes(packId)) packs.push(packId);
-                        return `resourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
-                    });
-                } else {
-                    content += `\nresourcePacks:[${JSON.stringify('vanilla')},${JSON.stringify(packId)}]\n`;
+        // 3. Prohledání všech odpovídajících složek ve versions
+        const versionsDir = path.join(baseDir, 'versions');
+        if (fs.existsSync(versionsDir)) {
+            try {
+                const dirs = fs.readdirSync(versionsDir);
+                for (const d of dirs) {
+                    if (d.includes(targetVer)) {
+                        const cand = path.join(versionsDir, d, `${d}.jar`);
+                        if (fs.existsSync(cand)) jarsToPatch.add(cand);
+                    }
                 }
-
-                if (content.includes('incompatibleResourcePacks:')) {
-                    content = content.replace(/incompatibleResourcePacks:\[(.*?)\]/, (match, inner) => {
-                        let packs = [];
-                        try {
-                            packs = JSON.parse(`[${inner}]`);
-                        } catch (e) {
-                            packs = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
-                        }
-                        packs = packs.filter(p => p !== packId && p !== 'file/mychalsmp-character');
-                        return `incompatibleResourcePacks:[${packs.map(p => JSON.stringify(p)).join(',')}]`;
-                    });
-                }
-                fs.writeFileSync(optionsFile, content, 'utf8');
-            } else {
-                fs.writeFileSync(optionsFile, `resourcePacks:["vanilla","${packId}"]\nincompatibleResourcePacks:[]\n`, 'utf8');
-            }
+            } catch (_) {}
         }
-        onLog(`[POSTAVA] ✓ Resource pack postavy aktivován v options.txt.`);
+
+        for (const jarPath of jarsToPatch) {
+            injectRawSkinIntoJar(jarPath, activeSkin, activeCape, onLog);
+        }
     } catch (err) {
-        onLog(`[POSTAVA] ⚠ Chyba při přípravě offline skinu/pláště: ${err.message}`);
+        onLog(`[POSTAVA] ⚠ Chyba při RAW aplikaci skinu/pláště: ${err.message}`);
     }
 }
 
@@ -1434,6 +1584,16 @@ async function ensureFabricProfile(centralRootDir, targetVersion, onLog = consol
         onLog(`[FABRIC] ✓ Fabric profil ${fabricId} úspěšně připraven a sloučen s jádrem!`);
         return fabricId;
     } catch (err) {
+        try {
+            const localFallback = fs.readdirSync(versionsDir).find(d =>
+                d.toLowerCase().startsWith('fabric-loader-') && d.includes(targetVersion) &&
+                fs.existsSync(path.join(versionsDir, d, `${d}.json`))
+            );
+            if (localFallback) {
+                onLog(`[FABRIC] Síťové ověření selhalo (${err.message}), použiji existující lokální profil: ${localFallback}`);
+                return localFallback;
+            }
+        } catch (_) {}
         onLog(`[FABRIC] ⚠ Nepodařilo se připravit Fabric profil: ${err.message}. Spouštím Vanilla.`);
         return null;
     }
@@ -1480,9 +1640,6 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     // ⚡ Bleskové převzetí existujících assetů a knihoven ze systému (.minecraft)
     linkOrShareExistingMinecraftData(BASE_DIR, onLog);
 
-    // 🎭 Aplikace vlastního offline skinu a pláště pro warez / offline režim
-    await setupOfflineCustomSkinAndCape(gameInstanceDir, config, onLog);
-
     // JVM Arguments (supports modern Java 25 ZGC and G1GC)
     let jvmArgs = [];
     if (config.customJvmArgs && config.customJvmArgs.trim()) {
@@ -1500,6 +1657,20 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     jvmArgs = jvmArgs.filter(a => a !== '-XX:+ZGenerational');
     if (!jvmArgs.some(a => a.startsWith('-Dfile.encoding='))) {
         jvmArgs.push('-Dfile.encoding=UTF-8');
+    }
+
+    // ⚡ Pokročilé JVM optimalizace pro nulové mikro-záseky (eliminace diskového I/O při GC) a úsporu paměti
+    const advancedJvmFlags = [
+        '-XX:+PerfDisableSharedMem',      // Vypíná diskové zápisy HotSpot hsperfdata, které způsobují lag spiky při GC
+        '-XX:+UseStringDeduplication',     // Sloučí identické textové řetězce v paměti (šetří 10-15% RAM)
+        '-XX:+UseNUMA',                    // Optimalizuje paměťovou propustnost a cache na vícejádrových CPU (Ryzen / Intel)
+        '-Djava.net.preferIPv4Stack=true'  // Zrychluje síťové sockety v Netty (vypíná zbytečný dual-stack IPv6 fallback)
+    ];
+    for (const flag of advancedJvmFlags) {
+        const flagPrefix = flag.split('=')[0];
+        if (!jvmArgs.some(a => a.startsWith(flagPrefix))) {
+            jvmArgs.push(flag);
+        }
     }
 
     // Moderní Mojang JVM Native Access Arguments pro Java 21 a Java 25
@@ -1582,16 +1753,30 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
     const activeVersionFolder = versionOpts.custom || versionOpts.number;
     const clientJarPath = path.join(BASE_DIR, 'versions', activeVersionFolder, `${activeVersionFolder}.jar`);
     if (fs.existsSync(clientJarPath) && !isJarFileValid(clientJarPath)) {
-        onLog(`[OPRAVA]: Detekován poškozený soubor klienta ${clientJarPath}. Odstraňuji pro čisté znovustažení...`);
-        try { fs.unlinkSync(clientJarPath); } catch (e) {}
+        const bak = clientJarPath.replace(/\.jar$/, '.vanilla.jar');
+        if (fs.existsSync(bak) && isJarFileValid(bak)) {
+            try { fs.copyFileSync(bak, clientJarPath); } catch (_) {}
+        } else {
+            onLog(`[OPRAVA]: Detekován poškozený soubor klienta ${clientJarPath}. Odstraňuji pro čisté znovustažení...`);
+            try { fs.unlinkSync(clientJarPath); } catch (e) {}
+        }
     }
     const vanillaClientJar = path.join(BASE_DIR, 'versions', versionOpts.number, `${versionOpts.number}.jar`);
     if (fs.existsSync(vanillaClientJar) && !isJarFileValid(vanillaClientJar)) {
-        onLog(`[OPRAVA]: Detekován poškozený soubor jádra ${vanillaClientJar}. Odstraňuji pro čisté znovustažení...`);
-        try { fs.unlinkSync(vanillaClientJar); } catch (e) {}
+        const bak = vanillaClientJar.replace(/\.jar$/, '.vanilla.jar');
+        if (fs.existsSync(bak) && isJarFileValid(bak)) {
+            try { fs.copyFileSync(bak, vanillaClientJar); } catch (_) {}
+        } else {
+            onLog(`[OPRAVA]: Detekován poškozený soubor jádra ${vanillaClientJar}. Odstraňuji pro čisté znovustažení...`);
+            try { fs.unlinkSync(vanillaClientJar); } catch (e) {}
+        }
     }
 
+    // 🎭 Aplikace vlastního RAW offline skinu a pláště pro warez / offline režim přímo do jádra
+    await setupOfflineCustomSkinAndCape(gameInstanceDir, config, onLog, targetVersion, versionOpts);
+
     const opts = {
+        config: config,
         authorization: authData,
         root: BASE_DIR, // Centrální adresář pro sdílení verzí, knihoven a assetů bez znovustahování
         version: versionOpts,
@@ -1659,6 +1844,10 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
 
         // MangoHud Overlay (deaktivováno - nepodporováno)
         // config.enableMangoHud je trvale vypnuto na žádost uživatele
+
+        // ⚡ Vícevláknová fronta OpenGL příkazů v grafických ovladačích (Mesa i NVIDIA)
+        setGameEnv('MESA_GL_THREAD', 'true');
+        setGameEnv('__GL_THREADED_OPTIMIZATIONS', '1');
 
         // Discrete GPU (NVIDIA & AMD Prime Offloading)
         if (config.enableDiscreteGpu) {
@@ -2143,6 +2332,7 @@ function cancelAudioDlcDownload() {
 }
 
 module.exports = {
+    BASE_DIR,
     detectJavaPath,
     getAvailableJavas,
     getInstalledVersions,
