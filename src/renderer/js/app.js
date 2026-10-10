@@ -814,9 +814,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             const offlineCross = (!isMychal && s.online === false)
                 ? '<span class="server-offline-cross-badge" title="Server neodpovídá / je offline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span>'
                 : '';
-            const playCount = Number(s.playCount) || 0;
-            const playMeta = playCount > 0 ? `<span class="server-play-meta">• ${playCount}× hráno</span>` : '';
-
             return `
                 <div class="tracked-server-item">
                     <div style="position: relative; flex-shrink: 0;">
@@ -828,7 +825,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <span class="item-name">${escapeHtml(s.name)}</span>
                             ${!isMychal ? `<button class="btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Odebrat server"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
                         </div>
-                        <div class="item-ip">${escapeHtml(s.ip)} ${playMeta}</div>
+                        <div class="item-ip">${escapeHtml(s.ip)}</div>
                     </div>
                     <div class="tracked-server-actions">
                         <button class="btn-quick-join" data-server="${escapeHtml(s.ip)}" title="Připojit se">
@@ -2677,23 +2674,35 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         });
 
-        // Bind delete buttons
+        // Bind delete buttons with iOS-style uninstall animation
         listEl.querySelectorAll('.btn-mod-delete').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const filename = btn.dataset.filename;
                 if (!confirm(`Opravdu chceš smazat soubor "${filename}" z profilu?`)) return;
                 btn.disabled = true;
+
+                const rowItem = btn.closest('.installed-mod-row');
+                if (rowItem) {
+                    rowItem.classList.add('ios-uninstalling');
+                }
+
+                await new Promise(r => setTimeout(r, 380));
+
                 try {
                     const res = await window.api.deleteProfileMod(profId, filename);
                     if (res && res.success) {
-                        showToast('Soubor módu byl smazán.', 'success');
+                        showToast('Soubor módu byl odinstalován.', 'success');
                         await loadProfileMods(profId);
                     } else {
                         showToast('Chyba při mazání módu: ' + (res?.error || 'Neznámá chyba'), 'error');
+                        if (rowItem) rowItem.classList.remove('ios-uninstalling');
+                        btn.disabled = false;
                     }
                 } catch (err) {
                     showToast('Chyba: ' + err.message, 'error');
+                    if (rowItem) rowItem.classList.remove('ios-uninstalling');
+                    btn.disabled = false;
                 }
             });
         });
@@ -2837,7 +2846,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
         });
 
-        // Bind delete pack
+        // Bind delete pack with iOS-style uninstall animation
         listEl.querySelectorAll('.btn-pack-delete').forEach(btn => {
             btn.onclick = async (e) => {
                 e.stopPropagation();
@@ -2845,16 +2854,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const pt = btn.dataset.packType;
                 if (!confirm(`Opravdu chceš smazat "${fn}" z profilu?`)) return;
                 btn.disabled = true;
+
+                const rowItem = btn.closest('.installed-mod-row');
+                if (rowItem) {
+                    rowItem.classList.add('ios-uninstalling');
+                }
+
+                await new Promise(r => setTimeout(r, 380));
+
                 try {
                     const res = await window.api.deleteProfilePack(profId, pt, fn);
                     if (res && res.success) {
-                        showToast('Soubor byl smazán.', 'success');
+                        showToast('Položka byla odinstalována.', 'success');
                         await loadProfileMods(profId);
                     } else {
                         showToast('Chyba: ' + (res?.error || 'Neznámá chyba'), 'error');
+                        if (rowItem) rowItem.classList.remove('ios-uninstalling');
+                        btn.disabled = false;
                     }
                 } catch (err) {
                     showToast('Chyba: ' + err.message, 'error');
+                    if (rowItem) rowItem.classList.remove('ios-uninstalling');
+                    btn.disabled = false;
                 }
             };
         });
@@ -3356,7 +3377,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
 
-        // Bind interactive delete buttons directly from catalog
+        // Bind interactive delete buttons directly from catalog with iOS-style reverse animation
         modsCardsList.querySelectorAll('.btn-catalog-delete-mod').forEach(delBtn => {
             delBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
@@ -3367,8 +3388,35 @@ document.addEventListener('DOMContentLoaded', async () => {
                     showToast('Nelze dohledat soubor pro smazání.', 'error');
                     return;
                 }
-                if (!confirm(`Opravdu chceš smazat "${modTitle}" (${filename}) z profilu?`)) return;
+                if (!confirm(`Opravdu chceš smazat "${modTitle}" z profilu?`)) return;
+
                 delBtn.disabled = true;
+                const cardRow = delBtn.closest('.mod-card-row');
+                const avatarBox = cardRow?.querySelector('.mod-avatar-box');
+                const ov = avatarBox?.querySelector('.apple-progress-overlay');
+                const bar = avatarBox?.querySelector('.apple-progress-bar');
+
+                // iOS-style uninstall reverse download animation
+                if (avatarBox) avatarBox.classList.add('ios-uninstalling');
+                if (cardRow) cardRow.classList.add('ios-card-uninstalling');
+
+                if (ov && bar) {
+                    ov.classList.remove('success');
+                    ov.classList.add('active', 'uninstalling');
+                    bar.style.transition = 'none';
+                    bar.style.strokeDashoffset = '0';
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            bar.style.transition = 'stroke-dashoffset 0.45s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.2s ease';
+                            bar.style.strokeDashoffset = '87.96';
+                        });
+                    });
+                }
+
+                delBtn.innerHTML = `<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span>`;
+
+                await new Promise(r => setTimeout(r, 450));
+
                 try {
                     const projType = currentModFilter.projectType || 'mod';
                     let res;
@@ -3381,15 +3429,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
 
                     if (res && res.success) {
-                        showToast(`${modTitle} byl smazán z profilu.`, 'success');
+                        showToast(`${modTitle} byl odinstalován z profilu.`, 'success');
                         await loadProfileMods(targetProfileId);
                         renderModCards(lastLoadedCatalogMods);
                     } else {
                         showToast('Chyba při mazání: ' + (res?.error || 'Neznámá chyba'), 'error');
+                        if (ov) ov.classList.remove('active', 'uninstalling');
+                        if (avatarBox) avatarBox.classList.remove('ios-uninstalling');
+                        if (cardRow) cardRow.classList.remove('ios-card-uninstalling');
                         delBtn.disabled = false;
                     }
                 } catch (err) {
                     showToast('Chyba: ' + err.message, 'error');
+                    if (ov) ov.classList.remove('active', 'uninstalling');
+                    if (avatarBox) avatarBox.classList.remove('ios-uninstalling');
+                    if (cardRow) cardRow.classList.remove('ios-card-uninstalling');
                     delBtn.disabled = false;
                 }
             });

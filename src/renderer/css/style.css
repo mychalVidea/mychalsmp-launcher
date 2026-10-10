@@ -460,18 +460,35 @@ body {
     z-index: 10;
 }
 
-.sidebar-nav-top {
+.sidebar-compact {
+    min-width: var(--sidebar-width);
+    max-width: var(--sidebar-width);
+    flex-shrink: 0;
+    background-color: var(--surface);
+    border-right: 1px solid var(--surface-border);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0;
+    z-index: 10;
+    position: relative;
+}
+
+.sidebar-nav-top,
+.sidebar-nav-bottom {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     align-items: center;
     width: 100%;
 }
 
 .nav-icon-btn {
+    position: relative;
     width: 44px;
     height: 44px;
-    border-radius: var(--radius-md);
+    border-radius: 12px;
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-muted);
@@ -479,24 +496,72 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: var(--transition);
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+                background 0.2s ease,
+                border-color 0.2s ease,
+                color 0.2s ease,
+                box-shadow 0.25s ease;
 }
 
 .nav-icon-btn svg {
     width: 20px;
     height: 20px;
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.2s ease, filter 0.2s ease;
 }
 
+/* Elegant Hover Animation */
 .nav-icon-btn:hover {
-    background: var(--surface2);
-    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 
+.nav-icon-btn:hover svg {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 6px rgba(10, 103, 229, 0.45));
+}
+
+.nav-icon-btn:active {
+    transform: scale(0.95);
+    transition-duration: 0.08s;
+}
+
+/* Active State: Elegant Combo of Brand Blue & Green */
 .nav-icon-btn.active {
-    background: rgba(10, 103, 229, 0.15);
-    border-color: rgba(10, 103, 229, 0.4);
-    color: var(--brand-blue);
-    box-shadow: 0 0 12px rgba(10, 103, 229, 0.2);
+    background: linear-gradient(135deg, rgba(10, 103, 229, 0.22) 0%, rgba(33, 222, 0, 0.1) 100%);
+    border-color: rgba(10, 103, 229, 0.45);
+    color: #ffffff;
+    box-shadow: 0 4px 18px rgba(10, 103, 229, 0.25),
+                0 0 12px rgba(33, 222, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Vertical indicator pill with emerald green to brand blue gradient */
+.nav-icon-btn::before {
+    content: '';
+    position: absolute;
+    left: -7px;
+    top: 50%;
+    transform: translateY(-50%) scaleY(0);
+    width: 3.5px;
+    height: 22px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #21DE00 0%, #0a67e5 100%);
+    box-shadow: 0 0 10px rgba(33, 222, 0, 0.6), 0 0 16px rgba(10, 103, 229, 0.5);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+    opacity: 0;
+}
+
+.nav-icon-btn.active::before {
+    transform: translateY(-50%) scaleY(1);
+    opacity: 1;
+}
+
+.nav-icon-btn.active svg {
+    stroke: #ffffff;
+    filter: drop-shadow(0 2px 8px rgba(10, 103, 229, 0.5)) drop-shadow(0 0 5px rgba(33, 222, 0, 0.35));
 }
 
 .sidebar-nav-bottom {
@@ -507,7 +572,6 @@ body {
     margin-top: auto;
     padding-bottom: 6px;
 }
-
 
 /* ── Content Viewport ─────────────────────────────────────────────────── */
 .content-viewport {
@@ -521,10 +585,25 @@ body {
 .tab-pane {
     display: none;
     height: 100%;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab-pane.active {
     display: block;
+    animation: tabPaneFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes tabPaneFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* ── Modern Dawn-Style Clean Button System ───────────────────────────── */
@@ -792,27 +871,7 @@ body {
 }
 
 .stage-user-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-    color: #38bdf8;
-    background: rgba(14, 165, 233, 0.12);
-    border: 1px solid rgba(56, 189, 248, 0.28);
-    padding: 3px 10px;
-    border-radius: 999px;
-    margin-bottom: 8px;
-}
-
-.user-status-indicator {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #21DE00;
-    box-shadow: 0 0 8px #21DE00;
-    display: inline-block;
+    display: none !important;
 }
 
 .stage-title {
@@ -2229,6 +2288,52 @@ select option {
 
 .apple-progress-overlay.success .apple-progress-stop {
     background: #21DE00;
+}
+
+/* iOS-style uninstall reverse download animation */
+.apple-progress-overlay.uninstalling .apple-progress-bar {
+    stroke: #f51515;
+}
+
+.apple-progress-overlay.uninstalling .apple-progress-stop {
+    background: #f51515;
+    border-radius: 50%;
+    transform: scale(0.85);
+}
+
+@keyframes ios-uninstall-jiggle {
+    0% { transform: rotate(0deg) scale(1); }
+    15% { transform: rotate(-2.5deg) scale(0.98); }
+    30% { transform: rotate(2.5deg) scale(0.96); }
+    45% { transform: rotate(-2deg) scale(0.95); }
+    60% { transform: rotate(2deg) scale(0.94); }
+    75% { transform: rotate(-1deg) scale(0.95); }
+    100% { transform: rotate(0deg) scale(1); }
+}
+
+.mod-avatar-box.ios-uninstalling {
+    animation: ios-uninstall-jiggle 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+.mod-card-row.ios-card-uninstalling {
+    animation: ios-uninstall-jiggle 0.45s ease;
+    transition: all 0.45s ease;
+}
+
+@keyframes ios-row-delete-jiggle {
+    0% { transform: translateX(0) scale(1); opacity: 1; }
+    20% { transform: translateX(-4px) scale(0.98); }
+    40% { transform: translateX(4px) scale(0.97); }
+    60% { transform: translateX(-2px) scale(0.96); }
+    100% { transform: scale(0.92); opacity: 0; }
+}
+
+.installed-mod-row.ios-uninstalling {
+    animation: ios-row-delete-jiggle 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    pointer-events: none;
+    overflow: hidden;
+    max-height: 80px;
+    transition: max-height 0.38s cubic-bezier(0.2, 0.8, 0.2, 1), margin 0.38s ease, padding 0.38s ease;
 }
 
 .mod-info-area {
