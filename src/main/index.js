@@ -51,11 +51,12 @@ try {
     app.commandLine.appendSwitch('enable-gpu-rasterization');
     app.commandLine.appendSwitch('enable-zero-copy');
     app.commandLine.appendSwitch('ignore-gpu-blocklist');
-} catch (_) {}
+} catch (_) { }
 
 let mainWindow = null;
 let splashWindow = null;
 let appTray = null;
+let isQuitting = false;
 
 function setupTray() {
     if (appTray && !appTray.isDestroyed()) return appTray;
@@ -71,16 +72,17 @@ function setupTray() {
                     label: 'Zobrazit launcher',
                     click: () => {
                         if (mainWindow && !mainWindow.isDestroyed()) {
+                            if (mainWindow.isMinimized()) mainWindow.restore();
                             mainWindow.show();
                             mainWindow.focus();
                         }
                     }
                 },
                 {
-                    label: 'Minimalizovat',
+                    label: 'Skrýt do lišty',
                     click: () => {
                         if (mainWindow && !mainWindow.isDestroyed()) {
-                            mainWindow.minimize();
+                            mainWindow.hide();
                         }
                     }
                 },
@@ -88,6 +90,7 @@ function setupTray() {
                 {
                     label: 'Ukončit aplikaci',
                     click: () => {
+                        isQuitting = true;
                         app.quit();
                     }
                 }
@@ -99,6 +102,7 @@ function setupTray() {
                     if (mainWindow.isVisible()) {
                         mainWindow.hide();
                     } else {
+                        if (mainWindow.isMinimized()) mainWindow.restore();
                         mainWindow.show();
                         mainWindow.focus();
                     }
@@ -109,6 +113,7 @@ function setupTray() {
                     if (mainWindow.isVisible()) {
                         mainWindow.hide();
                     } else {
+                        if (mainWindow.isMinimized()) mainWindow.restore();
                         mainWindow.show();
                         mainWindow.focus();
                     }
@@ -214,6 +219,15 @@ function createWindow() {
         mainWindow.focus();
     });
 
+    mainWindow.on('close', (event) => {
+        if (!isQuitting) {
+            event.preventDefault();
+            setupTray();
+            mainWindow.hide();
+            return false;
+        }
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
@@ -236,8 +250,8 @@ function ensureLinuxDesktopShortcut() {
         }
 
         const desktopContent = `[Desktop Entry]
-Name=MYCHAL SMP Launcher
-Comment=Oficiální Minecraft launcher sítě MYCHAL SMP
+Name=SMPClient
+Comment=Oficiální Minecraft klient sítě MYCHAL SMP
 Exec="${execPath}" %U
 Icon=${fs.existsSync(iconDest) ? iconDest : 'mychalsmp-launcher'}
 Terminal=false
@@ -260,7 +274,7 @@ StartupWMClass=xyz.mychalsmp.launcher
         ];
         for (const d of desktopCandidates) {
             if (fs.existsSync(d)) {
-                const target = path.join(d, 'MYCHAL SMP Launcher.desktop');
+                const target = path.join(d, 'SMPClient.desktop');
                 fs.writeFileSync(target, desktopContent, 'utf-8');
                 try { fs.chmodSync(target, 0o755); } catch (e) { }
             }
@@ -274,8 +288,9 @@ if (!gotTheLock) {
     app.quit();
 } else {
     app.on('second-instance', () => {
-        if (mainWindow) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
             if (mainWindow.isMinimized()) mainWindow.restore();
+            if (!mainWindow.isVisible()) mainWindow.show();
             mainWindow.focus();
         } else if (splashWindow && !splashWindow.isDestroyed()) {
             if (splashWindow.isMinimized()) splashWindow.restore();
@@ -285,6 +300,7 @@ if (!gotTheLock) {
 
     app.whenReady().then(() => {
         ensureLinuxDesktopShortcut();
+        setupTray();
         createSplashWindow();
         createWindow();
 
@@ -305,14 +321,26 @@ if (!gotTheLock) {
         }
 
         app.on('activate', () => {
-            if (BrowserWindow.getAllWindows().length === 0) createWindow();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                if (!mainWindow.isVisible()) mainWindow.show();
+                mainWindow.focus();
+            } else if (BrowserWindow.getAllWindows().length === 0) {
+                createWindow();
+            }
         });
     });
 }
 
+app.on('before-quit', () => {
+    isQuitting = true;
+});
+
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
+    if (isQuitting) {
+        if (process.platform !== 'darwin') {
+            app.quit();
+        }
     }
 });
 
@@ -385,7 +413,7 @@ ipcMain.handle('download-mod-or-pack', async (event, modOptions) => {
                         total,
                         percent
                     });
-                } catch (_) {}
+                } catch (_) { }
             }
         };
         const res = await downloadModOrPack(optsWithProgress, targetDir);
@@ -791,8 +819,8 @@ function getCachedPackMetadata(filePath, mtime, isDirectory) {
             if (AdmZip && fs.existsSync(filePath)) {
                 const zip = new AdmZip(filePath);
                 const packPng = zip.getEntry('pack.png') ||
-                                zip.getEntry('pack.icon.png') ||
-                                zip.getEntries().find(e => (e.entryName.toLowerCase().endsWith('pack.png') || e.entryName.toLowerCase().endsWith('icon.png')) && e.header.size < 800000);
+                    zip.getEntry('pack.icon.png') ||
+                    zip.getEntries().find(e => (e.entryName.toLowerCase().endsWith('pack.png') || e.entryName.toLowerCase().endsWith('icon.png')) && e.header.size < 800000);
                 if (packPng && packPng.header.size < 800000) {
                     meta.iconDataUrl = `data:image/png;base64,${packPng.getData().toString('base64')}`;
                 }
@@ -860,7 +888,7 @@ ipcMain.handle('get-profile-packs', async (event, profileId, packType) => {
                 let version = fileMeta.version || null;
                 if (!version) {
                     const verMatch = cleanName.match(/[-_ ](?:v|r|ver)?([0-9]+(?:\.[0-9]+)+(?:[-_][a-zA-Z0-9]+)?)/i) ||
-                                     cleanName.match(/[-_ ](v?[0-9]+\.[0-9]+)/i);
+                        cleanName.match(/[-_ ](v?[0-9]+\.[0-9]+)/i);
                     if (verMatch) version = verMatch[1];
                 }
 
@@ -1079,7 +1107,7 @@ function saveSessionTick(session) {
         session.lastTickTime = now;
         try {
             fs.writeFileSync(SESSION_FILE, JSON.stringify(session, null, 2), 'utf-8');
-        } catch (_) {}
+        } catch (_) { }
 
         try {
             const freshConfig = loadConfig();
@@ -1173,7 +1201,7 @@ function endSessionTracking(exitCode = 0) {
 
         try {
             if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE);
-        } catch (_) {}
+        } catch (_) { }
 
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('game-stopped');
@@ -1181,9 +1209,23 @@ function endSessionTracking(exitCode = 0) {
                 exitCode,
                 profileId: finishedProfileId
             });
+            if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show();
             mainWindow.focus();
         }
+
+        try {
+            const cfg = loadConfig();
+            if (cfg.enableDiscordRpc !== false) {
+                const activeProfile = (cfg.profiles || []).find(p => p.id === cfg.activeProfileId);
+                discordRpc.updateActivity({
+                    username: cfg.username || 'Hráč',
+                    server: cfg.serverIp || 'mychalsmp.xyz',
+                    profileName: activeProfile ? activeProfile.name : 'Minecraft 26.2',
+                    isPlaying: false
+                });
+            }
+        } catch (_) { }
     }
 }
 
@@ -1194,7 +1236,7 @@ function checkAndResumeActiveSession() {
         if (!raw || !raw.trim()) return false;
         const session = JSON.parse(raw);
         if (!session.pid || !session.profileId) {
-            try { fs.unlinkSync(SESSION_FILE); } catch (_) {}
+            try { fs.unlinkSync(SESSION_FILE); } catch (_) { }
             return false;
         }
 
@@ -1224,7 +1266,7 @@ function checkAndResumeActiveSession() {
                         startTime: session.startTime || Date.now()
                     });
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             return true;
         } else {
@@ -1238,7 +1280,7 @@ function checkAndResumeActiveSession() {
                         exitTime = stat.mtimeMs;
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             const unrecordedSec = Math.max(0, Math.floor((exitTime - (session.lastTickTime || session.startTime)) / 1000));
             const actualUnrecorded = Math.min(unrecordedSec, Math.floor((Date.now() - (session.lastTickTime || session.startTime)) / 1000));
@@ -1257,14 +1299,14 @@ function checkAndResumeActiveSession() {
                     });
                     saveConfig({ profiles: updated });
                     console.log(`[PLAYTIME] Připsán nezaznamenaný čas z offline běhu hry: +${actualUnrecorded}s.`);
-                } catch (_) {}
+                } catch (_) { }
             }
-            try { fs.unlinkSync(SESSION_FILE); } catch (_) {}
+            try { fs.unlinkSync(SESSION_FILE); } catch (_) { }
             return false;
         }
     } catch (e) {
         console.error('[PLAYTIME] Chyba při obnovování relace:', e);
-        try { if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE); } catch (_) {}
+        try { if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE); } catch (_) { }
         return false;
     }
 }
@@ -1277,7 +1319,7 @@ ipcMain.handle('kill-game', () => {
     if (activeSessionData && isProcessAlive(activeSessionData.pid)) {
         try {
             process.kill(activeSessionData.pid);
-        } catch (_) {}
+        } catch (_) { }
     }
     killGame();
     endSessionTracking(0);
@@ -1384,7 +1426,7 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
         const targetDir = launchConfig.baseDir || BASE_DIR;
         ensureOptionsGuiScale(targetDir, 2);
         syncServersDat(targetDir, config.servers || []);
-    } catch (_) {}
+    } catch (_) { }
 
     if (serverIp && (serverIp.includes('mychalsmp.xyz') || serverIp.includes('mychalsmp'))) {
         const probeScan = scanProfileForBlacklistedMods(launchConfig.baseDir);
@@ -1464,7 +1506,7 @@ ipcMain.handle('launch-game', async (event, profileId, serverIp) => {
                                 mainWindow.webContents.send('servers-updated', srvList);
                             }
                         }
-                    } catch (_) {}
+                    } catch (_) { }
                 }
             },
             (exitCode) => {
@@ -2073,7 +2115,10 @@ ipcMain.on('window-maximize', () => {
 });
 
 ipcMain.on('window-close', () => {
-    if (mainWindow) mainWindow.close();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        setupTray();
+        mainWindow.hide();
+    }
 });
 
 // Mod Safety IPC Handlers
@@ -2426,7 +2471,7 @@ ipcMain.handle('save-dragged-skin', async (event, filePath) => {
         const cfg = saveConfig({ customSkinPath: dest });
         try {
             await setupOfflineCustomSkinAndCape(BASE_DIR, cfg, (m) => console.log(m), cfg.version);
-        } catch (_) {}
+        } catch (_) { }
         return { success: true, customSkinPath: dest, skinDataUrl: dataUrl };
     } catch (e) {
         return { success: false, error: e.message };
