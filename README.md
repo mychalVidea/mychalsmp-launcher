@@ -9,7 +9,7 @@ Plná podpora pro **Linux** (Ubuntu/Debian, Fedora, CachyOS, Arch Linux) a **Win
 ## 💎 Hlavní funkce
 
 1. **🚀 1-Click Přímé připojení na server:**
-   - Automatické připojení přímo na herní server `mychalsmp.xyz` (`join.mychalsmp.xyz`) bez nutnosti ručně vyhledávat server v multiplayer seznamu.
+   - Automatické připojení přímo na herní server `mychalsmp.xyz` bez nutnosti ručně vyhledávat server v multiplayer seznamu.
 2. **⚡ Maximální FPS & Optimalizace (Fabric + Sodium):**
    - Integrovaná podpora pro **Sodium / Embeddium**, **Iris Shaders**, **Lithium** a **FerriteCore** pro maximální plynulost a nízkou spotřebu paměti RAM i na slabších počítačích.
 3. **👤 Duální správa účtů:**
