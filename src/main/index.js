@@ -475,12 +475,14 @@ function getCachedModMetadata(jarPath, mtimeMs) {
 
             // 3. Forge / NeoForge mods.toml
             if (!name) {
-                const tomlEntry = zip.getEntry('META-INF/mods.toml');
+                const tomlEntry = zip.getEntry('META-INF/neoforge.mods.toml') || zip.getEntry('META-INF/mods.toml');
                 if (tomlEntry) {
                     try {
                         const txt = tomlEntry.getData().toString('utf8');
                         const mName = txt.match(/displayName\s*=\s*["']([^"']+)["']/);
                         if (mName) name = mName[1];
+                        const mId = txt.match(/modId\s*=\s*["']([^"']+)["']/);
+                        if (mId && !modId) modId = mId[1];
                         const mVer = txt.match(/version\s*=\s*["']([^"']+)["']/);
                         if (mVer && mVer[1] !== '${file.jarVersion}') version = mVer[1];
                         const mLogo = txt.match(/logoFile\s*=\s*["']([^"']+)["']/);

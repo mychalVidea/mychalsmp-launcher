@@ -2918,26 +2918,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
+    function extractVersionParts(v) {
+        if (!v) return [];
+        let s = String(v).trim();
+        s = s.replace(/^v/i, '');
+        let prev;
+        do {
+            prev = s;
+            s = s.replace(/^(?:fabric|forge|neoforge|quilt|mc[0-9.]*)[-_+]/i, '');
+            s = s.replace(/^v/i, '');
+        } while (s !== prev);
+
+        const leftOfPlus = s.split('+')[0].trim();
+        const candidate = /\d/.test(leftOfPlus) ? leftOfPlus : s;
+        const match = candidate.match(/(\d+(?:\.\d+)*)/);
+        if (!match) return [];
+        return match[1].split('.').map(n => parseInt(n, 10) || 0);
+    }
+
     /**
      * Zjistí, zda je vzdálená verze z Modrinthu novější než lokálně nainstalovaná verze v profilu.
      */
     function isModVersionNewer(remoteVer, localVer) {
         if (!remoteVer || !localVer) return false;
-        if (remoteVer === localVer) return false;
+        if (remoteVer.trim().toLowerCase() === localVer.trim().toLowerCase()) return false;
 
-        const clean = (v) => {
-            const raw = (v || '').trim();
-            const withoutPrefix = raw.replace(/^v/i, '').replace(/^mc[0-9.]*[-_]/i, '');
-            const base = withoutPrefix.split('+')[0].split('-')[0].trim();
-            return base;
-        };
+        const rParts = extractVersionParts(remoteVer);
+        const lParts = extractVersionParts(localVer);
 
-        const rClean = clean(remoteVer);
-        const lClean = clean(localVer);
-        if (rClean === lClean) return false;
-
-        const rParts = rClean.split('.').map(n => parseInt(n, 10) || 0);
-        const lParts = lClean.split('.').map(n => parseInt(n, 10) || 0);
+        if (rParts.length === 0 || lParts.length === 0) return false;
 
         for (let i = 0; i < Math.max(rParts.length, lParts.length); i++) {
             const r = rParts[i] || 0;
@@ -2960,7 +2969,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     /**
+     * Získá čistý základ názvu módu / resource packu / shaderu z názvu souboru
+     * bez loaderů (fabric, forge, neoforge, quilt), MC tagů a verzí.
+     */
+    function extractModBaseName(filename) {
+        if (!filename) return '';
+        let base = filename.replace(/\.disabled$/i, '').replace(/\.(jar|zip)$/i, '');
+        let prev;
+        do {
+            prev = base;
+            // 1. Oříznout koncový loader (-fabric, -forge, -neoforge, -quilt)
+            base = base.replace(/[-_+](?:fabric|forge|neoforge|quilt)$/i, '');
+            // 2. Oříznout koncovou verzi, mc tag nebo build tag (-1.5.1+26.2, +1.20.4, _r5.8.1, -mc1.20.4, +edge, -v2.5)
+            base = base.replace(/[-_+](?:(?:mc)?[0-9][0-9._\-+a-zA-Z]*|[vr][0-9][0-9._\-+a-zA-Z]*)$/i, '');
+            // 3. Oříznout loader spojený s verzí (-fabric-1.5.1, _forge_1.20)
+            base = base.replace(/[-_+](?:fabric|forge|neoforge|quilt)[-_+][0-9a-zA-Z._\-+]*$/i, '');
+        } while (base !== prev && base.length > 2);
+        return base;
+    }
+
+    /**
      * Spolehlivě a přesně najde odpovídající nainstalovaný mód, resource pack nebo shader v profilu pro danou položku z katalogu Modrinth.
+     * Striktní porovnávání zabraňuje falešným pozitivům (např. 'Sounds' vs 'Sound Physics Remastered').
      */
     function findInstalledModForCatalog(catalogMod, profileMods) {
         if (!profileMods || profileMods.length === 0 || !catalogMod) return null;
@@ -2974,19 +3004,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const cleanSlug = clean(catSlug);
         const cleanTitle = clean(catTitle);
         const cleanId = clean(catId);
-
-        // Striktní ověření shody názvu souboru s oddělovačem
-        function matchFilenameStrict(file, slug) {
-            if (!file || !slug) return false;
-            const normFile = file.toLowerCase().replace(/\.disabled$/i, '').replace(/\.(jar|zip)$/i, '');
-            if (normFile === slug) return true;
-            const escaped = slug.replace(/[-_]/g, '[-_]').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const pattern = new RegExp('^' + escaped + '([-_+.]|$)', 'i');
-            return pattern.test(normFile);
-        }
+        const cleanProjId = clean(catProjId);
 
         for (const inst of profileMods) {
-            // 0. 100% jistá metadata shoda z .mod_meta.json
+            // 0. 100% jistá metadata shoda z .mod_meta.json (uložená při stažení přes launcher)
             const instMId = (inst.modrinthId || '').toLowerCase().trim();
             const instMSlug = (inst.modrinthSlug || '').toLowerCase().trim();
             if (instMId && (instMId === catId || instMId === catSlug || instMId === catProjId)) {
@@ -3001,48 +3022,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             const instFile = (inst.filename || '').toLowerCase().trim();
             const cleanInstId = clean(instModId);
             const cleanInstName = clean(instName);
-            const cleanInstFile = clean(instFile.replace(/\.disabled$/i, '').replace(/\.(jar|zip)$/i, ''));
 
-            // 1. Přesná shoda normalizovaného ID módu / slug
-            if (cleanSlug && (cleanSlug === cleanInstId || cleanId === cleanInstId)) {
-                return inst;
-            }
-            if (catSlug && (catSlug === instModId || catId === instModId)) {
-                return inst;
-            }
-
-            // 2. Přesná shoda oficiálního názvu
-            if (cleanTitle && cleanTitle === cleanInstName) {
-                return inst;
-            }
-            if (catTitle && catTitle === instName) {
-                return inst;
+            // 1. Shoda podle interního ID módu z deskriptoru (fabric.mod.json / mods.toml / quilt.mod.json)
+            // Např. modId 'sound_physics_remastered' (clean: soundphysicsremastered) vs slug 'sound-physics-remastered'
+            if (cleanInstId) {
+                if (cleanSlug && cleanInstId === cleanSlug) return inst;
+                if (cleanId && cleanInstId === cleanId) return inst;
+                if (cleanProjId && cleanInstId === cleanProjId) return inst;
             }
 
-            // 3. Shoda názvu souboru se striktním oddělovačem na začátku
-            if (catSlug && matchFilenameStrict(instFile, catSlug)) {
-                return inst;
-            }
-            if (cleanSlug && cleanSlug.length >= 4 && matchFilenameStrict(instFile, cleanSlug)) {
-                return inst;
+            // 2. Přesná shoda podle oficiálního názvu
+            // Např. 'Sound Physics Remastered' vs 'Sound Physics Remastered'
+            if (cleanInstName) {
+                if (cleanTitle && cleanInstName === cleanTitle) return inst;
             }
 
-            // 4. Chytrá shoda pro Texture Packy a Shadery (camelCase a verze na konci)
-            // Např. ComplementaryReimagined_r5.8.1.zip odpovídá complementary-reimagined
-            // FreshAnimations_v1.10.5.zip odpovídá fresh-animations
-            // Solas Shader V3.6.zip odpovídá solas-shader
-            // Cursed Fog - V1.0.8.zip odpovídá cursed-fog
-            if (cleanSlug && cleanSlug.length >= 5) {
-                const withoutVer = cleanInstFile.replace(/(?:v|r|ver)?[0-9]+.*$/, '');
-                if (withoutVer === cleanSlug || cleanInstFile.startsWith(cleanSlug)) {
-                    return inst;
-                }
-            }
-            if (cleanTitle && cleanTitle.length >= 5) {
-                const withoutVer = cleanInstFile.replace(/(?:v|r|ver)?[0-9]+.*$/, '');
-                if (withoutVer === cleanTitle || cleanInstFile.startsWith(cleanTitle)) {
-                    return inst;
-                }
+            // 3. Shoda podle kořenového názvu souboru (bez verzí a loaderů)
+            // Např. 'sound-physics-remastered-fabric-1.5.1+26.2.jar' -> 'sound-physics-remastered'
+            // 'sounds-2.5.1+edge+26.2-fabric.jar' -> 'sounds'
+            // 'ComplementaryReimagined_r5.8.1.zip' -> 'ComplementaryReimagined'
+            const fileBase = extractModBaseName(instFile);
+            const cleanFileBase = clean(fileBase);
+
+            if (cleanFileBase) {
+                if (cleanSlug && cleanFileBase === cleanSlug) return inst;
+                if (cleanId && cleanFileBase === cleanId) return inst;
+                if (cleanTitle && cleanFileBase === cleanTitle) return inst;
             }
         }
         return null;

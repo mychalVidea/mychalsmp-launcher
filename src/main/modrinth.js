@@ -312,6 +312,13 @@ async function downloadModOrPack(options, targetDir) {
                     outFilename = `${id}.jar`;
                 }
             }
+            if (oldFilename) {
+                const oldPath = path.join(destDir, oldFilename);
+                try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch (_) {}
+                const oldDisabled = oldPath + '.disabled';
+                try { if (fs.existsSync(oldDisabled)) fs.unlinkSync(oldDisabled); } catch (_) {}
+            }
+
             const destPath = path.join(destDir, outFilename);
             await downloadToFileWithProgress(directUrl, destPath, options.onProgress);
 
@@ -319,6 +326,11 @@ async function downloadModOrPack(options, targetDir) {
             let metaObj = {};
             if (fs.existsSync(metaPath)) {
                 try { metaObj = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (_) {}
+            }
+            if (oldFilename && oldFilename !== outFilename) {
+                delete metaObj[oldFilename];
+                delete metaObj[oldFilename + '.disabled'];
+                delete metaObj[oldFilename.replace(/\.disabled$/i, '')];
             }
             metaObj[outFilename] = {
                 id: id || outFilename,
@@ -446,6 +458,11 @@ async function downloadModOrPack(options, targetDir) {
         let metaObj = {};
         if (fs.existsSync(metaPath)) {
             try { metaObj = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (_) {}
+        }
+        if (oldFilename && oldFilename !== file.filename) {
+            delete metaObj[oldFilename];
+            delete metaObj[oldFilename + '.disabled'];
+            delete metaObj[oldFilename.replace(/\.disabled$/i, '')];
         }
         metaObj[file.filename] = {
             id: id,
