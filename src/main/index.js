@@ -2165,102 +2165,187 @@ ipcMain.handle('restart-launcher', () => {
         const hasPortablePending = portablePending && fs.existsSync(portablePending);
         const hasAsarPending = fs.existsSync(pendingAsar);
 
+        // Kontrola případného instalačního balíčku .exe
+        const pendingInstaller = path.join(resourcesDir, 'installer.pending.exe');
+        const hasInstallerPending = fs.existsSync(pendingInstaller);
+
+        if (hasInstallerPending) {
+            const { spawn } = require('child_process');
+            try {
+                spawn(pendingInstaller, [], { detached: true, stdio: 'ignore' }).unref();
+            } catch (err) {
+                console.error('[UPDATER] Nelze spustit instalátor aktualizace:', err);
+            }
+            app.exit(0);
+            return;
+        }
+
         if (hasAsarPending || hasPortablePending) {
-            const batPath = path.join(os.tmpdir(), `mychalsmp_update_${Date.now()}.bat`);
+            const currentPid = process.pid;
+            const isPortableSwap = hasPortablePending && !hasAsarPending;
+            const targetPath = isPortableSwap ? portableTarget : targetAsar;
+            const pendingPath = isPortableSwap ? portablePending : pendingAsar;
             const exePath = portableTarget || process.execPath;
             const exeDir = path.dirname(exePath);
 
+            const timestamp = Date.now();
+            const ps1Path = path.join(os.tmpdir(), `mychalsmp_update_${timestamp}.ps1`);
+            const batPath = path.join(os.tmpdir(), `mychalsmp_update_${timestamp}.bat`);
+
+            // PowerShell skript: Čeká na ukončení PID a bezpečně atomicky přemístí soubor
+            const escapePs = (str) => (str || '').replace(/'/g, "''");
+            const ps1Lines = [
+                'param()',
+                `$targetPid = ${currentPid}`,
+                `$targetPath = '${escapePs(targetPath)}'`,
+                `$pendingPath = '${escapePs(pendingPath)}'`,
+                `$exePath = '${escapePs(exePath)}'`,
+                `$exeDir = '${escapePs(exeDir)}'`,
+                '',
+                '# 1. Počkáme na úplné ukončení běžícího Electron procesu',
+                'try {',
+                '    $proc = Get-Process -Id $targetPid -ErrorAction SilentlyContinue',
+                '    if ($proc) {',
+                '        $null = $proc.WaitForExit(15000)',
+                '    }',
+                '} catch {}',
+                '',
+                '# Bezpečnostní prodleva pro uvolnění kernel zámků Windows (NTFS)',
+                'Start-Sleep -Milliseconds 800',
+                '',
+                '# 2. Výměna souborů s opakováním (až 30 pokusů, 500ms interval)',
+                '$swapped = $false',
+                'for ($i = 0; $i -lt 30; $i++) {',
+                '    try {',
+                '        if (-not (Test-Path -LiteralPath $pendingPath)) {',
+                '            break',
+                '        }',
+                '        if (Test-Path -LiteralPath $targetPath) {',
+                '            try {',
+                '                Remove-Item -LiteralPath $targetPath -Force -ErrorAction Stop',
+                '            } catch {',
+                '                Start-Sleep -Milliseconds 500',
+                '                continue',
+                '            }',
+                '        }',
+                '        Move-Item -LiteralPath $pendingPath -Destination $targetPath -Force -ErrorAction Stop',
+                '        $swapped = $true',
+                '        break',
+                '    } catch {',
+                '        Start-Sleep -Milliseconds 500',
+                '    }',
+                '}',
+                '',
+                '# Fallback přes .NET File Copy, pokud Move-Item selhal',
+                'if (-not $swapped -and (Test-Path -LiteralPath $pendingPath)) {',
+                '    for ($i = 0; $i -lt 15; $i++) {',
+                '        try {',
+                '            [System.IO.File]::Copy($pendingPath, $targetPath, $true)',
+                '            Remove-Item -LiteralPath $pendingPath -Force -ErrorAction SilentlyContinue',
+                '            $swapped = $true',
+                '            break',
+                '        } catch {',
+                '            Start-Sleep -Milliseconds 500',
+                '        }',
+                '    }',
+                '}',
+                '',
+                '# 3. Spuštění aktualizovaného launcheru',
+                'try {',
+                '    Start-Process -FilePath $exePath -WorkingDirectory $exeDir',
+                '} catch {',
+                '    cmd.exe /c start "" "$exePath"',
+                '}',
+                '',
+                '# Úklid skriptu',
+                'try {',
+                '    Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue',
+                '} catch {}',
+                'exit 0'
+            ];
+            const ps1Content = ps1Lines.join('\r\n') + '\r\n';
+
             // Escapování procent pro bezpečné použití v dávkovém souboru Windows cmd
-            const cleanTarget = targetAsar.replace(/%/g, '%%');
-            const cleanPending = pendingAsar.replace(/%/g, '%%');
+            const cleanTarget = targetPath.replace(/%/g, '%%');
+            const cleanPending = pendingPath.replace(/%/g, '%%');
             const cleanExe = exePath.replace(/%/g, '%%');
             const cleanExeDir = exeDir.replace(/%/g, '%%');
-            const cleanPortableTarget = portableTarget ? portableTarget.replace(/%/g, '%%') : '';
-            const cleanPortablePending = portablePending ? portablePending.replace(/%/g, '%%') : '';
+            const cleanPs1 = ps1Path.replace(/%/g, '%%');
 
             const batLines = [
                 '@echo off',
                 'setlocal EnableExtensions',
                 'chcp 65001 >nul',
                 '',
-                ':: 1. Počkáme 2 sekundy na úplné uzavření procesu Electronu a uvolnění systémových zámků',
-                'timeout /t 2 /nobreak >nul',
-                '',
                 `set "TARGET=${cleanTarget}"`,
                 `set "PENDING=${cleanPending}"`,
                 `set "EXE=${cleanExe}"`,
                 `set "EXE_DIR=${cleanExeDir}"`,
-                `set "HAS_PORTABLE=${hasPortablePending ? '1' : '0'}"`,
-                `set "PORTABLE_TARGET=${cleanPortableTarget}"`,
-                `set "PORTABLE_PENDING=${cleanPortablePending}"`,
+                `set "PID=${currentPid}"`,
+                `set "PS1=${cleanPs1}"`,
                 '',
-                ':: 2. Robustní smyčka pro spolehlivou výměnu souborů (až 30 pokusů, 1 pokus/sec)',
+                ':: 1. Primární spolehlivá metoda: PowerShell skript',
+                'if exist "%PS1%" (',
+                '    powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%PS1%" >nul 2>&1',
+                '    if %ERRORLEVEL% equ 0 (',
+                '        (goto) 2>nul & del "%PS1%" >nul 2>&1',
+                '        (goto) 2>nul & del "%~f0" >nul 2>&1',
+                '        exit /b 0',
+                '    )',
+                ')',
+                '',
+                ':: 2. Záložní CMD řešení pokud byl PowerShell blokován zásadami systému',
+                ':: Čekáme na úplné uzavření procesu PID pomocí tasklist a ping (timeout selhává při skrytém vstupu)',
+                ':wait_proc',
+                'tasklist /fi "PID eq %PID%" 2>nul | findstr "%PID%" >nul',
+                'if %ERRORLEVEL% equ 0 (',
+                '    ping 127.0.0.1 -n 2 >nul',
+                '    goto wait_proc',
+                ')',
+                'ping 127.0.0.1 -n 2 >nul',
+                '',
+                ':: Smyčka pro výměnu souborů (až 30 pokusů, 1s interval přes ping)',
                 'set ATTEMPTS=0',
                 ':swap_loop',
                 'set /a ATTEMPTS+=1',
                 '',
-                'if "%HAS_PORTABLE%"=="1" (',
-                '    if exist "%PORTABLE_TARGET%" (',
-                '        del /f /q "%PORTABLE_TARGET%" >nul 2>&1',
-                '    )',
-                '    if exist "%PORTABLE_PENDING%" (',
-                '        move /y "%PORTABLE_PENDING%" "%PORTABLE_TARGET%" >nul 2>&1',
-                '    )',
-                '    if not exist "%PORTABLE_PENDING%" (',
-                '        if exist "%PORTABLE_TARGET%" (',
-                '            goto launch_app',
-                '        )',
-                '    )',
-                ') else (',
+                'if exist "%PENDING%" (',
                 '    if exist "%TARGET%" (',
                 '        del /f /q "%TARGET%" >nul 2>&1',
                 '    )',
-                '    if exist "%PENDING%" (',
+                '    if not exist "%TARGET%" (',
                 '        move /y "%PENDING%" "%TARGET%" >nul 2>&1',
-                '    )',
-                '    if not exist "%PENDING%" (',
-                '        if exist "%TARGET%" (',
+                '        if not exist "%PENDING%" (',
                 '            goto launch_app',
                 '        )',
+                '    )',
+                '    copy /y "%PENDING%" "%TARGET%" >nul 2>&1',
+                '    if not exist "%PENDING%" (',
+                '        goto launch_app',
                 '    )',
                 ')',
                 '',
                 'if %ATTEMPTS% lss 30 (',
-                '    timeout /t 1 /nobreak >nul',
+                '    ping 127.0.0.1 -n 2 >nul',
                 '    goto swap_loop',
-                ')',
-                '',
-                ':: Záložní fallback řešení: copy /y a del',
-                'if "%HAS_PORTABLE%"=="1" (',
-                '    if exist "%PORTABLE_PENDING%" (',
-                '        copy /y "%PORTABLE_PENDING%" "%PORTABLE_TARGET%" >nul 2>&1',
-                '        if exist "%PORTABLE_TARGET%" (',
-                '            del /f /q "%PORTABLE_PENDING%" >nul 2>&1',
-                '        )',
-                '    )',
-                ') else (',
-                '    if exist "%PENDING%" (',
-                '        copy /y "%PENDING%" "%TARGET%" >nul 2>&1',
-                '        if exist "%TARGET%" (',
-                '            del /f /q "%PENDING%" >nul 2>&1',
-                '        )',
-                '    )',
                 ')',
                 '',
                 ':launch_app',
                 'cd /d "%EXE_DIR%"',
                 'start "" "%EXE%"',
                 '',
-                ':: Samomazání dávkového souboru a čisté ukončení',
+                ':: Samomazání a čisté ukončení',
+                'if exist "%PS1%" del /f /q "%PS1%" >nul 2>&1',
                 '(goto) 2>nul & del "%~f0"',
                 'exit /b 0'
             ];
 
             const batContent = batLines.join('\r\n') + '\r\n';
             try {
+                fs.writeFileSync(ps1Path, ps1Content, 'utf8');
                 fs.writeFileSync(batPath, batContent, 'utf8');
             } catch (err) {
-                console.error('[UPDATER] Nelze zapsat Windows swap dávkový soubor:', err);
+                console.error('[UPDATER] Nelze zapsat Windows swap skripty:', err);
                 app.relaunch();
                 app.exit(0);
                 return;
@@ -2282,11 +2367,18 @@ ipcMain.handle('restart-launcher', () => {
         return;
     }
 
-    let targetExe = path.join(require('os').homedir(), '.local', 'share', 'mychalsmp-launcher', 'mychalsmp-launcher');
+    let targetExe = path.join(require('os').homedir(), '.local', 'share', 'mychalsmp-launcher', 'SMPClient');
+    if (!fs.existsSync(targetExe)) {
+        targetExe = path.join(require('os').homedir(), '.local', 'share', 'mychalsmp-launcher', 'mychalsmp-launcher');
+    }
     if (process.platform === 'linux') {
         const exeDir = path.dirname(process.execPath);
-        if (!exeDir.startsWith('/tmp') && fs.existsSync(path.join(exeDir, 'mychalsmp-launcher'))) {
-            targetExe = path.join(exeDir, 'mychalsmp-launcher');
+        if (!exeDir.startsWith('/tmp')) {
+            if (fs.existsSync(path.join(exeDir, 'SMPClient'))) {
+                targetExe = path.join(exeDir, 'SMPClient');
+            } else if (fs.existsSync(path.join(exeDir, 'mychalsmp-launcher'))) {
+                targetExe = path.join(exeDir, 'mychalsmp-launcher');
+            }
         }
     }
     if (fs.existsSync(targetExe)) {

@@ -1480,7 +1480,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             try {
                 const assets = pendingUpdateData.assets || [];
-                const deltaAsset = assets.find(a => a.name === 'update.asar' || a.name === 'app.asar');
+                const deltaAsset = assets.find(a => a.name === 'update-v2.asar' || a.name === 'update.asar' || a.name === 'app.asar');
                 const tarAsset = assets.find(a => a.name.endsWith('.tar.gz'));
                 const downloadUrl = pendingUpdateData.downloadUrl || (deltaAsset ? deltaAsset.downloadUrl : (tarAsset ? tarAsset.downloadUrl : (assets[0] ? assets[0].downloadUrl : pendingUpdateData.releaseUrl)));
 

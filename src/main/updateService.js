@@ -50,8 +50,8 @@ async function checkForUpdates() {
             size: a.size
         }));
 
-        // Detekce bleskového delta balíčku (update.asar nebo app.asar ~3 MB)
-        const deltaAsset = assets.find(a => a.name === 'update.asar' || a.name === 'app.asar');
+        // Detekce bleskového delta balíčku (update-v2.asar, update.asar nebo app.asar ~3 MB)
+        const deltaAsset = assets.find(a => a.name === 'update-v2.asar' || a.name === 'update.asar' || a.name === 'app.asar');
         const tarAsset = assets.find(a => a.name.endsWith('.tar.gz') && !a.name.includes('blockmap'));
         const winAsset = assets.find(a => a.name.endsWith('.exe') && !a.name.includes('blockmap'));
         const winSetupAsset = assets.find(a => a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup') && !a.name.includes('blockmap'));
@@ -154,7 +154,7 @@ function getResourcesDir() {
     ];
 
     for (const cand of candidates) {
-        if (cand && fs.existsSync(cand) && (fs.existsSync(path.join(cand, 'app.asar')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher.exe')))) {
+        if (cand && fs.existsSync(cand) && (fs.existsSync(path.join(cand, 'app.asar')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher')) || fs.existsSync(path.join(path.dirname(cand), 'mychalsmp-launcher.exe')) || fs.existsSync(path.join(path.dirname(cand), 'SMPClient.exe')) || fs.existsSync(path.join(path.dirname(cand), 'SMPClient')))) {
             return cand;
         }
     }
@@ -415,7 +415,10 @@ async function applyUpdate(assetUrl, onProgress) {
         const syncStats = await syncDirDiffAsync(sourceDir, installDir);
         console.log(`[DIFF UPDATER] Synchronizováno ${syncStats.modified} změněných souborů, ${syncStats.skipped} nezměněných knihoven zachováno.`);
 
-        const targetExe = path.join(installDir, 'mychalsmp-launcher');
+        let targetExe = path.join(installDir, 'SMPClient');
+        if (!fs.existsSync(targetExe)) {
+            targetExe = path.join(installDir, 'mychalsmp-launcher');
+        }
         try { fs.chmodSync(targetExe, 0o755); } catch (e) {}
 
         try {
@@ -494,16 +497,19 @@ async function applyUpdate(assetUrl, onProgress) {
                 message: 'Aktualizace byla úspěšně stažena a bude aplikována při restartu.'
             };
         } else {
-            const { spawn } = require('child_process');
-            spawn(tmpExe, [], { detached: true, stdio: 'ignore' }).unref();
-            setTimeout(() => {
-                app.exit(0);
-            }, 800);
+            const resourcesDir = getResourcesDir();
+            const pendingInstaller = path.join(resourcesDir, 'installer.pending.exe');
+            try {
+                fs.copyFileSync(tmpExe, pendingInstaller);
+                try { fs.unlinkSync(tmpExe); } catch (_) {}
+            } catch (e) {
+                console.warn('[UPDATER] Nelze zkopírovat installer do resources, ponechán v tmp:', e.message);
+            }
             return {
                 success: true,
                 applied: true,
                 isDelta: false,
-                message: 'Instalátor aktualizace byl spuštěn.'
+                message: 'Instalátor aktualizace je připraven a spustí se při restartu launcheru.'
             };
         }
     } else {
