@@ -1,6 +1,6 @@
 {
   "name": "mychalsmp-launcher",
-  "version": "1.5.24",
+  "version": "1.5.26",
   "description": "Oficiální multiplatformní launcher pro síť MYCHAL SMP s optimalizovaným klientem pro Windows 11 a Linux",
   "main": "src/main/index.js",
   "scripts": {
@@ -16,6 +16,7 @@
   "author": "mychalVidea <admin@mychalsmp.xyz>",
   "license": "MIT",
   "dependencies": {
+    "adm-zip": "^0.5.18",
     "minecraft-launcher-core": "^3.18.2",
     "minecraft-server-util": "^5.4.4",
     "msmc": "^5.0.5",

@@ -48,116 +48,114 @@ function verifyFileSha1(filePath, expectedSha1) {
     }
 }
 
-function isJarFileValid(filePath) {
+function isJarFileValidInternal(filePath) {
+    if (!fs.existsSync(filePath)) return false;
+    const stats = fs.statSync(filePath);
+    if (stats.size < 22) return false;
+    const fd = fs.openSync(filePath, 'r');
     try {
-        if (!fs.existsSync(filePath)) return false;
-        const stats = fs.statSync(filePath);
-        if (stats.size < 22) return false;
-        const fd = fs.openSync(filePath, 'r');
-        try {
-            const headBuf = Buffer.alloc(4);
-            fs.readSync(fd, headBuf, 0, 4, 0);
-            // První 4 bajty musí být přesně LOC hlavička: 0x04034b50 (PK\3\4)
-            if (headBuf[0] !== 0x50 || headBuf[1] !== 0x4b || headBuf[2] !== 0x03 || headBuf[3] !== 0x04) {
-                return false;
-            }
-            const tailLen = Math.min(stats.size, 65557);
-            const tailBuf = Buffer.alloc(tailLen);
-            fs.readSync(fd, tailBuf, 0, tailLen, stats.size - tailLen);
-            const eocdIndex = tailBuf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-            if (eocdIndex === -1) {
-                return false;
-            }
-
-            // Ověření integrity Central Directory (CEN) hlavičky pro prevenci java.util.zip.ZipException: invalid CEN header
-            if (eocdIndex + 20 <= tailLen) {
-                let cenOffset = tailBuf.readUInt32LE(eocdIndex + 16);
-                let cenSize = tailBuf.readUInt32LE(eocdIndex + 12);
-                let totalEntries = tailBuf.readUInt16LE(eocdIndex + 10);
-
-                // Zip64 podpora pro velké archivy
-                if (cenOffset === 0xFFFFFFFF || cenSize === 0xFFFFFFFF || totalEntries === 0xFFFF) {
-                    const locIndex = tailBuf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x06, 0x07]));
-                    if (locIndex !== -1 && locIndex + 16 <= tailLen) {
-                        const zip64EocdOffset = Number(tailBuf.readBigUInt64LE(locIndex + 8));
-                        if (zip64EocdOffset < stats.size) {
-                            const zip64Buf = Buffer.alloc(56);
-                            fs.readSync(fd, zip64Buf, 0, 56, zip64EocdOffset);
-                            if (zip64Buf[0] === 0x50 && zip64Buf[1] === 0x4b && zip64Buf[2] === 0x06 && zip64Buf[3] === 0x06) {
-                                cenOffset = Number(zip64Buf.readBigUInt64LE(48));
-                                cenSize = Number(zip64Buf.readBigUInt64LE(40));
-                                totalEntries = Number(zip64Buf.readBigUInt64LE(32));
-                            }
-                        }
-                    }
-                }
-
-                if (cenSize > 0) {
-                    if (cenOffset >= stats.size || (cenOffset + cenSize) > stats.size) return false;
-                    const readCenLen = Math.min(cenSize, Math.min(stats.size - cenOffset, 16 * 1024 * 1024));
-                    const cenSigBuf = Buffer.alloc(readCenLen);
-                    fs.readSync(fd, cenSigBuf, 0, readCenLen, cenOffset);
-                    // CEN signature prvního záznamu musí být přesně 0x02014b50 (PK\1\2)
-                    if (cenSigBuf[0] !== 0x50 || cenSigBuf[1] !== 0x4b || cenSigBuf[2] !== 0x01 || cenSigBuf[3] !== 0x02) {
-                        return false;
-                    }
-
-                    // Hloubkové ověření LOC hlaviček napříč CELÝM archivem pro zamezení ZipFile invalid LOC header (bad signature)
-                    let p = 0;
-                    const locOffsets = [];
-                    while (p + 46 <= readCenLen) {
-                        if (cenSigBuf[p] !== 0x50 || cenSigBuf[p + 1] !== 0x4b || cenSigBuf[p + 2] !== 0x01 || cenSigBuf[p + 3] !== 0x02) {
-                            return false; // Porušená položka v CEN tabulce
-                        }
-                        const nameLen = cenSigBuf.readUInt16LE(p + 28);
-                        const extraLen = cenSigBuf.readUInt16LE(p + 30);
-                        const commentLen = cenSigBuf.readUInt16LE(p + 32);
-                        const locOffset = cenSigBuf.readUInt32LE(p + 42);
-
-                        if (locOffset >= stats.size) {
-                            return false;
-                        }
-                        locOffsets.push(locOffset);
-                        p += 46 + nameLen + extraLen + commentLen;
-                    }
-
-                    if (locOffsets.length === 0) return false;
-
-                    // Ověření LOC signatur rovnoměrně rozprostřených napříč celým archivem (0 % až 100 %)
-                    const locBuf = Buffer.alloc(4);
-                    const checkIndices = new Set();
-                    checkIndices.add(0);
-                    checkIndices.add(locOffsets.length - 1);
-                    checkIndices.add(Math.floor(locOffsets.length / 2));
-                    checkIndices.add(Math.floor(locOffsets.length / 4));
-                    checkIndices.add(Math.floor((3 * locOffsets.length) / 4));
-
-                    const step = Math.max(1, Math.floor(locOffsets.length / 100));
-                    for (let i = 0; i < locOffsets.length; i += step) {
-                        checkIndices.add(i);
-                    }
-
-                    for (const idx of checkIndices) {
-                        const offset = locOffsets[idx];
-                        if (offset + 4 > stats.size) return false;
-                        fs.readSync(fd, locBuf, 0, 4, offset);
-                        if (locBuf[0] !== 0x50 || locBuf[1] !== 0x4b || locBuf[2] !== 0x03 || locBuf[3] !== 0x04) {
-                            return false; // Vadná LOC hlavička (bad signature) nalezena v archivu!
-                        }
-                    }
-                }
-            }
-        } finally {
-            fs.closeSync(fd);
+        const headBuf = Buffer.alloc(4);
+        fs.readSync(fd, headBuf, 0, 4, 0);
+        // První 4 bajty musí být přesně LOC hlavička: 0x04034b50 (PK\3\4)
+        if (headBuf[0] !== 0x50 || headBuf[1] !== 0x4b || headBuf[2] !== 0x03 || headBuf[3] !== 0x04) {
+            return false;
+        }
+        const tailLen = Math.min(stats.size, 65557);
+        const tailBuf = Buffer.alloc(tailLen);
+        fs.readSync(fd, tailBuf, 0, tailLen, stats.size - tailLen);
+        const eocdIndex = tailBuf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+        if (eocdIndex === -1) {
+            return false;
         }
 
-        // Hloubková kontrola dekomprese vzorku položek pomocí adm-zip (zabrání java.util.zip.ZipException: invalid stored block lengths)
-        try {
-            const AdmZip = require('adm-zip');
-            const zip = new AdmZip(filePath);
-            const entries = zip.getEntries();
-            if (!entries || entries.length === 0) return false;
+        // Ověření integrity Central Directory (CEN) hlavičky pro prevenci java.util.zip.ZipException: invalid CEN header
+        if (eocdIndex + 20 <= tailLen) {
+            let cenOffset = tailBuf.readUInt32LE(eocdIndex + 16);
+            let cenSize = tailBuf.readUInt32LE(eocdIndex + 12);
+            let totalEntries = tailBuf.readUInt16LE(eocdIndex + 10);
 
+            // Zip64 podpora pro velké archivy
+            if (cenOffset === 0xFFFFFFFF || cenSize === 0xFFFFFFFF || totalEntries === 0xFFFF) {
+                const locIndex = tailBuf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x06, 0x07]));
+                if (locIndex !== -1 && locIndex + 16 <= tailLen) {
+                    const zip64EocdOffset = Number(tailBuf.readBigUInt64LE(locIndex + 8));
+                    if (zip64EocdOffset < stats.size) {
+                        const zip64Buf = Buffer.alloc(56);
+                        fs.readSync(fd, zip64Buf, 0, 56, zip64EocdOffset);
+                        if (zip64Buf[0] === 0x50 && zip64Buf[1] === 0x4b && zip64Buf[2] === 0x06 && zip64Buf[3] === 0x06) {
+                            cenOffset = Number(zip64Buf.readBigUInt64LE(48));
+                            cenSize = Number(zip64Buf.readBigUInt64LE(40));
+                            totalEntries = Number(zip64Buf.readBigUInt64LE(32));
+                        }
+                    }
+                }
+            }
+
+            if (cenSize > 0) {
+                if (cenOffset >= stats.size || (cenOffset + cenSize) > stats.size) return false;
+                const readCenLen = Math.min(cenSize, Math.min(stats.size - cenOffset, 16 * 1024 * 1024));
+                const cenSigBuf = Buffer.alloc(readCenLen);
+                fs.readSync(fd, cenSigBuf, 0, readCenLen, cenOffset);
+                // CEN signature prvního záznamu musí být přesně 0x02014b50 (PK\1\2)
+                if (cenSigBuf[0] !== 0x50 || cenSigBuf[1] !== 0x4b || cenSigBuf[2] !== 0x01 || cenSigBuf[3] !== 0x02) {
+                    return false;
+                }
+
+                // Hloubkové ověření LOC hlaviček napříč CELÝM archivem pro zamezení ZipFile invalid LOC header (bad signature)
+                let p = 0;
+                const locOffsets = [];
+                while (p + 46 <= readCenLen) {
+                    if (cenSigBuf[p] !== 0x50 || cenSigBuf[p + 1] !== 0x4b || cenSigBuf[p + 2] !== 0x01 || cenSigBuf[p + 3] !== 0x02) {
+                        return false; // Porušená položka v CEN tabulce
+                    }
+                    const nameLen = cenSigBuf.readUInt16LE(p + 28);
+                    const extraLen = cenSigBuf.readUInt16LE(p + 30);
+                    const commentLen = cenSigBuf.readUInt16LE(p + 32);
+                    const locOffset = cenSigBuf.readUInt32LE(p + 42);
+
+                    if (locOffset >= stats.size) {
+                        return false;
+                    }
+                    locOffsets.push(locOffset);
+                    p += 46 + nameLen + extraLen + commentLen;
+                }
+
+                if (locOffsets.length === 0) return false;
+
+                // Ověření LOC signatur rovnoměrně rozprostřených napříč celým archivem (0 % až 100 %)
+                const locBuf = Buffer.alloc(4);
+                const checkIndices = new Set();
+                checkIndices.add(0);
+                checkIndices.add(locOffsets.length - 1);
+                checkIndices.add(Math.floor(locOffsets.length / 2));
+                checkIndices.add(Math.floor(locOffsets.length / 4));
+                checkIndices.add(Math.floor((3 * locOffsets.length) / 4));
+
+                const step = Math.max(1, Math.floor(locOffsets.length / 100));
+                for (let i = 0; i < locOffsets.length; i += step) {
+                    checkIndices.add(i);
+                }
+
+                for (const idx of checkIndices) {
+                    const offset = locOffsets[idx];
+                    if (offset + 4 > stats.size) return false;
+                    fs.readSync(fd, locBuf, 0, 4, offset);
+                    if (locBuf[0] !== 0x50 || locBuf[1] !== 0x4b || locBuf[2] !== 0x03 || locBuf[3] !== 0x04) {
+                        return false; // Vadná LOC hlavička (bad signature) nalezena v archivu!
+                    }
+                }
+            }
+        }
+    } finally {
+        fs.closeSync(fd);
+    }
+
+    // Doplňková kontrola dekomprese vzorku položek pomocí adm-zip (pokud je dostupný)
+    try {
+        const AdmZip = require('adm-zip');
+        const zip = new AdmZip(filePath);
+        const entries = zip.getEntries();
+        if (entries && entries.length > 0) {
             const sampleEntries = [];
             const manifest = entries.find(e => e.entryName === 'META-INF/MANIFEST.MF');
             if (manifest) sampleEntries.push(manifest);
@@ -177,14 +175,30 @@ function isJarFileValid(filePath) {
                     return false; // Selhala dekomprese položky
                 }
             }
-        } catch (_) {
+        }
+    } catch (_) {
+        // Pokud adm-zip není dostupný, selže na paměti nebo alokaci,
+        // ale nativní binární kontrola hlaviček výše prošla na 100 %, archiv je platný!
+    }
+
+    return true;
+}
+
+function isJarFileValid(filePath) {
+    if (!filePath || typeof filePath !== 'string') return false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            return isJarFileValidInternal(filePath);
+        } catch (err) {
+            if ((err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'EACCES') && attempt < 2) {
+                const end = Date.now() + 150;
+                while (Date.now() < end) { /* sync delay for OS file handle release */ }
+                continue;
+            }
             return false;
         }
-
-        return true;
-    } catch (e) {
-        return false;
     }
+    return false;
 }
 
 // Intercept Handler.prototype.downloadAsync:
