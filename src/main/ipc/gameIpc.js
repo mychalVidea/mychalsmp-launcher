@@ -268,6 +268,8 @@ function registerGameIpc({ getMainWindow, setupTray, updateTrayMenu }) {
         }
 
         const recentGameLogs = [];
+        const criticalErrorLogs = [];
+        let errorCaptureRemaining = 0;
         const gameSessionStart = Date.now();
 
         setImmediate(() => {
@@ -306,6 +308,19 @@ function registerGameIpc({ getMainWindow, setupTray, updateTrayMenu }) {
                 (logLine) => {
                     recentGameLogs.push(logLine);
                     if (recentGameLogs.length > 200) recentGameLogs.shift();
+
+                    // Ochrana kritických chybových řádků před přemazáním resource reloadem
+                    const isErrLine = logLine.includes('/ERROR') || logLine.includes('Exception') || logLine.includes('Error:') || logLine.includes('\tat ') || logLine.includes('Caused by:');
+                    if (isErrLine) {
+                        criticalErrorLogs.push(logLine);
+                        if (criticalErrorLogs.length > 400) criticalErrorLogs.shift();
+                        errorCaptureRemaining = 35; // Zachytit i následujících 35 řádků stacktrace
+                    } else if (errorCaptureRemaining > 0) {
+                        criticalErrorLogs.push(logLine);
+                        if (criticalErrorLogs.length > 400) criticalErrorLogs.shift();
+                        errorCaptureRemaining--;
+                    }
+
                     if (win && !win.isDestroyed()) {
                         win.webContents.send('launch-log', logLine);
                     }
@@ -470,7 +485,10 @@ function registerGameIpc({ getMainWindow, setupTray, updateTrayMenu }) {
                         }
 
                         try {
-                            const crashData = await analyzeCrash(launchConfig.baseDir, exitCode, recentGameLogs, {
+                            const combinedLogs = criticalErrorLogs.length > 0
+                                ? [...criticalErrorLogs, ...recentGameLogs]
+                                : recentGameLogs;
+                            const crashData = await analyzeCrash(launchConfig.baseDir, exitCode, combinedLogs, {
                                 ...launchConfig,
                                 intentionalStop: wasTerminationIntentional()
                             });

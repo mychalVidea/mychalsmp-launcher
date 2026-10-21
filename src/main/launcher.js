@@ -3638,11 +3638,15 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             if (Array.isArray(manifestJvm)) {
                 for (const arg of manifestJvm) {
                     if (typeof arg === 'string') {
-                        const trimmedArg = arg.trim();
+                        const trimmedArg = arg.trim().replaceAll('${natives_directory}', nativesExtractDir);
                         if (!trimmedArg.startsWith('-cp') && !trimmedArg.startsWith('${classpath}') &&
                             !trimmedArg.startsWith('-Djava.library.path') && !trimmedArg.startsWith('-Dminecraft.launcher') &&
                             !trimmedArg.startsWith('-DFabricMcEmu')) {
-                            if (!jvmArgs.includes(trimmedArg)) {
+                            const propPrefix = (trimmedArg.startsWith('-D') && trimmedArg.includes('='))
+                                ? trimmedArg.slice(0, trimmedArg.indexOf('=') + 1)
+                                : null;
+                            const alreadyHasProp = propPrefix && jvmArgs.some(a => typeof a === 'string' && a.startsWith(propPrefix));
+                            if (!alreadyHasProp && !jvmArgs.includes(trimmedArg)) {
                                 jvmArgs.push(trimmedArg);
                             }
                         }
@@ -3819,6 +3823,8 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
         ];
         for (const optPath of optPaths) {
             if (fs.existsSync(optPath)) {
+                let optText = fs.readFileSync(optPath, 'utf8');
+                let changed = false;
                 const targetBackend = config.graphicsBackend || 'default';
                 if (optText.includes('preferredGraphicsBackend:')) {
                     optText = optText.replace(/preferredGraphicsBackend:"[^"]*"/g, `preferredGraphicsBackend:"${targetBackend}"`);

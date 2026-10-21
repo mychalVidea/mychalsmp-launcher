@@ -76,15 +76,15 @@ function findLatestCrashReport(gameDir) {
 /**
  * Reads the tail of latest.log
  */
-function readLatestLogTail(gameDir, maxLines = 300) {
+function readLatestLogTail(gameDir, maxLines = 600) {
     if (!gameDir || typeof gameDir !== 'string') return '';
     try {
         const logPath = path.join(gameDir, 'logs', 'latest.log');
         if (!fs.existsSync(logPath)) return '';
 
         const stat = fs.statSync(logPath);
-        // Read up to last 256KB
-        const readSize = Math.min(stat.size, 262144);
+        // Read up to last 512KB
+        const readSize = Math.min(stat.size, 524288);
         const buffer = Buffer.alloc(readSize);
         const fd = fs.openSync(logPath, 'r');
         fs.readSync(fd, buffer, 0, readSize, stat.size - readSize);
@@ -483,6 +483,7 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
         /Mod '[^']+' \([^)]+\) is incompatible with mod/i.test(combinedText) ||
         /Could not execute entrypoint stage '[^']+' due to errors, provided by '[^']+'/i.test(combinedText) ||
         /in\s+\[[a-zA-Z0-9_\-]+\.mixins\.json/i.test(combinedText) ||
+        /(?:handler|wrapMethod|wrapOperation|modify\w*|redirect|constant)\$[a-z0-9]+\$[a-zA-Z0-9_\-]+\$/i.test(combinedText) ||
         /IncompatibleModException/i.test(combinedText);
 
     if (!isIncompatible) {
@@ -571,6 +572,27 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
                 id,
                 reason: 'kritická chyba v Mixin transformaci kódu hry'
             });
+        }
+    }
+
+    // 6. Runtime Fabric Mixin handler ve stacktracu (např. handler$edd000$spatial-gui$spatialGUI$beforeGuiRender)
+    if (/Unreported exception thrown|emergencySaveAndCrash|---- Minecraft Crash Report ----|Failed to handle packet/i.test(combinedText)) {
+        const runtimeMixinRegex = /(?:handler|wrapMethod|wrapOperation|modify\w*|redirect|constant)\$[a-z0-9]+\$([a-zA-Z0-9_\-]+)\$/gi;
+        while ((m = runtimeMixinRegex.exec(combinedText)) !== null) {
+            const rawId = m[1];
+            const idLower = rawId.toLowerCase();
+            if (!['minecraft', 'fabric', 'fabricloader', 'mixinextras'].includes(idLower) &&
+                !idLower.startsWith('fabric-') &&
+                !idLower.startsWith('fabric_') &&
+                !PROTECTED_CORE_MODS.has(idLower) &&
+                !culprits.some(c => c.id.toLowerCase() === idLower)) {
+                culprits.push({
+                    name: rawId,
+                    id: rawId,
+                    reason: 'runtime pád (NullPointerException / Mixin hook) během běhu hry'
+                });
+                break; // Bereme pouze nejvyšší Mixin frame na vrcholu stacktracu (skutečného viníka), ne nižší wrappery jako dynamic_fps
+            }
         }
     }
 
@@ -683,6 +705,13 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
         const formattedIdx = combinedText.indexOf('FormattedException:');
         if (formattedIdx !== -1) {
             excerpt = combinedText.substring(formattedIdx, formattedIdx + 900).trim();
+        } else {
+            const mixinMatch = combinedText.match(/(?:handler|wrapMethod|wrapOperation|modify\w*|redirect|constant)\$[a-z0-9]+\$[a-zA-Z0-9_\-]+\$/);
+            if (mixinMatch) {
+                const mixinIdx = mixinMatch.index;
+                const start = Math.max(0, mixinIdx - 300);
+                excerpt = combinedText.substring(start, start + 900).trim();
+            }
         }
     }
 
@@ -1005,27 +1034,26 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
         } else {
             const culpritNames = incompResult.culprits.map(c => c.name || c.id).join(', ');
             const filesToDisable = incompResult.culprits.map(c => c.matchedFile).filter(Boolean);
-            return {
-                hasCrash: true,
-                exitCode,
-                reportPath,
-                fixed: false,
-                title: 'Nekompatibilní modifikace',
-                severity: 'critical',
-                description: `V profilu byl nalezen nekompatibilní mód: ${culpritNames}. Vyžaduje jinou verzi Minecraftu nebo jiný zavaděč.`,
-                recommendation: 'Deaktivace problematického módu pro bezproblémové spuštění.',
-                logExcerpt: incompResult.logExcerpt || logExcerpt,
-                autoFix: filesToDisable.length > 0 ? {
-                    id: 'DISABLE_INCOMPATIBLE_MODS',
-                    files: filesToDisable,
-                    label: `Deaktivovat mód (${culpritNames})`,
-                    description: 'Přejmenuje problematický mód na .disabled pro bezpečné spuštění.'
-                } : {
-                    id: 'OPEN_MODS_DIR',
-                    label: 'Otevřít složku módů',
-                    description: 'Otevře složku mods pro správu souborů.'
-                }
-            };
+                const targetFiles = filesToDisable.length > 0
+                    ? filesToDisable
+                    : incompResult.culprits.map(c => `${c.id}.jar`);
+                return {
+                    hasCrash: true,
+                    exitCode,
+                    reportPath,
+                    fixed: false,
+                    title: 'Nekompatibilní modifikace',
+                    severity: 'critical',
+                    description: `V profilu byl nalezen nekompatibilní mód: ${culpritNames}. Vyžaduje jinou verzi Minecraftu nebo jiný zavaděč.`,
+                    recommendation: 'Deaktivace problematického módu pro bezproblémové spuštění.',
+                    logExcerpt: incompResult.logExcerpt || logExcerpt,
+                    autoFix: {
+                        id: 'DISABLE_INCOMPATIBLE_MODS',
+                        files: targetFiles,
+                        label: `Deaktivovat mód (${culpritNames})`,
+                        description: 'Přejmenuje problematický mód na .disabled pro bezpečné spuštění.'
+                    }
+                };
         }
     }
 
@@ -1356,6 +1384,52 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
             recommendation: 'Zkontroluj složku mods a dočasně zakaž tuto modifikaci přejmenováním na .disabled.',
             logExcerpt,
             autoFix: {
+                id: 'OPEN_MODS_DIR',
+                label: '📂 Otevřít složku mods',
+                description: 'Otevře složku mods pro správu souborů.'
+            }
+        };
+    }
+
+    // ── Diagnostic Rule 8b: Mixin Transformation / Injection Conflict ────────
+    if (
+        /MixinApplyError/i.test(combinedText) ||
+        /MixinTransformerError/i.test(combinedText) ||
+        /InjectionError/i.test(combinedText) ||
+        /Critical injection failure/i.test(combinedText) ||
+        (/(?:handler|wrapMethod|wrapOperation|modify\w*|redirect|constant)\$[a-z0-9]+\$([a-zA-Z0-9_\-]+)\$/i.test(combinedText) &&
+            /NullPointerException|Unreported exception thrown|emergencySaveAndCrash/i.test(combinedText))
+    ) {
+        let culpritMod = null;
+        const modMatch =
+            combinedText.match(/from mod\s+([a-zA-Z0-9_\-]+)/i) ||
+            combinedText.match(/in\s+([a-zA-Z0-9_\-]+)\.mixins\.json/i) ||
+            combinedText.match(/mixins\.([a-zA-Z0-9_\-]+)\.json/i) ||
+            combinedText.match(/(?:handler|wrapMethod|wrapOperation|modify\w*|redirect|constant)\$[a-z0-9]+\$([a-zA-Z0-9_\-]+)\$/i);
+        if (modMatch && modMatch[1]) {
+            culpritMod = modMatch[1];
+        }
+
+        const culpritLabel = culpritMod ? `: ${culpritMod}` : '';
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: `Kritická chyba Mixin injekce${culpritLabel}`,
+            severity: 'critical',
+            description: culpritMod
+                ? `Modifikace "${culpritMod}" selhala při úpravě herního kódu za běhu nebo způsobila fatální výjimku v Mixin hooku.`
+                : 'Některá z modifikací selhala při vstřikování kódu do Minecraftu (Mixin injection failure).',
+            recommendation: culpritMod
+                ? `Deaktivuj nebo aktualizuj modifikaci "${culpritMod}" v herním profilu.`
+                : 'Zkontroluj herní log a vyřaď problematické modifikace.',
+            logExcerpt: extractRelevantStack(combinedText, /(?:handler\$|wrapMethod|wrapOperation|MixinApplyError|InjectionError|emergencySaveAndCrash)/i) || logExcerpt,
+            autoFix: culpritMod ? {
+                id: 'DISABLE_INCOMPATIBLE_MODS',
+                files: [`${culpritMod}.jar`],
+                label: `Deaktivovat mód (${culpritMod})`,
+                description: `Přejmenuje ${culpritMod}.jar na .disabled pro bezpečné spuštění.`
+            } : {
                 id: 'OPEN_MODS_DIR',
                 label: '📂 Otevřít složku mods',
                 description: 'Otevře složku mods pro správu souborů.'
