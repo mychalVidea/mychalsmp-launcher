@@ -59,8 +59,8 @@ function isJarFileValid(filePath) {
             // Ověření integrity Central Directory (CEN) hlavičky pro prevenci java.util.zip.ZipException: invalid CEN header
             if (eocdIndex + 20 <= tailLen) {
                 let cenOffset = tailBuf.readUInt32LE(eocdIndex + 16);
-                const cenSize = tailBuf.readUInt32LE(eocdIndex + 12);
-                const totalEntries = tailBuf.readUInt16LE(eocdIndex + 10);
+                let cenSize = tailBuf.readUInt32LE(eocdIndex + 12);
+                let totalEntries = tailBuf.readUInt16LE(eocdIndex + 10);
 
                 // Zip64 podpora pro velké archivy
                 if (cenOffset === 0xFFFFFFFF || cenSize === 0xFFFFFFFF || totalEntries === 0xFFFF) {
@@ -72,14 +72,16 @@ function isJarFileValid(filePath) {
                             fs.readSync(fd, zip64Buf, 0, 56, zip64EocdOffset);
                             if (zip64Buf[0] === 0x50 && zip64Buf[1] === 0x4b && zip64Buf[2] === 0x06 && zip64Buf[3] === 0x06) {
                                 cenOffset = Number(zip64Buf.readBigUInt64LE(48));
+                                cenSize = Number(zip64Buf.readBigUInt64LE(40));
+                                totalEntries = Number(zip64Buf.readBigUInt64LE(32));
                             }
                         }
                     }
                 }
 
                 if (cenSize > 0) {
-                    if (cenOffset >= stats.size) return false;
-                    const readCenLen = Math.min(cenSize, 1024 * 1024);
+                    if (cenOffset >= stats.size || (cenOffset + cenSize) > stats.size) return false;
+                    const readCenLen = Math.min(cenSize, Math.min(stats.size - cenOffset, 16 * 1024 * 1024));
                     const cenSigBuf = Buffer.alloc(readCenLen);
                     fs.readSync(fd, cenSigBuf, 0, readCenLen, cenOffset);
                     // CEN signature prvního záznamu musí být přesně 0x02014b50 (PK\1\2)
@@ -87,28 +89,48 @@ function isJarFileValid(filePath) {
                         return false;
                     }
 
-                    // Hloubkové ověření vzorku LOC hlaviček napříč archivem pro prevenci ZipFile invalid LOC header (bad signature)
+                    // Hloubkové ověření LOC hlaviček napříč CELÝM archivem pro zamezení ZipFile invalid LOC header (bad signature)
                     let p = 0;
-                    let checkedLocs = 0;
-                    const locBuf = Buffer.alloc(4);
-                    while (p + 46 <= readCenLen && checkedLocs < 30) {
+                    const locOffsets = [];
+                    while (p + 46 <= readCenLen) {
                         if (cenSigBuf[p] !== 0x50 || cenSigBuf[p + 1] !== 0x4b || cenSigBuf[p + 2] !== 0x01 || cenSigBuf[p + 3] !== 0x02) {
-                            break;
+                            return false; // Porušená položka v CEN tabulce
                         }
                         const nameLen = cenSigBuf.readUInt16LE(p + 28);
                         const extraLen = cenSigBuf.readUInt16LE(p + 30);
                         const commentLen = cenSigBuf.readUInt16LE(p + 32);
                         const locOffset = cenSigBuf.readUInt32LE(p + 42);
 
-                        if (locOffset < stats.size && locOffset !== 0xFFFFFFFF) {
-                            fs.readSync(fd, locBuf, 0, 4, locOffset);
-                            if (locBuf[0] !== 0x50 || locBuf[1] !== 0x4b || locBuf[2] !== 0x03 || locBuf[3] !== 0x04) {
-                                return false; // Nalezena vadná LOC hlavička -> soubor je poškozený!
-                            }
-                            checkedLocs++;
+                        if (locOffset >= stats.size) {
+                            return false;
                         }
-                        const entrySize = 46 + nameLen + extraLen + commentLen;
-                        p += (checkedLocs === 1) ? entrySize : (entrySize * 8);
+                        locOffsets.push(locOffset);
+                        p += 46 + nameLen + extraLen + commentLen;
+                    }
+
+                    if (locOffsets.length === 0) return false;
+
+                    // Ověření LOC signatur rovnoměrně rozprostřených napříč celým archivem (0 % až 100 %)
+                    const locBuf = Buffer.alloc(4);
+                    const checkIndices = new Set();
+                    checkIndices.add(0);
+                    checkIndices.add(locOffsets.length - 1);
+                    checkIndices.add(Math.floor(locOffsets.length / 2));
+                    checkIndices.add(Math.floor(locOffsets.length / 4));
+                    checkIndices.add(Math.floor((3 * locOffsets.length) / 4));
+
+                    const step = Math.max(1, Math.floor(locOffsets.length / 100));
+                    for (let i = 0; i < locOffsets.length; i += step) {
+                        checkIndices.add(i);
+                    }
+
+                    for (const idx of checkIndices) {
+                        const offset = locOffsets[idx];
+                        if (offset + 4 > stats.size) return false;
+                        fs.readSync(fd, locBuf, 0, 4, offset);
+                        if (locBuf[0] !== 0x50 || locBuf[1] !== 0x4b || locBuf[2] !== 0x03 || locBuf[3] !== 0x04) {
+                            return false; // Vadná LOC hlavička (bad signature) nalezena v archivu!
+                        }
                     }
                 }
             }
@@ -116,12 +138,32 @@ function isJarFileValid(filePath) {
             fs.closeSync(fd);
         }
 
-        // Hloubková kontrola struktury a čitelnosti pomocí adm-zip (zabrání java.util.zip.ZipException)
+        // Hloubková kontrola dekomprese vzorku položek pomocí adm-zip (zabrání java.util.zip.ZipException: invalid stored block lengths)
         try {
             const AdmZip = require('adm-zip');
             const zip = new AdmZip(filePath);
             const entries = zip.getEntries();
             if (!entries || entries.length === 0) return false;
+
+            const sampleEntries = [];
+            const manifest = entries.find(e => e.entryName === 'META-INF/MANIFEST.MF');
+            if (manifest) sampleEntries.push(manifest);
+            const fabricJson = entries.find(e => e.entryName === 'fabric.mod.json');
+            if (fabricJson) sampleEntries.push(fabricJson);
+
+            const nonDirEntries = entries.filter(e => !e.isDirectory);
+            if (nonDirEntries.length > 0) {
+                sampleEntries.push(nonDirEntries[0]);
+                sampleEntries.push(nonDirEntries[Math.floor(nonDirEntries.length / 2)]);
+                sampleEntries.push(nonDirEntries[nonDirEntries.length - 1]);
+            }
+
+            for (const entry of sampleEntries) {
+                const data = zip.readFile(entry);
+                if (data === null && entry.header && entry.header.size > 0) {
+                    return false; // Selhala dekomprese položky
+                }
+            }
         } catch (_) {
             return false;
         }
@@ -292,6 +334,35 @@ Client.prototype.startMinecraft = function (launchArguments) {
         return null;
     }
     try {
+        if (Array.isArray(launchArguments)) {
+            const centralRoot = this.options?.overrides?.cwd || this.options?.root || path.join(os.homedir(), '.mychalsmp');
+            const targetVer = String(this.version?.id || this.options?.version?.number || '26.2');
+            const resolvedNatives = path.join(centralRoot, 'natives_extract', targetVer);
+
+            // 1. Nahradit případné neexpandované šablony ${natives_directory} z MCLC
+            launchArguments = launchArguments.map(arg => {
+                if (typeof arg === 'string' && arg.includes('${natives_directory}')) {
+                    return arg.replaceAll('${natives_directory}', resolvedNatives);
+                }
+                return arg;
+            });
+
+            // 2. Deduplikace systémových vlastností (-D), aby pozdější neexpandované či duplicitní parametry nepřepisovaly platné
+            const seenPropKeys = new Set();
+            launchArguments = launchArguments.filter(arg => {
+                if (typeof arg === 'string' && arg.startsWith('-D')) {
+                    const eqIdx = arg.indexOf('=');
+                    if (eqIdx !== -1) {
+                        const propKey = arg.slice(0, eqIdx);
+                        if (seenPropKeys.has(propKey)) {
+                            return false;
+                        }
+                        seenPropKeys.add(propKey);
+                    }
+                }
+                return true;
+            });
+        }
         const proc = origStartMinecraft.call(this, launchArguments);
         if (this._isCancelled && proc) {
             try { proc.kill(); } catch (e) { }
@@ -403,9 +474,15 @@ Handler.prototype.getJar = async function () {
                         const hasValidVanillaBackup = fs.existsSync(vanillaBackup) && isJarFileValid(vanillaBackup);
                         const hasSkinSig = fs.existsSync(sigPath);
 
-                        if (hasSkinSig || hasValidVanillaBackup) {
-                            // Cílový JAR má aplikovaný náš RAW skin offline postavy, není poškozený
-                            this.client.emit('debug', `[POSTAVA]: Herní klient ${jarName} má aplikovaný RAW offline skin postavy.`);
+                        if (hasSkinSig && hasValidVanillaBackup) {
+                            const bakSha1 = getFileSha1(vanillaBackup);
+                            if (bakSha1 && bakSha1 === expectedSha1) {
+                                // Cílový JAR má aplikovaný náš RAW skin offline postavy a záloha přesně odpovídá Mojangu
+                                this.client.emit('debug', `[POSTAVA]: Herní klient ${jarName} má aplikovaný RAW offline skin postavy.`);
+                            } else {
+                                isUpToDate = false;
+                                this.client.emit('debug', `[AKTUALIZACE]: Záloha jádra ${path.basename(vanillaBackup)} neodpovídá oficiálnímu SHA-1. Stahuji čisté jádro...`);
+                            }
                         } else {
                             isUpToDate = false;
                             this.client.emit('debug', `[AKTUALIZACE]: Lokální hash ${actualSha1} neodpovídá ${expectedSha1}. Stahuji aktualizovaný klient jar...`);
@@ -427,6 +504,10 @@ Handler.prototype.getJar = async function () {
         } else {
             this.client.emit('debug', `[OPRAVA]: Soubor ${jarName} je poškozený nebo neúplný. Mažu a stahuji znovu...`);
             try { fs.unlinkSync(targetJarPath); } catch (e) { }
+            try { fs.unlinkSync(targetJarPath.replace(/\.jar$/, '.vanilla.jar')); } catch (e) { }
+            try { fs.unlinkSync(`${targetJarPath}.skin_sig`); } catch (e) { }
+            try { fs.unlinkSync(`${targetJarPath}.brand_sig`); } catch (e) { }
+            try { fs.unlinkSync(`${targetJarPath}.vanilla_bak`); } catch (e) { }
         }
     }
 
@@ -2124,6 +2205,14 @@ function injectRawSkinIntoJar(jarPath, activeSkinPath, activeCapePath, onLog = c
             try { if (fs.existsSync(sigPath)) fs.unlinkSync(sigPath); } catch (_) { }
             onLog(`[POSTAVA] ⚠ Obnoven původní funkční soubor ${path.basename(jarPath)} ze zálohy.`);
         } catch (_) { }
+    } else {
+        if (fs.existsSync(backupPath)) {
+            try { fs.unlinkSync(backupPath); } catch (_) { }
+        }
+        if (fs.existsSync(jarPath) && !isJarFileValid(jarPath)) {
+            try { fs.unlinkSync(jarPath); } catch (_) { }
+        }
+        try { if (fs.existsSync(sigPath)) fs.unlinkSync(sigPath); } catch (_) { }
     }
     return false;
 }
@@ -2141,11 +2230,20 @@ function restoreVanillaJars(baseDir, targetVer, onLog = console.log) {
                 const jarPath = path.join(versionsDir, d, `${d}.jar`);
                 const backupPath = path.join(versionsDir, d, `${d}.vanilla.jar`);
                 const sigPath = `${jarPath}.skin_sig`;
+                const brandSigPath = `${jarPath}.brand_sig`;
+
+                // ⚡ Pojistka: Pokud záloha neprošla validací, okamžitě ji smažeme, aby nešířila poškození
+                if (fs.existsSync(backupPath) && !isJarFileValid(backupPath)) {
+                    try { fs.unlinkSync(backupPath); } catch (_) { }
+                    onLog(`[POSTAVA] 🧹 Odstraněna poškozená záloha jádra: ${path.basename(backupPath)}`);
+                }
+
                 if (fs.existsSync(backupPath) && isJarFileValid(backupPath)) {
                     if (!fs.existsSync(jarPath) || !isJarFileValid(jarPath) || fs.existsSync(sigPath)) {
                         try {
                             fs.copyFileSync(backupPath, jarPath);
                             try { if (fs.existsSync(sigPath)) fs.unlinkSync(sigPath); } catch (_) { }
+                            try { if (fs.existsSync(brandSigPath)) fs.unlinkSync(brandSigPath); } catch (_) { }
                             onLog(`[POSTAVA] 🔄 Obnoveno výchozí vanilla jádro bez úprav: ${d}.jar`);
                         } catch (_) { }
                     }
@@ -2153,6 +2251,7 @@ function restoreVanillaJars(baseDir, targetVer, onLog = console.log) {
                     try {
                         fs.unlinkSync(jarPath);
                         try { if (fs.existsSync(sigPath)) fs.unlinkSync(sigPath); } catch (_) { }
+                        try { if (fs.existsSync(brandSigPath)) fs.unlinkSync(brandSigPath); } catch (_) { }
                         onLog(`[POSTAVA] 🧹 Odstraněno poškozené herní jádro pro automatické znovustažení: ${d}.jar`);
                     } catch (_) { }
                 }
@@ -2267,6 +2366,12 @@ function injectSMPClientBrandIntoJars(baseDir, targetVersion = null, versionOpts
     const effectiveBrand = customBrand || `smpclient/${launcherVersion}-${resolvedLoader}-${targetVer}`;
     const brandSig = `smpclient_brand_v3_${effectiveBrand.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 
+    // U Fabric profilů se brand předává bezpečně a dynamicky přes -Xbootclasspath/a a -Dsmpclient.brand.
+    // NIKDY neupravujeme fyzické JAR soubory, protože to poškozuje TinyRemapper při deobfuskování a způsobuje ZipException.
+    if (resolvedLoader === 'fabric') {
+        return;
+    }
+
     const jarsToPatch = new Set();
     const vanillaJar = path.join(baseDir, 'versions', targetVer, `${targetVer}.jar`);
     if (fs.existsSync(vanillaJar)) jarsToPatch.add(vanillaJar);
@@ -2300,7 +2405,6 @@ function injectSMPClientBrandIntoJars(baseDir, targetVersion = null, versionOpts
     for (const jarPath of jarsToPatch) {
         if (!fs.existsSync(jarPath) || !isJarFileValid(jarPath)) continue;
 
-        // U Fabric profilů se brand předává bezpečně a dynamicky přes -Xbootclasspath/a a -Dsmpclient.brand.
         // NIKDY neupravujeme fabric-loader-*.jar soubor, protože to poškozuje TinyRemapper při deobfuskování!
         if (path.basename(jarPath).startsWith('fabric-loader-')) {
             continue;
@@ -2308,6 +2412,11 @@ function injectSMPClientBrandIntoJars(baseDir, targetVersion = null, versionOpts
 
         const backupPath = jarPath.replace(/\.jar$/, '.vanilla.jar');
         const sigPath = `${jarPath}.brand_sig`;
+
+        // Odstranění případné poškozené zálohy
+        if (fs.existsSync(backupPath) && !isJarFileValid(backupPath)) {
+            try { fs.unlinkSync(backupPath); } catch (_) { }
+        }
 
         // Čistá vanilla záloha před zápisem (pouze pokud je původní soubor platný)
         if (!fs.existsSync(backupPath) && isJarFileValid(jarPath)) {
@@ -2853,9 +2962,15 @@ async function ensureFabricProfile(centralRootDir, targetVersion, onLog = consol
 
         // Zkopírovat vanilla client.jar do složky fabric profilu (pouze pokud je vanilkový jar 100% platný)
         const vanillaJar = path.join(versionsDir, targetVersion, `${targetVersion}.jar`);
+        const vanillaBak = path.join(versionsDir, targetVersion, `${targetVersion}.vanilla.jar`);
         const fabricJar = path.join(targetDir, `${fabricId}.jar`);
+
+        if (fs.existsSync(vanillaBak) && !isJarFileValid(vanillaBak)) {
+            try { fs.unlinkSync(vanillaBak); } catch (e) { }
+        }
+
         if (fs.existsSync(fabricJar) && !isJarFileValid(fabricJar)) {
-            onLog(`[FABRIC] ⚠ Detekován poškozený soubor ${fabricId}.jar (neplatná CEN hlavička). Obnovuji...`);
+            onLog(`[FABRIC] ⚠ Detekován poškozený soubor ${fabricId}.jar. Obnovuji...`);
             try { fs.unlinkSync(fabricJar); } catch (e) { }
             try { fs.unlinkSync(`${fabricJar}.skin_sig`); } catch (e) { }
             try { fs.unlinkSync(`${fabricJar}.brand_sig`); } catch (e) { }
@@ -2863,10 +2978,12 @@ async function ensureFabricProfile(centralRootDir, targetVersion, onLog = consol
         if (fs.existsSync(vanillaJar) && !isJarFileValid(vanillaJar)) {
             onLog(`[FABRIC] ⚠ Detekován poškozený vanilkový soubor ${targetVersion}.jar. Odstraňuji pro čisté znovustažení...`);
             try { fs.unlinkSync(vanillaJar); } catch (e) { }
+            try { if (fs.existsSync(vanillaBak)) fs.unlinkSync(vanillaBak); } catch (e) { }
             try { fs.unlinkSync(`${vanillaJar}.skin_sig`); } catch (e) { }
             try { fs.unlinkSync(`${vanillaJar}.brand_sig`); } catch (e) { }
+            try { fs.unlinkSync(`${vanillaJar}.vanilla_bak`); } catch (e) { }
         }
-        if (fs.existsSync(vanillaJar) && isJarFileValid(vanillaJar) && !fs.existsSync(fabricJar)) {
+        if (fs.existsSync(vanillaJar) && isJarFileValid(vanillaJar) && (!fs.existsSync(fabricJar) || !isJarFileValid(fabricJar))) {
             try { fs.copyFileSync(vanillaJar, fabricJar); } catch (e) { }
         }
 
@@ -3562,6 +3679,11 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
         if (fs.existsSync(bak) && !isJarFileValid(bak)) {
             try { fs.unlinkSync(bak); } catch (_) { }
         }
+        if (versionOpts.custom && fs.existsSync(clientJarPath)) {
+            try { fs.unlinkSync(clientJarPath); } catch (_) { }
+            try { fs.unlinkSync(`${clientJarPath}.skin_sig`); } catch (_) { }
+            try { fs.unlinkSync(`${clientJarPath}.brand_sig`); } catch (_) { }
+        }
     }
 
     // Pro custom zavaděče (Fabric): pokud jar chybí, ale vanilkový existuje a je platný, vytvoříme okamžitě kopii
@@ -3855,10 +3977,16 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             }
         }
 
-        // Zink (OpenGL over Vulkan)
+        // Zink (OpenGL over Vulkan) - určen výhradně pro open-source Mesa ovladače (AMD, Intel, Nouveau),
+        // NIKDY pro proprietární ovladač NVIDIA (kde způsobuje pád 'Driver does not support OpenGL 3.3').
         if (config.enableZink) {
-            setGameEnv('MESA_LOADER_DRIVER_OVERRIDE', 'zink');
-            onLog('[VÝKON] Zink aktivován (MESA_LOADER_DRIVER_OVERRIDE=zink)');
+            if (linuxInfo.hasNvidia && config.enableDiscreteGpu && linuxInfo.isHybridMultiGpu) {
+                onLog('[VÝKON] ℹ Zink přeskočen: NVIDIA Prime Render Offload využívá nativní proprietární OpenGL ovladač NVIDIA pro maximální výkon.');
+                unsetGameEnv('MESA_LOADER_DRIVER_OVERRIDE');
+            } else {
+                setGameEnv('MESA_LOADER_DRIVER_OVERRIDE', 'zink');
+                onLog('[VÝKON] Zink aktivován (MESA_LOADER_DRIVER_OVERRIDE=zink)');
+            }
         }
 
         // VSync / Frame tearing override
@@ -3959,79 +4087,129 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             lastMclcError = e.replace('[MCLC]: Failed to start due to', '').replace(', closing...', '').trim();
         }
     });
-    launcher.on('data', (e) => onLog(`[GAME] ${e}`));
+    // ── Unified Kinetic Launch & Milestone Engine ───────────────────────────
+    // Zajišťuje 100% nepřetržitý plynulý posun progress baru (dle AGENTS.md sekce 8).
+    // Odstraňuje zamrzávání na 54 % při startu JVM a zavádění desítek módů.
+    let unifiedProgress = 12;
+    let targetProgress = 20;
+    let currentStatusText = 'Příprava herního jádra...';
+    let launchFinished = false;
 
-    // ── Unified Launch & Download Progress Aggregator ───────────────────────
-    // Spojuje všechny fáze (stahování jádra, knihoven, assetů a start) do jednoho
-    // plynulého celku 0 % -> 100 %. Zamezuje trhání a skákání procent zpět při stahování tisíců mini-souborů.
-    let unifiedProgress = 8;
-    let currentPhase = 'init'; // 'init' | 'classes' | 'assets' | 'natives'
-
-    function emitUnifiedProgress(targetPercent, statusText) {
-        if (targetPercent > unifiedProgress) {
-            unifiedProgress = Math.min(99, targetPercent);
+    function pushMilestone(targetPercent, statusText) {
+        if (targetPercent > targetProgress) {
+            targetProgress = Math.min(99, targetPercent);
         }
-        onProgress({
-            percent: unifiedProgress,
-            text: statusText
-        });
+        if (statusText) {
+            currentStatusText = statusText;
+        }
+        if (onProgress) {
+            onProgress({
+                percent: Math.min(99, Math.max(Math.round(unifiedProgress), Math.round(targetProgress))),
+                text: currentStatusText
+            });
+        }
     }
+
+    // Živý kinetický ticker (každých 80ms) – zaručuje, že progress se neustále organicky hýbe
+    const progressTicker = setInterval(() => {
+        if (launchFinished || launcher._isCancelled) {
+            clearInterval(progressTicker);
+            return;
+        }
+
+        // Plynulé kinetické přibližování k cílovému milníku
+        if (unifiedProgress < targetProgress) {
+            const step = Math.max(0.2, (targetProgress - unifiedProgress) * 0.15);
+            unifiedProgress = Math.min(targetProgress, unifiedProgress + step);
+        } else if (unifiedProgress < 96) {
+            // Asymptotický organický mikrokrok, aby se progress nikdy nezastavil na místě
+            unifiedProgress = Math.min(96, unifiedProgress + 0.12);
+        }
+
+        if (onProgress) {
+            onProgress({
+                percent: Math.min(99, Math.round(unifiedProgress)),
+                text: currentStatusText
+            });
+        }
+    }, 80);
+
+    launcher._progressTicker = progressTicker;
+
+    let currentPhase = 'init'; // 'init' | 'classes' | 'assets' | 'natives'
 
     launcher.on('progress', (e) => {
         const taskFraction = (e.total && e.total > 0) ? Math.min(1, Math.max(0, e.task / e.total)) : 0;
 
         if (e.type === 'classes' || e.type === 'classes-custom' || e.type === 'classes-maven-custom') {
             currentPhase = 'classes';
-            // Fáze knihoven: 10 % -> 55 % (rozpětí 45 %)
-            const phasePercent = Math.round(10 + (taskFraction * 45));
+            // Fáze knihoven: 20 % -> 48 %
+            const phasePercent = Math.round(20 + (taskFraction * 28));
             const text = (e.task >= e.total)
                 ? 'Herní knihovny připraveny'
-                : `Stahuji herní knihovny (${e.task} z ${e.total})...`;
-            emitUnifiedProgress(phasePercent, text);
+                : `Ověřování herních knihoven (${e.task} z ${e.total})...`;
+            pushMilestone(phasePercent, text);
         } else if (e.type === 'assets') {
             currentPhase = 'assets';
-            // Fáze assetů (zvuky, textury): 55 % -> 92 % (rozpětí 37 %)
-            const phasePercent = Math.round(55 + (taskFraction * 37));
+            // Fáze assetů (zvuky, textury): 48 % -> 62 %
+            const phasePercent = Math.round(48 + (taskFraction * 14));
             const text = (e.task >= e.total)
-                ? 'Herní data a textury připraveny'
-                : `Stahuji herní data a textury (${Math.round(taskFraction * 100)} %)...`;
-            emitUnifiedProgress(phasePercent, text);
+                ? 'Herní textury a data připraveny'
+                : `Stahuji herní textury a data (${Math.round(taskFraction * 100)} %)...`;
+            pushMilestone(phasePercent, text);
         } else if (e.type === 'natives') {
             currentPhase = 'natives';
-            // Fáze nativních knihoven: 92 % -> 97 %
-            const phasePercent = Math.round(92 + (taskFraction * 5));
-            emitUnifiedProgress(phasePercent, 'Příprava nativních knihoven...');
+            const phasePercent = Math.round(62 + (taskFraction * 4));
+            pushMilestone(phasePercent, 'Příprava nativních systémových knihoven...');
         } else {
-            const phasePercent = Math.round(10 + (taskFraction * 80));
-            emitUnifiedProgress(phasePercent, 'Příprava herních souborů...');
+            const phasePercent = Math.round(15 + (taskFraction * 45));
+            pushMilestone(phasePercent, 'Příprava herních souborů...');
         }
     });
 
     launcher.on('download-status', (e) => {
-        // Jednotlivé mini-soubory NIKDY neresetují celková procenta na 0 %!
-        // Bereme je jako součást jednoho plynulého celku.
         const fileFraction = (e.total && e.total > 0) ? Math.min(1, Math.max(0, e.current / e.total)) : 0;
 
         if (currentPhase === 'init') {
-            // Úvodní stahování jádra (např. client.jar)
-            const phasePercent = Math.round(8 + (fileFraction * 6));
-            emitUnifiedProgress(phasePercent, `Stahuji jádro hry (${e.name || 'Minecraft'})...`);
+            const phasePercent = Math.round(10 + (fileFraction * 10));
+            pushMilestone(phasePercent, `Stahuji jádro hry (${e.name || 'Minecraft'})...`);
         } else if (currentPhase === 'classes') {
-            // Uvnitř fáze knihoven: informativní text, procenta řídí celkový task counter
-            onProgress({
-                percent: unifiedProgress,
-                text: `Stahuji herní knihovny (${e.name || 'soubor'})...`
-            });
+            currentStatusText = `Stahuji herní knihovny (${e.name || 'soubor'})...`;
         } else if (currentPhase === 'assets') {
-            // Uvnitř fáze tisíců mini-assetů: nezahlcovat UI každým jednotlivým souborem
-            onProgress({
-                percent: unifiedProgress,
-                text: `Stahuji herní data a textury...`
-            });
+            currentStatusText = `Stahuji herní textury a data...`;
+        }
+    });
+
+    launcher.on('data', (e) => {
+        const line = String(e || '');
+        onLog(`[GAME] ${line}`);
+
+        // ⚡ Živé milníky herního procesu (start JVM, načítání módů, Mixiny, GPU, okno)
+        if (line.includes('Loading Minecraft') || line.includes('KnotClient') || line.includes('Fabric Loader')) {
+            pushMilestone(68, 'Zavádění zavaděče Fabric a herního jádra...');
+        } else if (line.includes('Loading ') && line.includes('mods')) {
+            const modMatch = line.match(/Loading\s+(\d+)\s+mods/i);
+            const modText = modMatch ? `Zavádění ${modMatch[1]} módů a doplňků...` : 'Zavádění herních módů a doplňků...';
+            pushMilestone(74, modText);
+        } else if (line.includes('SpongePowered MIXIN') || line.includes('MixinExtras') || line.includes('BadOptimizations') || line.includes('Lithium') || line.includes('Sodium')) {
+            pushMilestone(82, 'Aplikace herních optimalizací (Mixin)...');
+        } else if (line.includes('Searching for graphics cards') || line.includes('Found graphics adapter') || line.includes('preferredGraphicsBackend')) {
+            pushMilestone(87, 'Inicializace grafické karty a GPU...');
+        } else if (line.includes('Datafixer') || line.includes('Datafixer optimizations')) {
+            pushMilestone(91, 'Optimalizace herních struktur a dat...');
+        } else if (line.includes('Backend library: LWJGL') || line.includes('Setting user:') || line.includes('Setting exclusive fullscreen')) {
+            pushMilestone(95, 'Vytváření herního okna...');
+        } else if (line.includes('Using graphics backend') || line.includes('GL_') || line.includes('VK_')) {
+            pushMilestone(98, 'Otevírání Minecraftu...');
         }
     });
 
     launcher.on('close', (code) => {
+        launchFinished = true;
+        if (launcher._progressTicker) {
+            clearInterval(launcher._progressTicker);
+            launcher._progressTicker = null;
+        }
         activeMinecraftProcess = null;
         onExit(code);
     });
@@ -4047,6 +4225,8 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             throw new Error(lastMclcError || 'Minecraft proces se nepodařilo nastartovat (MCLC selhalo při inicializaci).');
         }
         activeMinecraftProcess = proc;
+        pushMilestone(66, 'Spouštění herního enginu...');
+
         if (process.platform === 'win32' && config.winHighPriority !== false && proc && proc.pid) {
             try {
                 const os = require('os');
@@ -4062,7 +4242,7 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
         if (onProgress) {
             onProgress({
                 percent: 100,
-                text: 'Spouštím Minecraft...'
+                text: 'Spouštíme Minecraft!'
             });
         }
     } catch (e) {
@@ -4072,6 +4252,11 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
         }
         throw e;
     } finally {
+        launchFinished = true;
+        if (launcher._progressTicker) {
+            clearInterval(launcher._progressTicker);
+            launcher._progressTicker = null;
+        }
         if (!activeMinecraftProcess) {
             activeLauncherClient = null;
             currentLaunchInfo = null;
@@ -4097,6 +4282,11 @@ function isGameRunning() {
 function cancelLaunch() {
     if (activeLauncherClient) {
         activeLauncherClient._isCancelled = true;
+
+        if (activeLauncherClient._progressTicker) {
+            try { clearInterval(activeLauncherClient._progressTicker); } catch (_) { }
+            activeLauncherClient._progressTicker = null;
+        }
 
         if (activeLauncherClient._activeControllers) {
             for (const ctrl of activeLauncherClient._activeControllers) {

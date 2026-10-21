@@ -1608,14 +1608,41 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
             const targetVer = config.version || '26.2';
             const baseDir = config.baseDir || gameDir;
             const verDir = path.join(baseDir, 'versions');
-            const vJar = path.join(verDir, targetVer, `${targetVer}.jar`);
+            const targetVerDir = path.join(verDir, targetVer);
+            const vJar = path.join(targetVerDir, `${targetVer}.jar`);
+            const vBak = path.join(targetVerDir, `${targetVer}.vanilla.jar`);
+            try { if (fs.existsSync(vJar)) fs.unlinkSync(vJar); } catch (_) {}
+            try { if (fs.existsSync(vBak)) fs.unlinkSync(vBak); } catch (_) {}
+            try { if (fs.existsSync(`${vJar}.skin_sig`)) fs.unlinkSync(`${vJar}.skin_sig`); } catch (_) {}
+            try { if (fs.existsSync(`${vJar}.brand_sig`)) fs.unlinkSync(`${vJar}.brand_sig`); } catch (_) {}
+            try { if (fs.existsSync(`${vJar}.vanilla_bak`)) fs.unlinkSync(`${vJar}.vanilla_bak`); } catch (_) {}
+
+            // Vyčistit také všechny odvozené Fabric/Forge JARy pro tuto verzi
             try {
-                if (fs.existsSync(vJar)) fs.unlinkSync(vJar);
+                if (fs.existsSync(verDir)) {
+                    for (const d of fs.readdirSync(verDir)) {
+                        if (d.includes(targetVer)) {
+                            const subJar = path.join(verDir, d, `${d}.jar`);
+                            const subBak = path.join(verDir, d, `${d}.vanilla.jar`);
+                            try { if (fs.existsSync(subJar)) fs.unlinkSync(subJar); } catch (_) {}
+                            try { if (fs.existsSync(subBak)) fs.unlinkSync(subBak); } catch (_) {}
+                            try { if (fs.existsSync(`${subJar}.skin_sig`)) fs.unlinkSync(`${subJar}.skin_sig`); } catch (_) {}
+                            try { if (fs.existsSync(`${subJar}.brand_sig`)) fs.unlinkSync(`${subJar}.brand_sig`); } catch (_) {}
+                        }
+                    }
+                }
             } catch (_) {}
+
+            // Vyčistit remapped cache Fabricu
+            try {
+                const remappedDir = path.join(baseDir, '.fabric', 'remappedJars');
+                if (fs.existsSync(remappedDir)) fs.rmSync(remappedDir, { recursive: true, force: true });
+            } catch (_) {}
+
             return {
                 success: true,
                 relaunch: true,
-                message: `Soubor verze ${targetVer} byl resetován. Při příštím spuštění launcher stáhne čerstvou kopii!`
+                message: `Soubory verze ${targetVer} a odvozené profily byly resetovány. Při příštím spuštění launcher stáhne čistou oficiální kopii od Mojangu!`
             };
         }
 
@@ -1725,9 +1752,45 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                 try { if (fs.existsSync(`${filePath}.vanilla_bak`)) fs.unlinkSync(`${filePath}.vanilla_bak`); } catch (_) {}
             };
 
+            const baseDir = config.baseDir || gameDir;
+            if (targetFile) {
+                cleanJarAndBackups(targetFile);
+                // Pokud šlo o soubor v versions/, vyčistit i všechny spjaté profily
+                if (targetFile.includes('/versions/')) {
+                    const fname = path.basename(targetFile, '.jar');
+                    const verMatch = fname.match(/(\d+\.\d+(?:\.\d+)?)/);
+                    if (verMatch) {
+                        const targetVer = verMatch[1];
+                        const verDir = path.join(baseDir, 'versions');
+                        try {
+                            if (fs.existsSync(verDir)) {
+                                for (const d of fs.readdirSync(verDir)) {
+                                    if (d.includes(targetVer)) {
+                                        cleanJarAndBackups(path.join(verDir, d, `${d}.jar`));
+                                    }
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                }
+            } else {
+                // Plošné vyčištění všech neplatných JARů v versions
+                try {
+                    const verDir = path.join(baseDir, 'versions');
+                    if (fs.existsSync(verDir)) {
+                        for (const d of fs.readdirSync(verDir)) {
+                            const j = path.join(verDir, d, `${d}.jar`);
+                            if (fs.existsSync(j) && !isJarFileValid(j)) {
+                                cleanJarAndBackups(j);
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+
             // Vyčisti remapped cache Fabricu, která mohla vzniknout z poškozeného jádra
             try {
-                const remappedDir = path.join(gameDir, '.fabric', 'remappedJars');
+                const remappedDir = path.join(baseDir, '.fabric', 'remappedJars');
                 if (fs.existsSync(remappedDir)) {
                     fs.rmSync(remappedDir, { recursive: true, force: true });
                 }

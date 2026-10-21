@@ -75,30 +75,55 @@ document.addEventListener('DOMContentLoaded', async () => {
         const val = Number(realPercent);
         if (isNaN(val) || val <= 0) return 0;
         if (val >= 100) return 100;
-        const x = Math.max(0, Math.min(1, val / 100));
-        const perceived = evalCubicBezier(x, 0.05, 1, 1, 0.55);
-        const result = Math.round(perceived * 100);
-        return Math.min(99, Math.max(1, result));
+        return Math.min(99, Math.max(1, Math.round(val)));
     }
 
     /**
-     * Převede suché technické hlášky (např. Downloading library asm-9.6.jar...)
-     * na přátelské, atmosférické herní mikrostavy:
-     * „Připravujeme herní svět...“ ➔ „Leštíme modpack...“ ➔ „Rozpalujeme kamna...“ ➔ „Spouštíme Minecraft!“
+     * Převede technické hlášky nebo milníky na přátelské, živé atmosférické stavy.
+     * Pokud je předán konkrétní lidský text z launch engine, zachovává jej v plné přesnosti.
      */
     function getHumanFriendlyStatus(rawText, percent = 0) {
-        const lower = String(rawText || '').toLowerCase();
+        const text = String(rawText || '').trim();
+        const lower = text.toLowerCase();
 
         // Okamžité přerušení nebo ukončení
         if (lower.includes('ruším') || lower.includes('zrušeno')) return 'Ruším stahování...';
         if (lower.includes('ukončuji') || lower.includes('ukončeno')) return 'Ukončuji Minecraft...';
         if (lower.includes('spouštím minecraft') || lower.includes('hra spuštěna') || percent >= 98) return 'Spouštíme Minecraft!';
 
-        // Rozpoznání podle obsahu nebo fáze procent
-        if (lower.includes('java') || lower.includes('runtime') || lower.includes('jádro') || lower.includes('client.jar')) {
-            return 'Připravujeme herní svět...';
+        // Pokud text již obsahuje specifickou, smysluplnou herní zprávu z našeho launch enginu,
+        // zachováme ji v plné kráse (např. "Zavádění 57 módů a doplňků...")
+        if (
+            text.startsWith('Zavádění ') ||
+            text.startsWith('Aplikace ') ||
+            text.startsWith('Inicializace ') ||
+            text.startsWith('Vytváření ') ||
+            text.startsWith('Otevírání ') ||
+            text.startsWith('Ověřování ') ||
+            text.startsWith('Optimalizace ') ||
+            text.startsWith('Herní ') ||
+            text.startsWith('Start ') ||
+            text.startsWith('Příprava ') ||
+            text.startsWith('Stahuji herní knihovny') ||
+            text.startsWith('Stahuji herní textury') ||
+            text.startsWith('Stahuji jádro') ||
+            text.startsWith('Kontroluji aktualizace') ||
+            text.startsWith('Stahuji aktualizaci')
+        ) {
+            return text;
         }
-        if (lower.includes('mod') || lower.includes('optimiz') || lower.includes('knihovn') || lower.includes('librar') || lower.includes('classes')) {
+
+        // Klíčová slova podle subsystému
+        if (lower.includes('java') || lower.includes('runtime') || lower.includes('jádro') || lower.includes('client.jar')) {
+            return 'Připravujeme herní jádro...';
+        }
+        if (lower.includes('mixin') || lower.includes('optimiz')) {
+            return 'Aplikace herních optimalizací...';
+        }
+        if (lower.includes('gpu') || lower.includes('grafik') || lower.includes('vulkan') || lower.includes('opengl')) {
+            return 'Inicializace grafiky a GPU...';
+        }
+        if (lower.includes('mod') || lower.includes('knihovn') || lower.includes('librar') || lower.includes('classes')) {
             return 'Leštíme modpack...';
         }
         if (lower.includes('textur') || lower.includes('asset') || lower.includes('zvuk') || lower.includes('audio') || lower.includes('resource') || lower.includes('delta')) {
@@ -108,18 +133,101 @@ document.addEventListener('DOMContentLoaded', async () => {
             return 'Rozpalujeme kamna...';
         }
 
-        // Fáze podle procent (pokud v textu nebyla nalezena konkrétní klíčová slova)
+        // Dynamické herní stavy podle plynulých procent (pokud v textu není konkrétní údaj)
         if (percent < 18) {
-            return 'Připravujeme herní svět...';
+            return 'Připravujeme herní jádro...';
         }
-        if (percent < 58) {
+        if (percent < 45) {
+            return 'Ověřování herních souborů...';
+        }
+        if (percent < 68) {
             return 'Leštíme modpack...';
         }
+        if (percent < 84) {
+            return 'Aplikace herních optimalizací...';
+        }
+        if (percent < 94) {
+            return 'Inicializace grafiky a GPU...';
+        }
         if (percent < 98) {
-            return 'Rozpalujeme kamna...';
+            return 'Vytváření herního okna...';
         }
 
         return 'Spouštíme Minecraft!';
+    }
+
+    // ── Klientský plynulý mikro-posun během spouštění (eliminuje jakékoliv vizuální zamrznutí) ──
+    let clientProgressTicker = null;
+    function startClientProgressTicker() {
+        if (clientProgressTicker) clearInterval(clientProgressTicker);
+        clientProgressTicker = setInterval(() => {
+            if (!isLaunching || isRunning) {
+                stopClientProgressTicker();
+                return;
+            }
+            if (maxRenderedProgress > 0 && maxRenderedProgress < 96) {
+                maxRenderedProgress += 0.15;
+                updateLaunchProgressUI(maxRenderedProgress, lastProgressData ? lastProgressData.text : '');
+            }
+        }, 100);
+    }
+    function stopClientProgressTicker() {
+        if (clientProgressTicker) {
+            clearInterval(clientProgressTicker);
+            clientProgressTicker = null;
+        }
+    }
+
+    function updateLaunchProgressUI(rawPercent, statusText) {
+        const val = Math.min(Math.max(Number(rawPercent) || 0, 0), 100);
+        maxRenderedProgress = Math.max(maxRenderedProgress, val);
+        const percent = Math.min(99, Math.round(maxRenderedProgress));
+        const rawStatusText = statusText || (lastProgressData ? lastProgressData.text : 'Načítání hry...');
+        const friendlyStatus = getHumanFriendlyStatus(rawStatusText, percent);
+
+        if (progressContainer) {
+            progressContainer.style.display = 'flex';
+            if (progressBar) progressBar.style.width = `${percent}%`;
+            if (progressPercent) progressPercent.textContent = `${percent}%`;
+            if (progressText) {
+                progressText.textContent = friendlyStatus;
+                progressText.title = rawStatusText;
+            }
+        }
+
+        if (globalDownloadChip) {
+            globalDownloadChip.style.display = 'inline-flex';
+            if (globalDownloadBar) globalDownloadBar.style.width = `${percent}%`;
+            if (globalDownloadText) {
+                globalDownloadText.textContent = `${friendlyStatus} (${percent}%)`;
+                globalDownloadText.title = rawStatusText;
+            }
+        }
+
+        // Živý indikátor stahování přímo v kartě spouštěné verze
+        const activeProfile = (currentConfig.profiles || []).find(p => p.id === currentConfig.activeProfileId);
+        const activeVer = activeProfile ? activeProfile.version : (currentConfig.version || '26.2');
+        const idSuffix = activeVer ? activeVer.replace(/\./g, '') : '262';
+        const vBox = document.getElementById(`vProgressBox${idSuffix}`);
+        const vBar = document.getElementById(`vProgressBar${idSuffix}`);
+        const vPct = document.getElementById(`vProgressPercent${idSuffix}`);
+        const vTxt = document.getElementById(`vProgressText${idSuffix}`);
+        const vBadge = document.getElementById(`vStatus${idSuffix}`);
+
+        if (vBox) {
+            vBox.style.display = 'flex';
+            if (vBar) vBar.style.width = `${percent}%`;
+            if (vPct) vPct.textContent = `${percent}%`;
+            if (vTxt) {
+                vTxt.textContent = friendlyStatus;
+                vTxt.title = rawStatusText;
+            }
+        }
+        if (vBadge) {
+            vBadge.className = 'v-status-badge downloading';
+            const vLabel = vBadge.querySelector('.v-status-label') || vBadge;
+            vLabel.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Spouštění... ${percent}%</span>`;
+        }
     }
 
 
@@ -3074,9 +3182,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const isAlreadyInstalled = targetProf && Array.isArray(installedVersions) && installedVersions.includes(targetProf.version);
         const initStatusText = isAlreadyInstalled ? 'Příprava herního jádra...' : 'Stahuji verzi a herní data...';
-        maxRenderedProgress = calculatePerceptualProgress(15);
-        lastProgressData = { percent: 15, text: initStatusText };
-        const friendlyInit = getHumanFriendlyStatus(initStatusText, 15);
+        maxRenderedProgress = 12;
+        lastProgressData = { percent: 12, text: initStatusText };
+        const friendlyInit = getHumanFriendlyStatus(initStatusText, 12);
+
+        startClientProgressTicker();
 
         if (progressContainer) {
             progressContainer.style.display = 'flex';
@@ -3255,9 +3365,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const launchStatusText = isAlreadyInstalled ? 'Načítání hry...' : 'Stahuji verzi a herní data...';
-        maxRenderedProgress = Math.max(maxRenderedProgress, calculatePerceptualProgress(20));
-        lastProgressData = { percent: 20, text: launchStatusText };
-        const friendlyLaunch = getHumanFriendlyStatus(launchStatusText, 20);
+        maxRenderedProgress = Math.max(maxRenderedProgress, 18);
+        lastProgressData = { percent: 18, text: launchStatusText };
+        const friendlyLaunch = getHumanFriendlyStatus(launchStatusText, 18);
 
         if (progressContainer) {
             progressContainer.style.display = 'flex';
@@ -3458,6 +3568,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function resetPlayState() {
+        stopClientProgressTicker();
         document.body.classList.remove('launch-handoff');
         isRunning = false;
         runningProfileId = null;
@@ -7163,66 +7274,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.api.onProgress((data) => {
         lastProgressData = data;
         const rawPercent = Math.min(Math.max(data.percent || 0, 0), 100);
-        let curvedPercent;
-        if (rawPercent <= 0) {
-            curvedPercent = 0;
-        } else if (rawPercent >= 100) {
-            curvedPercent = 100;
-        } else {
-            curvedPercent = calculatePerceptualProgress(rawPercent);
-        }
-
-        maxRenderedProgress = Math.max(maxRenderedProgress, curvedPercent);
-        const percent = maxRenderedProgress;
-        const rawStatusText = data.text || 'Načítání hry...';
-        const friendlyStatus = getHumanFriendlyStatus(rawStatusText, percent);
-
-        if (progressContainer) {
-            progressContainer.style.display = 'flex';
-            if (progressBar) progressBar.style.width = `${percent}%`;
-            if (progressPercent) progressPercent.textContent = `${percent}%`;
-            if (progressText) {
-                progressText.textContent = friendlyStatus;
-                progressText.title = rawStatusText;
-            }
-        }
-
-        if (globalDownloadChip) {
-            globalDownloadChip.style.display = 'inline-flex';
-            if (globalDownloadBar) globalDownloadBar.style.width = `${percent}%`;
-            if (globalDownloadText) {
-                globalDownloadText.textContent = `${friendlyStatus} (${percent}%)`;
-                globalDownloadText.title = rawStatusText;
-            }
-        }
-
-        // Živý indikátor stahování přímo v kartě spouštěné verze
-        const activeProfile = (currentConfig.profiles || []).find(p => p.id === currentConfig.activeProfileId);
-        const activeVer = activeProfile ? activeProfile.version : (currentConfig.version || '26.2');
-        const idSuffix = activeVer ? activeVer.replace(/\./g, '') : '262';
-        const vBox = document.getElementById(`vProgressBox${idSuffix}`);
-        const vBar = document.getElementById(`vProgressBar${idSuffix}`);
-        const vPct = document.getElementById(`vProgressPercent${idSuffix}`);
-        const vTxt = document.getElementById(`vProgressText${idSuffix}`);
-        const vBadge = document.getElementById(`vStatus${idSuffix}`);
-
-        if (vBox) {
-            vBox.style.display = 'flex';
-            if (vBar) vBar.style.width = `${percent}%`;
-            if (vPct) vPct.textContent = `${percent}%`;
-            if (vTxt) {
-                vTxt.textContent = friendlyStatus;
-                vTxt.title = rawStatusText;
-            }
-        }
-        if (vBadge) {
-            vBadge.className = 'v-status-badge downloading';
-            const vLabel = vBadge.querySelector('.v-status-label') || vBadge;
-            vLabel.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Stahování... ${percent}%</span>`;
-        }
+        updateLaunchProgressUI(rawPercent, data.text);
     });
 
-    window.api.onLog((line) => appendLog(line));
+    window.api.onLog((line) => {
+        appendLog(line);
+        // Živé milníky herního procesu zachycené přímo v rendereru
+        if (isLaunching && !isRunning && typeof line === 'string') {
+            if (line.includes('Loading Minecraft') || line.includes('Fabric Loader')) {
+                updateLaunchProgressUI(Math.max(maxRenderedProgress, 68), 'Zavádění zavaděče Fabric a herního jádra...');
+            } else if (line.includes('Loading ') && line.includes('mods')) {
+                const modMatch = line.match(/Loading\s+(\d+)\s+mods/i);
+                const modTxt = modMatch ? `Zavádění ${modMatch[1]} módů a doplňků...` : 'Zavádění herních módů a doplňků...';
+                updateLaunchProgressUI(Math.max(maxRenderedProgress, 74), modTxt);
+            } else if (line.includes('SpongePowered MIXIN') || line.includes('MixinExtras')) {
+                updateLaunchProgressUI(Math.max(maxRenderedProgress, 82), 'Aplikace herních optimalizací (Mixin)...');
+            } else if (line.includes('Searching for graphics') || line.includes('Found graphics adapter') || line.includes('Sodium')) {
+                updateLaunchProgressUI(Math.max(maxRenderedProgress, 87), 'Inicializace grafické karty a GPU...');
+            } else if (line.includes('Datafixer') || line.includes('Datafixer optimizations')) {
+                updateLaunchProgressUI(Math.max(maxRenderedProgress, 91), 'Optimalizace herních struktur a dat...');
+            } else if (line.includes('Backend library: LWJGL') || line.includes('Setting user:')) {
+                updateLaunchProgressUI(Math.max(maxRenderedProgress, 95), 'Vytváření herního okna...');
+            } else if (line.includes('Using graphics backend') || line.includes('GL_') || line.includes('VK_')) {
+                updateLaunchProgressUI(Math.max(maxRenderedProgress, 98), 'Otevírání Minecraftu...');
+            }
+        }
+    });
 
     window.api.onExit((data) => {
         const exitCode = (typeof data === 'object' && data !== null) ? data.exitCode : data;
@@ -7296,6 +7373,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             setTimeout(() => {
                 document.body.classList.remove('launch-handoff');
             }, 400);
+            stopClientProgressTicker();
             isRunning = true;
             isLaunching = false;
             launchingProfileId = null;
