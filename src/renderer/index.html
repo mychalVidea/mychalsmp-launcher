@@ -2982,8 +2982,8 @@
         <div class="custom-modal-box" style="max-width: 620px;">
             <div class="modal-head">
                 <div class="modal-title-with-icon">
-                    <span class="modal-icon">
-                        <svg class="ui-icon-svg ui-icon-svg--lg ui-icon-svg--red" viewBox="0 0 24 24">
+                    <span class="modal-icon" id="crashModalIcon">
+                        <svg class="ui-icon-svg ui-icon-svg--lg ui-icon-svg--red" id="crashModalIconSvg" viewBox="0 0 24 24">
                             <path
                                 d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
                             </path>
@@ -2993,7 +2993,7 @@
                     </span>
                     <div>
                         <h3 id="crashAnalyzerTitle" style="color: #f51515;">Pád hry</h3>
-                        <p class="modal-subtitle" id="crashAnalyzerSubtitle">Chyba při běhu (kód 1)</p>
+                        <p class="modal-subtitle" id="crashAnalyzerSubtitle" style="color: #94a3b8;">Chyba při běhu (kód 1)</p>
                     </div>
                 </div>
                 <button class="modal-close-x" id="btnCloseCrashModal">
@@ -3005,25 +3005,38 @@
             </div>
             <div class="modal-body">
                 <!-- Diagnostic Result Banner -->
-                <div class="crash-diag-card"
+                <div class="crash-diag-card" id="crashDiagCard"
                     style="background: rgba(245, 21, 21, 0.08); border: 1px solid rgba(245, 21, 21, 0.25); border-radius: 10px; padding: 14px; margin-bottom: 14px;">
                     <div
                         style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-                        <strong id="crashCauseHead" style="color: #f87171; font-size: 15px;">Příčina: Nedostatek
-                            paměti RAM</strong>
+                        <strong id="crashCauseHead" style="color: #f51515; font-size: 15px;">Příčina: Nedostatek paměti RAM</strong>
                         <span class="badge" id="crashExitCodeBadge"
-                            style="background: #f51515; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Kód
-                            1</span>
+                            style="background: #f51515; color: #ffffff; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Kód 1</span>
                     </div>
                     <p id="crashCauseDesc"
-                        style="font-size: 13px; color: #e2e8f0; line-height: 1.5; margin: 0 0 10px 0;">
+                        style="font-size: 13px; color: #94a3b8; line-height: 1.5; margin: 0 0 10px 0;">
                         Hře došla přidělená paměť RAM.
                     </p>
-                    <div
-                        style="background: rgba(0,0,0,0.3); border-left: 3px solid #0a67e5; padding: 8px 12px; border-radius: 4px;">
-                        <span style="font-size: 12px; color: #94a3b8;">Doporučení:</span>
+
+                    <!-- Live Autonomous Auto-Repair Status Banner -->
+                    <div id="crashAutoRepairBanner"
+                        style="display: none; align-items: center; gap: 12px; background: rgba(10, 103, 229, 0.12); border: 1px solid rgba(10, 103, 229, 0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);">
+                        <span id="crashAutoRepairIcon" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" style="color: #0a67e5;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/>
+                            </svg>
+                        </span>
+                        <div style="flex: 1; min-width: 0;">
+                            <div id="crashAutoRepairTitle" style="font-size: 13px; font-weight: 600; color: #0a67e5;">Automatická oprava probíhá</div>
+                            <div id="crashAutoRepairDesc" style="font-size: 12px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Aplikuji opravy...</div>
+                        </div>
+                    </div>
+
+                    <div id="crashRecommendationBox"
+                        style="background: rgba(0, 0, 0, 0.3); border-left: 3px solid #0a67e5; padding: 8px 12px; border-radius: 4px;">
+                        <span style="font-size: 12px; color: #94a3b8;">Doporučení / Stav:</span>
                         <div id="crashRecommendation"
-                            style="font-size: 13px; color: #60a5fa; font-weight: 500; margin-top: 2px;">
+                            style="font-size: 13px; color: #0a67e5; font-weight: 500; margin-top: 2px;">
                             Zvyš paměť RAM v nastavení na alespoň 6 GB.
                         </div>
                     </div>
@@ -3034,7 +3047,7 @@
                     <span style="font-size: 12px; color: #94a3b8; font-weight: 600;">Záznam chyby:</span>
                 </div>
                 <pre id="crashLogExcerpt"
-                    style="max-height: 140px; overflow-y: auto; background: #0c0e17; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; font-size: 11px; font-family: monospace; color: #cbd5e1; white-space: pre-wrap; user-select: text; margin: 0;"></pre>
+                    style="max-height: 140px; overflow-y: auto; background: #0a0a0c; border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 8px; padding: 10px; font-size: 11px; font-family: monospace; color: #94a3b8; white-space: pre-wrap; user-select: text; margin: 0;"></pre>
             </div>
             <div class="modal-foot" style="display: flex; justify-content: space-between; align-items: center;">
                 <button class="mc-btn mc-btn-secondary" id="btnOpenCrashFullReport">
@@ -3051,15 +3064,9 @@
                 </button>
                 <div style="display: flex; gap: 8px;">
                     <button class="mc-btn mc-btn-secondary" id="btnDismissCrashModal">Zavřít</button>
-                    <button class="mc-btn mc-btn-green" id="btnApplyCrashFix">
+                    <button class="mc-btn mc-btn-primary" id="btnApplyCrashFix">
                         <span id="btnApplyCrashFixText">
-                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold ui-icon-pulse"
-                                viewBox="0 0 24 24">
-                                <path
-                                    d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z">
-                                </path>
-                            </svg>
-                            Automatická oprava
+                            <span>Rozumím</span>
                         </span>
                     </button>
                 </div>

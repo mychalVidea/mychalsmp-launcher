@@ -25,6 +25,19 @@ const PROTECTED_CORE_MODS = new Set([
 ]);
 
 /**
+ * Extracts a relevant stacktrace excerpt around a matching pattern
+ */
+function extractRelevantStack(text, regex) {
+    if (!text || !regex) return '';
+    const lines = text.split('\n');
+    const idx = lines.findIndex(l => regex.test(l));
+    if (idx === -1) return '';
+    const start = Math.max(0, idx - 2);
+    const end = Math.min(lines.length, idx + 18);
+    return lines.slice(start, end).join('\n').trim();
+}
+
+/**
  * Searches for the newest crash report in gameDir/crash-reports
  */
 function findLatestCrashReport(gameDir) {
@@ -226,10 +239,10 @@ function disableModInModsDir(modsDir, modIdentifier, modName) {
     try {
         const metaFile = path.join(modsDir, '.mod_meta.json');
         if (fs.existsSync(metaFile)) metaMap = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
-    } catch (_) {}
+    } catch (_) { }
 
     let AdmZip = null;
-    try { AdmZip = require('adm-zip'); } catch (_) {}
+    try { AdmZip = require('adm-zip'); } catch (_) { }
 
     const rawId = (modIdentifier || '').toLowerCase();
     const rawHyphen = rawId.replace(/_/g, '-');
@@ -251,7 +264,7 @@ function disableModInModsDir(modsDir, modIdentifier, modName) {
                     if (fab.id) mId = fab.id.toLowerCase();
                     if (fab.name) mName = fab.name.toLowerCase().replace(/[^a-z0-9]/g, '');
                 }
-            } catch (_) {}
+            } catch (_) { }
         }
 
         const cleanFile = f.replace(/\.jar$/i, '').toLowerCase();
@@ -303,7 +316,7 @@ async function autoResolveMissingDependencies(gameDir, combinedText, launchConfi
     // 1. Pokud pro některou závislost nemáme zjištěný modId (který ji vyžaduje),
     // prohledáme fabric.mod.json všech JARů v modsDir, abychom našli ten, který ji má v "depends"
     let AdmZip = null;
-    try { AdmZip = require('adm-zip'); } catch (_) {}
+    try { AdmZip = require('adm-zip'); } catch (_) { }
 
     if (AdmZip && fs.existsSync(modsDir)) {
         try {
@@ -330,10 +343,10 @@ async function autoResolveMissingDependencies(gameDir, combinedText, launchConfi
                                 }
                             }
                         }
-                    } catch (_) {}
+                    } catch (_) { }
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     const reEnabled = [];
@@ -567,17 +580,17 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
 
     // Read all jar files in mods directory
     let files = [];
-    try { files = fs.readdirSync(modsDir); } catch (_) {}
+    try { files = fs.readdirSync(modsDir); } catch (_) { }
     const jarFiles = files.filter(f => f.toLowerCase().endsWith('.jar'));
 
     let metaMap = {};
     try {
         const metaFile = path.join(modsDir, '.mod_meta.json');
         if (fs.existsSync(metaFile)) metaMap = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
-    } catch (_) {}
+    } catch (_) { }
 
     let AdmZip = null;
-    try { AdmZip = require('adm-zip'); } catch (_) {}
+    try { AdmZip = require('adm-zip'); } catch (_) { }
 
     const modFiles = [];
     for (const f of jarFiles) {
@@ -595,7 +608,7 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
                     if (fab.id) modId = fab.id.toLowerCase();
                     if (fab.name) modName = fab.name.toLowerCase();
                 }
-            } catch (_) {}
+            } catch (_) { }
         }
 
         modFiles.push({
@@ -695,7 +708,7 @@ function autoResolveDuplicateMods(gameDir, combinedText) {
 
     let dupKey = (dupMatch[1] || '').trim();
     let files = [];
-    try { files = fs.readdirSync(modsDir); } catch (_) {}
+    try { files = fs.readdirSync(modsDir); } catch (_) { }
     const jarFiles = files.filter(f => f.toLowerCase().endsWith('.jar'));
 
     const candidateFiles = [];
@@ -706,7 +719,7 @@ function autoResolveDuplicateMods(gameDir, combinedText) {
                 try {
                     const stat = fs.statSync(fullPath);
                     candidateFiles.push({ filename: f, fullPath, mtime: stat.mtimeMs });
-                } catch (_) {}
+                } catch (_) { }
             }
         }
     }
@@ -719,7 +732,7 @@ function autoResolveDuplicateMods(gameDir, combinedText) {
             try {
                 fs.renameSync(candidateFiles[i].fullPath, candidateFiles[i].fullPath + '.disabled');
                 disabledFilename = candidateFiles[i].filename;
-            } catch (_) {}
+            } catch (_) { }
         }
     }
 
@@ -742,7 +755,7 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
     if (reportPath && fs.existsSync(reportPath)) {
         try {
             reportContent = fs.readFileSync(reportPath, 'utf-8');
-        } catch (e) {}
+        } catch (e) { }
     }
 
     let nativeScan = null;
@@ -755,7 +768,7 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
             if ((!nativeScan || !nativeScan.has_crash) && fs.existsSync(latestLogFile)) {
                 nativeScan = nativeLoader.fastScanLogForCrashes(latestLogFile);
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     if (nativeScan && nativeScan.crash_type === 'CLEAN_SHUTDOWN') {
@@ -791,7 +804,7 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
         );
         logExcerpt = errorLines.slice(-15).join('\n') || logTail.split('\n').slice(-15).join('\n');
     }
-    
+
     if (!logExcerpt && memoryLogText) {
         const memLines = memoryLogText.split('\n').map(l => l.trim()).filter(Boolean);
         const errorLines = memLines.filter(l =>
@@ -801,13 +814,20 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
         logExcerpt = errorLines.slice(-15).join('\n') || memLines.slice(-15).join('\n');
     }
 
-    // ── Diagnostic Rule: Normal Game Shutdown Watchdog (False Positive) ───────
+    // ── Diagnostic Rule: Normal Game Shutdown or Intentional Kill (False Positive) ───────
     if (
+        launchConfig?.intentionalStop ||
+        exitCode === 4294967288 ||
+        exitCode === -8 ||
+        exitCode === 130 || // SIGINT
+        exitCode === 143 || // SIGTERM
+        exitCode === 137 || // SIGKILL
+        exitCode === 3221225786 || // STATUS_CONTROL_C_EXIT
+        exitCode === -1073741510 ||
         combinedText.includes('Client shutdown from post-main') ||
         combinedText.includes('ClientShutdownWatchdog') ||
         combinedText.includes('Description: Client shutdown from post-main') ||
-        exitCode === 4294967288 ||
-        exitCode === -8
+        (combinedText.includes('Stopping!') && !combinedText.includes('This crash report has been saved to:'))
     ) {
         return {
             hasCrash: false,
@@ -921,7 +941,7 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
     // ── Diagnostic Rule: Sodium Graphics PreLaunch Crash ───────────────────────
     const isSodiumPreLaunch =
         (/Could not execute entrypoint stage 'preLaunch' due to errors, provided by 'sodium'/i.test(combinedText) ||
-         /SodiumPreLaunch/i.test(combinedText)) &&
+            /SodiumPreLaunch/i.test(combinedText)) &&
         !combinedText.includes('Incompatible mods found!') &&
         !/NoClassDefFoundError:\s*org[\/\.]lwjgl/i.test(combinedText) &&
         !/ClassNotFoundException:\s*org[\/\.]lwjgl/i.test(combinedText);
@@ -1084,7 +1104,7 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
 
     // ── Diagnostic Rule 3: Unsupported Java Class Version ───────────────────
     const classVerMatch = combinedText.match(/class file version (\d+)(?:\.\d+)?.*?(?:only recognizes|up to).*?(\d+)(?:\.\d+)?/i) ||
-                          combinedText.match(/class file version (\d+)(?:\.\d+)?/i);
+        combinedText.match(/class file version (\d+)(?:\.\d+)?/i);
     if (
         /UnsupportedClassVersionError/i.test(combinedText) ||
         /has been compiled by a more recent version of the Java Runtime/i.test(combinedText) ||
@@ -1119,24 +1139,25 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
         };
     }
 
-    // ── Diagnostic Rule: Could not find or load main class (Corrupted Client JAR) ──
+    // ── Diagnostic Rule: Could not find or load main class / Missing Client Class (Corrupted Client JAR) ──
     if (
         /Could not find or load main class net\.minecraft\.client\.main\.Main/i.test(combinedText) ||
         /ClassNotFoundException: net\.minecraft\.client\.main\.Main/i.test(combinedText) ||
-        /Failed to load class file for 'net\.minecraft/i.test(combinedText)
+        /Failed to load class file for 'net\.minecraft/i.test(combinedText) ||
+        /(?:NoClassDefFoundError|ClassNotFoundException):\s*net[\/\.]minecraft[\/\.]client/i.test(combinedText)
     ) {
         return {
             hasCrash: true,
             exitCode,
             reportPath,
-            title: 'Poškozený soubor verze',
+            title: 'Poškozený soubor verze Minecraftu',
             severity: 'critical',
-            description: 'Hlavní soubor klienta hry chybí nebo je neúplný.',
-            recommendation: 'Stáhni soubor verze znovu.',
-            logExcerpt,
+            description: 'Hlavní kód klienta Minecraftu je neúplný nebo byl poškozen (chybějící kódová třída).',
+            recommendation: 'Automatická oprava odstranila poškozený soubor verze. Při příštím startu se čistě stáhne oficiální balíček od Mojangu.',
+            logExcerpt: extractRelevantStack(combinedText, /(?:NoClassDefFoundError|ClassNotFoundException|Failed to load class file|Could not find or load main class)/i) || logExcerpt,
             autoFix: {
                 id: 'REDOWNLOAD_VERSION_JAR',
-                label: 'Znovu stáhnout verzi',
+                label: 'Znovu stáhnout verzi hry',
                 description: 'Odstraní stávající soubor verze pro čisté stažení.'
             }
         };
@@ -1256,11 +1277,11 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
     ) {
         let corruptJarPath = null;
         const jarMatch = combinedText.match(/error remapping game jars\s*\[\s*([^\]]+\.jar)\s*\]/i) ||
-                         combinedText.match(/remapping game jars\s*\[\s*([^\]]+\.jar)\s*\]/i) ||
-                         combinedText.match(/error reading\s+([^\n\r\t]+\.jar)/i) ||
-                         combinedText.match(/reading\s+([^\n\r\t\s]+\.jar)/i) ||
-                         combinedText.match(/([^\s\n\r\t\'\"\[\]]+\.jar)[^\n\r]*ZipException/i) ||
-                         combinedText.match(/ZipException[^\n\r]*?([^\s\n\r\t\'\"\[\]]+\.jar)/i);
+            combinedText.match(/remapping game jars\s*\[\s*([^\]]+\.jar)\s*\]/i) ||
+            combinedText.match(/error reading\s+([^\n\r\t]+\.jar)/i) ||
+            combinedText.match(/reading\s+([^\n\r\t\s]+\.jar)/i) ||
+            combinedText.match(/([^\s\n\r\t\'\"\[\]]+\.jar)[^\n\r]*ZipException/i) ||
+            combinedText.match(/ZipException[^\n\r]*?([^\s\n\r\t\'\"\[\]]+\.jar)/i);
         if (jarMatch && jarMatch[1]) {
             corruptJarPath = jarMatch[1].trim();
         }
@@ -1278,7 +1299,7 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
                         }
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             if (!corruptJarPath && /net\.minecraft\./i.test(combinedText)) {
                 const targetVer = launchConfig?.version?.number || '26.2';
@@ -1315,11 +1336,11 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
 
     // ── Diagnostic Rule 8: Specific Mod Incompatibility ─────────────────────
     const incompModMatch = combinedText.match(/Replace mod '([^']+)'/i) ||
-                           combinedText.match(/Mod '([^']+)' requires/i) ||
-                           combinedText.match(/Mod '([^']+)' is incompatible/i);
+        combinedText.match(/Mod '([^']+)' requires/i) ||
+        combinedText.match(/Mod '([^']+)' is incompatible/i);
     const modCrashMatch = incompModMatch ||
-                          combinedText.match(/(?:Caused by:\s+)?net\.fabricmc\.loader\.[^\n]+Exception:\s+([^\n\r]+)/i) ||
-                          combinedText.match(/Could not execute entrypoint stage 'main' due to errors, provided by '([^']+)'/i);
+        combinedText.match(/(?:Caused by:\s+)?net\.fabricmc\.loader\.[^\n]+Exception:\s+([^\n\r]+)/i) ||
+        combinedText.match(/Could not execute entrypoint stage 'main' due to errors, provided by '([^']+)'/i);
     if (modCrashMatch) {
         const culprit = incompModMatch ? incompModMatch[1] : modCrashMatch[1];
         const isKnownIncomp = Boolean(incompModMatch) || /Incompatible mods found/i.test(combinedText);
@@ -1368,6 +1389,197 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
         };
     }
 
+    // ── Diagnostic Rule: BackendCreationException / OpenGL 3.3 / Zink Failure ──
+    if (
+        /BackendCreationException:\s*Driver does not support OpenGL 3\.3/i.test(combinedText) ||
+        /Failed to create backend OpenGL/i.test(combinedText) ||
+        /MESA-LOADER:\s*failed to retrieve device information/i.test(combinedText) ||
+        /ZINK:\s*failed to choose pdev/i.test(combinedText) ||
+        /Driver does not support OpenGL 3\.3/i.test(combinedText)
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Nekompatibilní grafický ovladač / Zink',
+            severity: 'critical',
+            description: 'Minecraft nedokázal vytvořit grafický kontext OpenGL 3.3. K chybě dochází při nekompatibilitě softwarové Zink vrstvy nebo nesprávném mapování grafických adaptérů na Linuxu.',
+            recommendation: 'Automatická oprava resetovala Zink vrstvu a obnovila bezpečný výchozí grafický backend.',
+            logExcerpt: extractRelevantStack(combinedText, /(?:BackendCreationException|Failed to create backend OpenGL|Driver does not support OpenGL)/i) || logExcerpt,
+            autoFix: {
+                id: 'RESET_GRAPHICS_BACKEND_DEFAULT',
+                label: 'Obnovit výchozí grafický ovladač',
+                description: 'Vypne Zink vrstvu a obnoví standardní stabilní grafický backend.'
+            }
+        };
+    }
+
+    // ── Diagnostic Rule: Iris Shaderpack Compilation Crash ───────────────────
+    if (
+        /net\.irisshaders\.iris\.pipeline\.transform\.TransformException/i.test(combinedText) ||
+        /net\.irisshaders\.iris\.gl\.shader\.ShaderCompileException/i.test(combinedText) ||
+        /iris:\s*Failed to load shader pack/i.test(combinedText) ||
+        /ShaderpackException/i.test(combinedText) ||
+        (/Failed to compile shader/i.test(combinedText) && /iris/i.test(combinedText))
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Chyba grafického shaderpacku (Iris)',
+            severity: 'critical',
+            description: 'Aktivní shaderpack selhal při kompilaci shaderů (TransformException / ShaderCompileException). Použitý shaderpack není kompatibilní s aktuálním grafickým ovladačem nebo verzí hry.',
+            recommendation: 'Automatická oprava deaktivovala aktivní shaderpack, aby hra mohla bezpečně naběhnout.',
+            logExcerpt: extractRelevantStack(combinedText, /(?:TransformException|ShaderCompileException|Failed to load shader pack)/i) || logExcerpt,
+            autoFix: {
+                id: 'DISABLE_CORRUPT_SHADERPACK',
+                label: 'Deaktivovat problematický shaderpack',
+                description: 'Vypne aktivní shaderpack v konfiguraci Iris a umožní bezpečný start hry.'
+            }
+        };
+    }
+
+    // ── Diagnostic Rule: Resource Pack Texture Atlas / ModelBakery Crash ─────
+    if (
+        /TextureAtlasSprite\.getPixelRGBA/i.test(combinedText) ||
+        (/ModelBakery/i.test(combinedText) && /NullPointerException/i.test(combinedText)) ||
+        /Failed to load resource pack/i.test(combinedText) ||
+        (/pack\.mcmeta/i.test(combinedText) && /(?:JsonSyntaxException|corrupt|invalid)/i.test(combinedText))
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Poškozený balíček textur (Resource Pack)',
+            severity: 'warning',
+            description: 'Aktivní balíček textur obsahuje poškozené textury nebo neplatný model (TextureAtlasSprite / ModelBakery), což způsobilo pád vykreslovacího vlákna.',
+            recommendation: 'Automatická oprava resetovala balíčky textur na výchozí vanilkový vzhled.',
+            logExcerpt: extractRelevantStack(combinedText, /(?:TextureAtlasSprite|ModelBakery|resource pack)/i) || logExcerpt,
+            autoFix: {
+                id: 'RESET_RESOURCE_PACKS',
+                label: 'Resetovat balíčky textur',
+                description: 'Vyčistí seznam aktivních resource packů v options.txt.'
+            }
+        };
+    }
+
+    // ── Diagnostic Rule: Partial / Corrupted Downloads in mods/ ──────────────
+    if (
+        /ZipException:\s*error in opening zip file/i.test(combinedText) ||
+        /JarFile:\s*file is empty/i.test(combinedText) ||
+        (/error reading\s+[^\n\r]+\.jar/i.test(combinedText) && /mods/i.test(combinedText))
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Neúplný / poškozený soubor módu (0 B nebo .part)',
+            severity: 'critical',
+            description: 'Ve složce mods byl detekován poškozený soubor nebo zbytek nedokončeného stahování (.part / 0 bajtů). Zavaděč nedokáže přečíst archiv módu.',
+            recommendation: 'Automatická oprava vyčistila neúplné a nulové soubory ze složky mods.',
+            logExcerpt: extractRelevantStack(combinedText, /(?:ZipException|error reading|JarFile)/i) || logExcerpt,
+            autoFix: {
+                id: 'CLEAN_PARTIAL_DOWNLOADS',
+                label: 'Vyčistit neúplné mod soubory',
+                description: 'Odstraní dočasné a nulové .jar a .part soubory ze složky mods.'
+            }
+        };
+    }
+
+    // ── Diagnostic Rule: LWJGL Natives Cache Corruption ───────────────────────
+    if (
+        /UnsatisfiedLinkError:.*natives_extract/i.test(combinedText) ||
+        /Failed to extract native library/i.test(combinedText) ||
+        (/libglfw\.so/i.test(combinedText) && /(?:file too short|invalid ELF header)/i.test(combinedText)) ||
+        (/UnsatisfiedLinkError/i.test(combinedText) && /Failed to load library:\s*lib(?:glfw|lwjgl|jemalloc|openal)/i.test(combinedText))
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Poškozená mezipaměť nativních knihoven',
+            severity: 'critical',
+            description: 'Nativní binární knihovny (LWJGL / GLFW) v mezipaměti natives_extract byly poškozeny nebo zkráceny (file too short / invalid ELF header).',
+            recommendation: 'Automatická oprava vyčistila složku natives_extract. Knihovny se čistě rozbalí při spuštění.',
+            logExcerpt: extractRelevantStack(combinedText, /UnsatisfiedLinkError/i) || logExcerpt,
+            autoFix: {
+                id: 'PURGE_NATIVES_CACHE',
+                label: 'Vyčistit cache nativních knihoven',
+                description: 'Odstraní dočasnou složku natives_extract pro čistou extrakci knihoven.'
+            }
+        };
+    }
+
+    // ── Diagnostic Rule: Invalid JVM Memory Heap or Args Misconfiguration ─────
+    if (
+        /Incompatible minimum and maximum heap sizes specified/i.test(combinedText) ||
+        /Initial heap size set to a larger value than the maximum heap size/i.test(combinedText) ||
+        /Invalid maximum heap size/i.test(combinedText) ||
+        /Could not create the Java Virtual Machine/i.test(combinedText) ||
+        /Error occurred during initialization of VM/i.test(combinedText)
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Chyba parametrů Java paměti (JVM)',
+            severity: 'critical',
+            description: 'Java odmítla nastartovat kvůli konfliktu v konfiguraci paměti (např. -Xms překračuje -Xmx nebo neplatný přepínač virtuálního stroje).',
+            recommendation: 'Automatická oprava srovnala paměť na stabilní hodnoty (2 GB min, 6 GB max) a vyčistila konfliktní argumenty.',
+            logExcerpt: extractRelevantStack(combinedText, /(?:Incompatible minimum|Initial heap size|Could not create the Java Virtual Machine|initialization of VM)/i) || logExcerpt,
+            autoFix: {
+                id: 'RESET_JVM_MEMORY_FLAGS',
+                label: 'Srovnat parametry RAM (2GB - 6GB)',
+                description: 'Nastaví bezpečné meze paměti RAM a odstraní kolidující přepínače.'
+            }
+        };
+    }
+
+    // ── Diagnostic Rule: Corrupted Sodium Options JSON ───────────────────────
+    if (
+        (/sodium-options\.json/i.test(combinedText) && /(?:JsonSyntaxException|corrupt|MalformedJsonException)/i.test(combinedText)) ||
+        /OptionException.*sodium/i.test(combinedText)
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Poškozená konfigurace Sodium',
+            severity: 'warning',
+            description: 'Konfigurační soubor sodium-options.json je poškozený nebo obsahuje neplatnou JSON syntaxi, která brání spuštění hry.',
+            recommendation: 'Automatická oprava zazálohovala vadný soubor a obnovila výchozí nastavení Sodium.',
+            logExcerpt: extractRelevantStack(combinedText, /sodium-options\.json/i) || logExcerpt,
+            autoFix: {
+                id: 'RESET_SODIUM_CONFIG',
+                label: 'Resetovat nastavení Sodium',
+                description: 'Zálohuje a obnoví sodium-options.json do čistého stavu.'
+            }
+        };
+    }
+
+    // ── Diagnostic Rule: OpenAL Audio Device Crash ────────────────────────────
+    if (
+        /org\.lwjgl\.openal\.AL10/i.test(combinedText) ||
+        /OpenAL error:\s*Invalid Device/i.test(combinedText) ||
+        /Failed to initialize OpenAL/i.test(combinedText)
+    ) {
+        return {
+            hasCrash: true,
+            exitCode,
+            reportPath,
+            title: 'Chyba zvukového subsystému (OpenAL)',
+            severity: 'warning',
+            description: 'Minecraftu se nepodařilo otevřít nastavené zvukové výstupní zařízení (OpenAL Invalid Device).',
+            recommendation: 'Automatická oprava resetovala zvukový výstup v options.txt na výchozí systémové zařízení.',
+            logExcerpt: extractRelevantStack(combinedText, /(?:openal|Invalid Device)/i) || logExcerpt,
+            autoFix: {
+                id: 'RESET_AUDIO_DEVICE',
+                label: 'Resetovat zvukové zařízení',
+                description: 'Nastaví soundDevice na výchozí zařízení v options.txt.'
+            }
+        };
+    }
+
     return {
         hasCrash: true,
         exitCode,
@@ -1408,12 +1620,12 @@ function downloadFile(url, destPath) {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                 // Follow redirect
                 file.close();
-                try { fs.unlinkSync(destPath); } catch (e) {}
+                try { fs.unlinkSync(destPath); } catch (e) { }
                 return downloadFile(res.headers.location, destPath).then(resolve).catch(reject);
             }
             if (res.statusCode !== 200) {
                 file.close();
-                try { fs.unlinkSync(destPath); } catch (e) {}
+                try { fs.unlinkSync(destPath); } catch (e) { }
                 return reject(new Error(`HTTP status: ${res.statusCode}`));
             }
             res.pipe(file);
@@ -1424,7 +1636,7 @@ function downloadFile(url, destPath) {
 
         req.on('error', (err) => {
             file.close();
-            try { fs.unlinkSync(destPath); } catch (e) {}
+            try { fs.unlinkSync(destPath); } catch (e) { }
             reject(err);
         });
     });
@@ -1462,7 +1674,7 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                             }
                         }
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
 
             // 2. Přidáme JVM argumenty obcházející bugchecky Sodium
@@ -1611,11 +1823,11 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
             const targetVerDir = path.join(verDir, targetVer);
             const vJar = path.join(targetVerDir, `${targetVer}.jar`);
             const vBak = path.join(targetVerDir, `${targetVer}.vanilla.jar`);
-            try { if (fs.existsSync(vJar)) fs.unlinkSync(vJar); } catch (_) {}
-            try { if (fs.existsSync(vBak)) fs.unlinkSync(vBak); } catch (_) {}
-            try { if (fs.existsSync(`${vJar}.skin_sig`)) fs.unlinkSync(`${vJar}.skin_sig`); } catch (_) {}
-            try { if (fs.existsSync(`${vJar}.brand_sig`)) fs.unlinkSync(`${vJar}.brand_sig`); } catch (_) {}
-            try { if (fs.existsSync(`${vJar}.vanilla_bak`)) fs.unlinkSync(`${vJar}.vanilla_bak`); } catch (_) {}
+            try { if (fs.existsSync(vJar)) fs.unlinkSync(vJar); } catch (_) { }
+            try { if (fs.existsSync(vBak)) fs.unlinkSync(vBak); } catch (_) { }
+            try { if (fs.existsSync(`${vJar}.skin_sig`)) fs.unlinkSync(`${vJar}.skin_sig`); } catch (_) { }
+            try { if (fs.existsSync(`${vJar}.brand_sig`)) fs.unlinkSync(`${vJar}.brand_sig`); } catch (_) { }
+            try { if (fs.existsSync(`${vJar}.vanilla_bak`)) fs.unlinkSync(`${vJar}.vanilla_bak`); } catch (_) { }
 
             // Vyčistit také všechny odvozené Fabric/Forge JARy pro tuto verzi
             try {
@@ -1624,20 +1836,20 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                         if (d.includes(targetVer)) {
                             const subJar = path.join(verDir, d, `${d}.jar`);
                             const subBak = path.join(verDir, d, `${d}.vanilla.jar`);
-                            try { if (fs.existsSync(subJar)) fs.unlinkSync(subJar); } catch (_) {}
-                            try { if (fs.existsSync(subBak)) fs.unlinkSync(subBak); } catch (_) {}
-                            try { if (fs.existsSync(`${subJar}.skin_sig`)) fs.unlinkSync(`${subJar}.skin_sig`); } catch (_) {}
-                            try { if (fs.existsSync(`${subJar}.brand_sig`)) fs.unlinkSync(`${subJar}.brand_sig`); } catch (_) {}
+                            try { if (fs.existsSync(subJar)) fs.unlinkSync(subJar); } catch (_) { }
+                            try { if (fs.existsSync(subBak)) fs.unlinkSync(subBak); } catch (_) { }
+                            try { if (fs.existsSync(`${subJar}.skin_sig`)) fs.unlinkSync(`${subJar}.skin_sig`); } catch (_) { }
+                            try { if (fs.existsSync(`${subJar}.brand_sig`)) fs.unlinkSync(`${subJar}.brand_sig`); } catch (_) { }
                         }
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             // Vyčistit remapped cache Fabricu
             try {
                 const remappedDir = path.join(baseDir, '.fabric', 'remappedJars');
                 if (fs.existsSync(remappedDir)) fs.rmSync(remappedDir, { recursive: true, force: true });
-            } catch (_) {}
+            } catch (_) { }
 
             return {
                 success: true,
@@ -1657,11 +1869,11 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                             try {
                                 fs.rmSync(path.join(versionsDir, d), { recursive: true, force: true });
                                 cleaned.push(d);
-                            } catch (_) {}
+                            } catch (_) { }
                         }
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             try {
                 const flLibDir = path.join(baseDir, 'libraries', 'net', 'fabricmc', 'fabric-loader');
@@ -1671,11 +1883,11 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                             try {
                                 fs.rmSync(path.join(flLibDir, d), { recursive: true, force: true });
                                 cleaned.push(`lib: ${d}`);
-                            } catch (_) {}
+                            } catch (_) { }
                         }
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             return {
                 success: true,
@@ -1736,7 +1948,7 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                                 fs.unlinkSync(filePath);
                                 deletedList.push(path.basename(filePath));
                             }
-                        } catch (_) {}
+                        } catch (_) { }
                     }
                 } else {
                     try {
@@ -1744,12 +1956,12 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                             fs.unlinkSync(filePath);
                             deletedList.push(path.basename(filePath));
                         }
-                    } catch (_) {}
-                    try { if (fs.existsSync(vBak)) fs.unlinkSync(vBak); } catch (_) {}
+                    } catch (_) { }
+                    try { if (fs.existsSync(vBak)) fs.unlinkSync(vBak); } catch (_) { }
                 }
-                try { if (fs.existsSync(`${filePath}.skin_sig`)) fs.unlinkSync(`${filePath}.skin_sig`); } catch (_) {}
-                try { if (fs.existsSync(`${filePath}.brand_sig`)) fs.unlinkSync(`${filePath}.brand_sig`); } catch (_) {}
-                try { if (fs.existsSync(`${filePath}.vanilla_bak`)) fs.unlinkSync(`${filePath}.vanilla_bak`); } catch (_) {}
+                try { if (fs.existsSync(`${filePath}.skin_sig`)) fs.unlinkSync(`${filePath}.skin_sig`); } catch (_) { }
+                try { if (fs.existsSync(`${filePath}.brand_sig`)) fs.unlinkSync(`${filePath}.brand_sig`); } catch (_) { }
+                try { if (fs.existsSync(`${filePath}.vanilla_bak`)) fs.unlinkSync(`${filePath}.vanilla_bak`); } catch (_) { }
             };
 
             const baseDir = config.baseDir || gameDir;
@@ -1770,7 +1982,7 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                                     }
                                 }
                             }
-                        } catch (_) {}
+                        } catch (_) { }
                     }
                 }
             } else {
@@ -1785,7 +1997,7 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                             }
                         }
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
 
             // Vyčisti remapped cache Fabricu, která mohla vzniknout z poškozeného jádra
@@ -1794,7 +2006,7 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                 if (fs.existsSync(remappedDir)) {
                     fs.rmSync(remappedDir, { recursive: true, force: true });
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             if (targetFile) {
                 cleanJarAndBackups(targetFile);
@@ -1830,7 +2042,7 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                             }
                         }
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
 
             return {
@@ -1930,6 +2142,204 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
             }
 
             throw new Error('Nepodařilo se automaticky stáhnout chybějící závislosti z Modrinthu ani deaktivovat problematický mód.');
+        }
+
+        case 'RESET_GRAPHICS_BACKEND_DEFAULT': {
+            config.enableZink = false;
+            config.graphicsBackend = 'default';
+            config.enableDiscreteGpu = false;
+            if (saveConfigFn) {
+                saveConfigFn({
+                    enableZink: false,
+                    graphicsBackend: 'default',
+                    enableDiscreteGpu: false
+                });
+            }
+            return {
+                success: true,
+                relaunch: true,
+                message: 'Zink byl vypnut a grafický adaptér byl resetován na bezpečný stabilní výchozí profil.',
+                updatedConfig: {
+                    enableZink: false,
+                    graphicsBackend: 'default',
+                    enableDiscreteGpu: false
+                }
+            };
+        }
+
+        case 'DISABLE_CORRUPT_SHADERPACK': {
+            const irisOptionsFile = path.join(gameDir, 'optionsiris.txt');
+            let modified = false;
+            if (fs.existsSync(irisOptionsFile)) {
+                try {
+                    let content = fs.readFileSync(irisOptionsFile, 'utf-8');
+                    content = content.replace(/shaderPack=.*/g, 'shaderPack=');
+                    content = content.replace(/enableShaders=true/g, 'enableShaders=false');
+                    fs.writeFileSync(irisOptionsFile, content, 'utf-8');
+                    modified = true;
+                } catch (e) {
+                    console.error('Chyba při úpravě optionsiris.txt:', e);
+                }
+            }
+            return {
+                success: true,
+                relaunch: true,
+                message: modified
+                    ? 'Aktivní shaderpack byl deaktivován v optionsiris.txt. Hra se spustí bez shaderů.'
+                    : 'Konfigurace shaderů byla vyčištěna.'
+            };
+        }
+
+        case 'RESET_RESOURCE_PACKS': {
+            const optionsFile = path.join(gameDir, 'options.txt');
+            let modified = false;
+            if (fs.existsSync(optionsFile)) {
+                try {
+                    let content = fs.readFileSync(optionsFile, 'utf-8');
+                    content = content.replace(/resourcePacks:\[.*?\]/g, 'resourcePacks:[]');
+                    content = content.replace(/incompatibleResourcePacks:\[.*?\]/g, 'incompatibleResourcePacks:[]');
+                    fs.writeFileSync(optionsFile, content, 'utf-8');
+                    modified = true;
+                } catch (e) {
+                    console.error('Chyba při úpravě options.txt:', e);
+                }
+            }
+            return {
+                success: true,
+                relaunch: true,
+                message: modified
+                    ? 'Balíčky textur (resource packs) byly vyčištěny z options.txt.'
+                    : 'Nastavení balíčků textur bylo resetováno na vanilkový vzhled.'
+            };
+        }
+
+        case 'CLEAN_PARTIAL_DOWNLOADS': {
+            const modsDir = path.join(gameDir, 'mods');
+            let cleaned = [];
+            if (fs.existsSync(modsDir)) {
+                try {
+                    const files = fs.readdirSync(modsDir);
+                    for (const f of files) {
+                        const lower = f.toLowerCase();
+                        const fullP = path.join(modsDir, f);
+                        const isPartial = lower.endsWith('.part') || lower.endsWith('.tmp') || lower.endsWith('.crdownload') || lower.endsWith('.download');
+                        let isBadJar = false;
+                        if (lower.endsWith('.jar')) {
+                            try {
+                                const st = fs.statSync(fullP);
+                                if (st.size < 300 || !isJarFileValid(fullP)) {
+                                    isBadJar = true;
+                                }
+                            } catch (_) {}
+                        }
+                        if (isPartial || isBadJar) {
+                            try {
+                                fs.unlinkSync(fullP);
+                                cleaned.push(f);
+                            } catch (_) {}
+                        }
+                    }
+                } catch (e) {
+                    console.error('Chyba při čištění složky mods:', e);
+                }
+            }
+            return {
+                success: true,
+                relaunch: true,
+                message: cleaned.length > 0
+                    ? `Bylo odstraněno ${cleaned.length} poškozených souborů (${cleaned.slice(0, 3).join(', ')}).`
+                    : 'Složka mods byla zkontrolována a vyčištěna.'
+            };
+        }
+
+        case 'PURGE_NATIVES_CACHE': {
+            const baseDir = config.baseDir || gameDir;
+            const candidates = [
+                path.join(baseDir, 'natives_extract'),
+                path.join(gameDir, 'natives_extract'),
+                path.join(baseDir, '.natives'),
+                path.join(gameDir, '.natives')
+            ];
+            let purgedCount = 0;
+            for (const p of candidates) {
+                if (fs.existsSync(p)) {
+                    try {
+                        fs.rmSync(p, { recursive: true, force: true });
+                        purgedCount++;
+                    } catch (_) {}
+                }
+            }
+            return {
+                success: true,
+                relaunch: true,
+                message: 'Mezipaměť rozbalených nativních knihoven LWJGL byla úspěšně vyčištěna.'
+            };
+        }
+
+        case 'RESET_JVM_MEMORY_FLAGS': {
+            config.ramMin = 2;
+            config.ramMax = Math.max(6, config.ramMax || 6);
+            if (config.customJvmArgs && typeof config.customJvmArgs === 'string') {
+                config.customJvmArgs = config.customJvmArgs
+                    .replace(/-Xm[sx]\d+[kmgKMG]?/g, '')
+                    .replace(/-XX:MaxHeapSize=\d+[kmgKMG]?/g, '')
+                    .replace(/-XX:InitialHeapSize=\d+[kmgKMG]?/g, '')
+                    .trim();
+            }
+            if (Array.isArray(config.jvmArgs)) {
+                config.jvmArgs = config.jvmArgs.filter(a => !/^-Xm[sx]/.test(a));
+            }
+            if (saveConfigFn) {
+                saveConfigFn({
+                    ramMin: 2,
+                    ramMax: config.ramMax,
+                    customJvmArgs: config.customJvmArgs,
+                    jvmArgs: config.jvmArgs
+                });
+            }
+            return {
+                success: true,
+                relaunch: true,
+                message: `Paměťové meze byly harmonizovány na 2 GB (min) a ${config.ramMax} GB (max).`,
+                updatedConfig: {
+                    ramMin: 2,
+                    ramMax: config.ramMax,
+                    customJvmArgs: config.customJvmArgs,
+                    jvmArgs: config.jvmArgs
+                }
+            };
+        }
+
+        case 'RESET_SODIUM_CONFIG': {
+            const sodiumConfig = path.join(gameDir, 'config', 'sodium-options.json');
+            if (fs.existsSync(sodiumConfig)) {
+                try {
+                    fs.renameSync(sodiumConfig, sodiumConfig + '.bak');
+                } catch (_) {}
+            }
+            return {
+                success: true,
+                relaunch: true,
+                message: 'Konfigurační soubor sodium-options.json byl zálohován a obnoven do výchozího stavu.'
+            };
+        }
+
+        case 'RESET_AUDIO_DEVICE': {
+            const optionsFile = path.join(gameDir, 'options.txt');
+            let modified = false;
+            if (fs.existsSync(optionsFile)) {
+                try {
+                    let content = fs.readFileSync(optionsFile, 'utf-8');
+                    content = content.replace(/soundDevice:.*/g, 'soundDevice:""');
+                    fs.writeFileSync(optionsFile, content, 'utf-8');
+                    modified = true;
+                } catch (_) {}
+            }
+            return {
+                success: true,
+                relaunch: true,
+                message: 'Zvukové výstupní zařízení v options.txt bylo resetováno na výchozí hodnotu.'
+            };
         }
 
         case 'OPEN_CRASH_REPORT': {

@@ -277,6 +277,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     let isRunning = false;
     let runningProfileId = null;
     let launchingProfileId = null;
+    let userRequestedGameStop = false;
+
+    function markUserRequestedStop() {
+        userRequestedGameStop = true;
+        setTimeout(() => { userRequestedGameStop = false; }, 6000);
+    }
     const BUNDLED_KEYARTS = {
         '1.21.11': 'assets/keyarts/1.21.11.jpg',
         '26.1': 'assets/keyarts/26.1.jpg',
@@ -2850,6 +2856,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const isThisRunning = isRunning && (runningProfileId ? pid === runningProfileId : pid === currentConfig.activeProfileId);
                 if (isThisRunning) {
                     if (confirm('Chceš ukončit běžící Minecraft proces?')) {
+                        markUserRequestedStop();
                         try {
                             await window.api.killGame();
                         } catch (err) { }
@@ -2995,6 +3002,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         sidebarPlayBtn.addEventListener('click', () => {
             if (isRunning) {
                 if (confirm('Chceš ukončit běžící Minecraft proces?')) {
+                    markUserRequestedStop();
                     window.api.killGame().catch(console.error);
                     resetPlayState();
                 }
@@ -3050,6 +3058,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('.btn-stop-v').forEach(btn => {
         btn.addEventListener('click', async () => {
             appendLog('[LAUNCHER] Zastavuji herní proces na přání uživatele...');
+            markUserRequestedStop();
             try {
                 await window.api.killGame();
             } catch (e) { }
@@ -3097,6 +3106,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (isRunning) {
                 appendLog('[LAUNCHER] Ukončuji běžící instanci Minecraftu...');
                 if (progressText) progressText.textContent = 'Ukončuji Minecraft...';
+                markUserRequestedStop();
                 try {
                     await window.api.killGame();
                 } catch (err) {
@@ -3129,6 +3139,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             e.stopPropagation();
             if (isRunning) {
                 appendLog('[LAUNCHER] Ukončuji běžící Minecraft z horní lišty...');
+                markUserRequestedStop();
                 try {
                     await window.api.killGame();
                 } catch (err) {
@@ -3156,6 +3167,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const currentRunningPid = runningProfileId || currentConfig.activeProfileId;
             if (profileId === currentRunningPid || (!profileId && currentConfig.activeProfileId === currentRunningPid)) {
                 if (confirm('Chceš ukončit běžící Minecraft proces?')) {
+                    markUserRequestedStop();
                     await window.api.killGame();
                     resetPlayState();
                 }
@@ -8466,82 +8478,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Conflict pill click -> filters to conflicts
-    if (keybindConflictPill) {
-        keybindConflictPill.addEventListener('click', () => {
-            if (keybindState.stats.conflicts > 0) {
-                keybindActiveCategory = 'conflicts';
-                updateCategoryChipsUI();
-                // přepneme na list view pro okamžitý přehled
-                if (btnKeybindToggleList) btnKeybindToggleList.click();
-            }
-        });
-    }
-
-    // Reset button
-    if (btnResetKeybinds) {
-        btnResetKeybinds.addEventListener('click', async () => {
-            try {
-                const res = await window.api.resetKeybindsDefault();
-                if (res && res.success) {
-                    await loadAndInitKeybinds();
-                    showToast('Všechny klávesy byly resetovány do výchozího stavu.', 'success');
-                }
-            } catch (err) {
-                console.error('Chyba při resetování bindů:', err);
-            }
-        });
-    }
-
-    // Close modal
-    if (btnCloseKeybindEditorModal) {
-        btnCloseKeybindEditorModal.addEventListener('click', () => {
-            if (modalKeybindEditor) modalKeybindEditor.style.display = 'none';
-        });
-    }
-    if (modalKeybindEditor) {
-        modalKeybindEditor.addEventListener('click', (e) => {
-            if (e.target === modalKeybindEditor) {
-                modalKeybindEditor.style.display = 'none';
-            }
-        });
-    }
-
-    async function loadAndInitKeybinds() {
-        try {
-            const res = await window.api.getKeybinds();
-            if (res && res.success) {
-                keybindState.binds = res.binds || [];
-                keybindState.stats = res.stats || {};
-                keybindState.keyDefinitions = res.keyDefinitions || {};
-            }
-            recalculateKeybindStats();
-            renderKeyboardStage();
-            renderKeybindListView();
-            if (keybindSelectedKey) {
-                renderKeyInspector(keybindSelectedKey);
-            } else {
-                // Výchozí vybraná klávesa W
-                selectKeyboardKey('key.keyboard.w', 'W');
-            }
-        } catch (err) {
-            console.error('Chyba načítání kláves:', err);
-        }
-    }
-
-    function openKeybindEditorModal() {
-        if (!modalKeybindEditor) return;
-        modalKeybindEditor.style.display = 'flex';
-        loadAndInitKeybinds();
-    }
-
-    // ── Intelligent Crash Analyzer ──────────────────────────────────────────
-    let currentCrashData = null;
+    // ==========================================
+    // CRASH ANALYZER & AUTONOMOUS REPAIR
+    // ==========================================
     const modalCrashAnalyzer = document.getElementById('modalCrashAnalyzer');
     const btnCloseCrashModal = document.getElementById('btnCloseCrashModal');
     const btnDismissCrashModal = document.getElementById('btnDismissCrashModal');
     const btnApplyCrashFix = document.getElementById('btnApplyCrashFix');
     const btnOpenCrashFullReport = document.getElementById('btnOpenCrashFullReport');
+
+    let currentCrashData = null;
+    let activeCrashFixPromise = null;
+    let userAcknowledgedWhileFixing = false;
 
     function closeCrashModal() {
         if (modalCrashAnalyzer) modalCrashAnalyzer.style.display = 'none';
@@ -8555,7 +8503,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.api.onCrash((crashData) => {
             setHeroLaunchCelebration(false);
             if (!crashData || !modalCrashAnalyzer) return;
+            if (userRequestedGameStop || crashData.isCleanShutdown || crashData.hasCrash === false) {
+                console.log('[CRASH ANALYZER] Ignoruji pád – hra byla ukončena záměrně uživatelem nebo systémem.');
+                return;
+            }
             currentCrashData = crashData;
+            activeCrashFixPromise = null;
+            userAcknowledgedWhileFixing = false;
 
             const titleElem = document.getElementById('crashAnalyzerTitle');
             const subElem = document.getElementById('crashAnalyzerSubtitle');
@@ -8565,113 +8519,317 @@ document.addEventListener('DOMContentLoaded', async () => {
             const recElem = document.getElementById('crashRecommendation');
             const logElem = document.getElementById('crashLogExcerpt');
             const fixTextElem = document.getElementById('btnApplyCrashFixText');
+            const repairBanner = document.getElementById('crashAutoRepairBanner');
+            const repairTitle = document.getElementById('crashAutoRepairTitle');
+            const repairDesc = document.getElementById('crashAutoRepairDesc');
+            const repairIcon = document.getElementById('crashAutoRepairIcon');
+            const diagCard = document.getElementById('crashDiagCard');
+            const modalIconSvg = document.getElementById('crashModalIconSvg');
 
-            const isAutoFixed = !!(crashData.fixed || crashData.autoFixed);
+            const isAlreadyFixed = !!(crashData.fixed || crashData.autoFixed);
+            const hasActionableFix = !!(crashData.autoFix && !isAlreadyFixed);
 
-            if (titleElem) {
-                titleElem.textContent = crashData.title || (isAutoFixed ? 'Hra opravena' : 'Pád hry');
-                titleElem.style.color = isAutoFixed ? '#21DE00' : '#f51515';
+            if (descElem) {
+                descElem.textContent = crashData.description || 'Neznámá chyba.';
+                descElem.style.color = '#94a3b8';
             }
-            if (subElem) {
-                subElem.textContent = isAutoFixed
-                    ? (crashData.title?.includes('závislost') ? 'Chybějící závislost byla automaticky doinstalována' : 'Nekompatibilní mód byl vyřazen')
-                    : `Chyba při běhu (kód: ${crashData.exitCode || 1})`;
-            }
-            if (badgeElem) {
-                badgeElem.textContent = isAutoFixed ? 'Opraveno' : `Kód ${crashData.exitCode || 1}`;
-                badgeElem.style.background = isAutoFixed ? '#21DE00' : '#f51515';
-                badgeElem.style.color = isAutoFixed ? '#0a0b0e' : '#ffffff';
-            }
-            if (headElem) {
-                headElem.textContent = isAutoFixed ? `Řešení: ${crashData.title || 'Vyřešeno'}` : `Příčina: ${crashData.title || 'Neznámá chyba'}`;
-                headElem.style.color = isAutoFixed ? '#21DE00' : '#f87171';
-            }
-            if (descElem) descElem.textContent = crashData.description || '';
-            if (recElem) recElem.textContent = crashData.recommendation || '';
-            if (logElem) logElem.textContent = crashData.logExcerpt || '';
-
-            if (isAutoFixed && typeof loadInstalledMods === 'function') {
-                loadInstalledMods();
+            if (logElem) {
+                logElem.textContent = crashData.stackExcerpt || crashData.rawLog || 'Žádné podrobnosti k dispozici.';
+                logElem.style.color = '#94a3b8';
             }
 
-            if (btnApplyCrashFix) {
-                if (crashData.autoFix) {
-                    btnApplyCrashFix.style.display = 'inline-flex';
-                    if (fixTextElem) {
-                        const cleanLabel = (crashData.autoFix.label || (isAutoFixed ? 'Spustit hru znovu' : 'Automatická oprava')).replace(/^[⚡⚠️🔧\s]+/u, '');
-                        const iconHtml = isAutoFixed
-                            ? '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>'
-                            : '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold ui-icon-pulse" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>';
-                        fixTextElem.innerHTML = `${iconHtml} <span>${escapeHtml(cleanLabel)}</span>`;
+            if (isAlreadyFixed) {
+                if (titleElem) {
+                    titleElem.textContent = crashData.title || 'Hra opravena';
+                    titleElem.style.color = '#21DE00';
+                }
+                if (subElem) {
+                    subElem.textContent = 'Automatická oprava dokončena';
+                    subElem.style.color = '#94a3b8';
+                }
+                if (badgeElem) {
+                    badgeElem.textContent = 'Opraveno';
+                    badgeElem.style.background = '#21DE00';
+                    badgeElem.style.color = '#0a0a0c';
+                }
+                if (headElem) {
+                    headElem.textContent = '✓ ' + (crashData.title || 'Vyřešeno');
+                    headElem.style.color = '#21DE00';
+                }
+                if (diagCard) {
+                    diagCard.style.background = 'rgba(33, 222, 0, 0.08)';
+                    diagCard.style.border = '1px solid rgba(33, 222, 0, 0.3)';
+                }
+                if (modalIconSvg) {
+                    modalIconSvg.className = 'ui-icon-svg ui-icon-svg--lg ui-icon-svg--green';
+                    modalIconSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+                }
+                if (repairBanner) {
+                    repairBanner.style.display = 'flex';
+                    repairBanner.style.background = 'rgba(33, 222, 0, 0.12)';
+                    repairBanner.style.border = '1px solid rgba(33, 222, 0, 0.35)';
+                    if (repairTitle) {
+                        repairTitle.textContent = '✓ Automaticky opraveno';
+                        repairTitle.style.color = '#21DE00';
                     }
-                } else {
-                    btnApplyCrashFix.style.display = 'none';
+                    if (repairDesc) {
+                        repairDesc.textContent = crashData.recommendation || 'Opravy byly úspěšně aplikovány.';
+                        repairDesc.style.color = '#94a3b8';
+                    }
+                    if (repairIcon) {
+                        repairIcon.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                    }
+                }
+                if (recElem) {
+                    recElem.textContent = crashData.recommendation || 'Můžeš hru ihned spustit znovu.';
+                    recElem.style.color = '#21DE00';
+                }
+                if (typeof loadInstalledMods === 'function') {
+                    loadInstalledMods();
+                }
+                if (btnApplyCrashFix) {
+                    btnApplyCrashFix.style.display = 'inline-flex';
+                    btnApplyCrashFix.className = 'mc-btn mc-btn-green';
+                    if (fixTextElem) {
+                        fixTextElem.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>Rozumím (Spustit hru)</span>';
+                    }
+                }
+            } else if (hasActionableFix) {
+                if (titleElem) {
+                    titleElem.textContent = crashData.title || 'Pád hry';
+                    titleElem.style.color = '#f51515';
+                }
+                if (subElem) {
+                    subElem.textContent = 'Automatická oprava probíhá';
+                    subElem.style.color = '#94a3b8';
+                }
+                if (badgeElem) {
+                    badgeElem.textContent = 'Opravuji...';
+                    badgeElem.style.background = '#0a67e5';
+                    badgeElem.style.color = '#ffffff';
+                }
+                if (headElem) {
+                    headElem.textContent = 'Příčina: ' + (crashData.title || 'Neznámá chyba');
+                    headElem.style.color = '#f51515';
+                }
+                if (diagCard) {
+                    diagCard.style.background = 'rgba(245, 21, 21, 0.08)';
+                    diagCard.style.border = '1px solid rgba(245, 21, 21, 0.25)';
+                }
+                if (modalIconSvg) {
+                    modalIconSvg.className = 'ui-icon-svg ui-icon-svg--lg ui-icon-svg--red';
+                    modalIconSvg.innerHTML = '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>';
+                }
+                if (repairBanner) {
+                    repairBanner.style.display = 'flex';
+                    repairBanner.style.background = 'rgba(10, 103, 229, 0.12)';
+                    repairBanner.style.border = '1px solid rgba(10, 103, 229, 0.3)';
+                    if (repairTitle) {
+                        repairTitle.textContent = 'Automatická oprava probíhá';
+                        repairTitle.style.color = '#0a67e5';
+                    }
+                    if (repairDesc) {
+                        repairDesc.textContent = 'Aplikuji opravy...';
+                        repairDesc.style.color = '#94a3b8';
+                    }
+                    if (repairIcon) {
+                        repairIcon.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" style="color: #0a67e5;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg>';
+                    }
+                }
+                if (recElem) {
+                    recElem.textContent = crashData.recommendation || 'Probíhá automatické řešení chyby...';
+                    recElem.style.color = '#0a67e5';
+                }
+                if (btnApplyCrashFix) {
+                    btnApplyCrashFix.style.display = 'inline-flex';
+                    btnApplyCrashFix.className = 'mc-btn mc-btn-secondary';
+                    if (fixTextElem) {
+                        fixTextElem.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Opravuji... (OK)</span>';
+                    }
+                }
+
+                // Autonomously start applying the fix right now while user looks at modal
+                appendLog(`[AUTOPILOT OPRAV] ⚡ Spouštím automatickou opravu v pozadí: ${crashData.autoFix.id}`);
+                activeCrashFixPromise = window.api.applyCrashFix(crashData.autoFix, currentConfig.activeProfileId)
+                    .then(async (res) => {
+                        activeCrashFixPromise = null;
+                        if (res && res.success) {
+                            if (currentCrashData) {
+                                currentCrashData.fixed = true;
+                                currentCrashData.autoFixed = true;
+                            }
+                            if (titleElem) {
+                                titleElem.textContent = 'Hra opravena';
+                                titleElem.style.color = '#21DE00';
+                            }
+                            if (subElem) {
+                                subElem.textContent = 'Automatická oprava dokončena';
+                                subElem.style.color = '#94a3b8';
+                            }
+                            if (badgeElem) {
+                                badgeElem.textContent = 'Opraveno';
+                                badgeElem.style.background = '#21DE00';
+                                badgeElem.style.color = '#0a0a0c';
+                            }
+                            if (headElem) {
+                                headElem.textContent = '✓ Problém byl vyřešen';
+                                headElem.style.color = '#21DE00';
+                            }
+                            if (diagCard) {
+                                diagCard.style.background = 'rgba(33, 222, 0, 0.08)';
+                                diagCard.style.border = '1px solid rgba(33, 222, 0, 0.3)';
+                            }
+                            if (modalIconSvg) {
+                                modalIconSvg.className = 'ui-icon-svg ui-icon-svg--lg ui-icon-svg--green';
+                                modalIconSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+                            }
+                            if (repairBanner) {
+                                repairBanner.style.background = 'rgba(33, 222, 0, 0.12)';
+                                repairBanner.style.border = '1px solid rgba(33, 222, 0, 0.35)';
+                                if (repairTitle) {
+                                    repairTitle.textContent = '✓ Automaticky opraveno';
+                                    repairTitle.style.color = '#21DE00';
+                                }
+                                if (repairDesc) {
+                                    repairDesc.textContent = res.message || 'Opravy byly úspěšně aplikovány.';
+                                    repairDesc.style.color = '#94a3b8';
+                                }
+                                if (repairIcon) {
+                                    repairIcon.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                                }
+                            }
+                            if (recElem) {
+                                recElem.textContent = res.message || 'Hra je opravena a připravena ke spuštění.';
+                                recElem.style.color = '#21DE00';
+                            }
+                            if (btnApplyCrashFix) {
+                                btnApplyCrashFix.className = 'mc-btn mc-btn-green';
+                                if (fixTextElem) {
+                                    fixTextElem.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>Rozumím (Spustit hru)</span>';
+                                }
+                            }
+
+                            if (typeof loadInstalledMods === 'function') loadInstalledMods();
+                            const updatedCfg = await window.api.getConfig();
+                            if (updatedCfg) {
+                                currentConfig = updatedCfg;
+                                if (ramSlider && updatedCfg.ramMax) {
+                                    if (ramSliderController) {
+                                        ramSliderController.setValue(updatedCfg.ramMax, true);
+                                    } else {
+                                        ramSlider.value = updatedCfg.ramMax;
+                                        updateSliderVisuals(ramSlider, ramValueBadge);
+                                    }
+                                }
+                                if (javaPathInput && updatedCfg.javaPath) {
+                                    javaPathInput.value = updatedCfg.javaPath;
+                                }
+                            }
+
+                            appendLog(`[AUTOPILOT OPRAV] ${res.message}`);
+                            showToast(String(res.message).replace(/^[✓⚡\s]+/u, ''), 'success');
+
+                            if (userAcknowledgedWhileFixing) {
+                                closeCrashModal();
+                                setTimeout(() => {
+                                    const btnLaunch = document.getElementById('btnLaunchGame');
+                                    if (btnLaunch && !btnLaunch.disabled) {
+                                        btnLaunch.click();
+                                    }
+                                }, 200);
+                            }
+                        } else {
+                            if (repairBanner) {
+                                repairBanner.style.background = 'rgba(245, 21, 21, 0.12)';
+                                repairBanner.style.border = '1px solid rgba(245, 21, 21, 0.35)';
+                                if (repairTitle) {
+                                    repairTitle.textContent = 'Opravu se nepodařilo dokončit';
+                                    repairTitle.style.color = '#f51515';
+                                }
+                                if (repairDesc) {
+                                    repairDesc.textContent = res?.error || 'Zkontroluj podrobnosti níže nebo otevři report.';
+                                    repairDesc.style.color = '#94a3b8';
+                                }
+                                if (repairIcon) {
+                                    repairIcon.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+                                }
+                            }
+                            if (btnApplyCrashFix) {
+                                btnApplyCrashFix.className = 'mc-btn mc-btn-secondary';
+                                if (fixTextElem) fixTextElem.innerHTML = '<span>Rozumím (Zavřít)</span>';
+                            }
+                        }
+                    })
+                    .catch((err) => {
+                        activeCrashFixPromise = null;
+                        console.error('Chyba při automatické opravě pádu v pozadí:', err);
+                        if (btnApplyCrashFix) {
+                            btnApplyCrashFix.className = 'mc-btn mc-btn-secondary';
+                            if (fixTextElem) fixTextElem.innerHTML = '<span>Rozumím</span>';
+                        }
+                    });
+            } else {
+                if (titleElem) {
+                    titleElem.textContent = crashData.title || 'Pád hry';
+                    titleElem.style.color = '#f51515';
+                }
+                if (subElem) {
+                    subElem.textContent = `Chyba při běhu (kód: ${crashData.exitCode || 1})`;
+                    subElem.style.color = '#94a3b8';
+                }
+                if (badgeElem) {
+                    badgeElem.textContent = `Kód ${crashData.exitCode || 1}`;
+                    badgeElem.style.background = '#f51515';
+                    badgeElem.style.color = '#ffffff';
+                }
+                if (headElem) {
+                    headElem.textContent = `Příčina: ${crashData.title || 'Neznámá chyba'}`;
+                    headElem.style.color = '#f51515';
+                }
+                if (recElem) {
+                    recElem.textContent = crashData.recommendation || '';
+                    recElem.style.color = '#0a67e5';
+                }
+                if (repairBanner) {
+                    repairBanner.style.display = 'none';
+                }
+                if (btnApplyCrashFix) {
+                    btnApplyCrashFix.style.display = 'inline-flex';
+                    btnApplyCrashFix.className = 'mc-btn mc-btn-primary';
+                    if (fixTextElem) fixTextElem.innerHTML = '<span>Rozumím</span>';
                 }
             }
 
             if (btnOpenCrashFullReport) {
-                if (crashData.reportPath) {
-                    btnOpenCrashFullReport.style.display = 'inline-flex';
-                } else {
-                    btnOpenCrashFullReport.style.display = 'none';
-                }
+                btnOpenCrashFullReport.style.display = crashData.reportPath ? 'inline-flex' : 'none';
             }
 
             modalCrashAnalyzer.style.display = 'flex';
-            appendLog(`[CRASH ANALYZER] ${isAutoFixed ? 'Automaticky vyřešeno' : 'Zjištěna příčina pádu'}: ${crashData.title}`);
+            appendLog(`[CRASH ANALYZER] ${isAlreadyFixed ? 'Automaticky vyřešeno' : 'Zjištěna příčina pádu'}: ${crashData.title}`);
         });
     }
 
     if (btnApplyCrashFix) {
-        btnApplyCrashFix.addEventListener('click', async () => {
-            if (!currentCrashData || !currentCrashData.autoFix) return;
-            const isRelaunch = currentCrashData.autoFix.id === 'RELAUNCH_GAME' || currentCrashData.fixed || currentCrashData.autoFixed;
-            btnApplyCrashFix.disabled = true;
-            btnApplyCrashFix.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Aplikuji opravu...</span>';
-            try {
-                const res = await window.api.applyCrashFix(currentCrashData.autoFix, currentConfig.activeProfileId);
-                if (res && res.success) {
-                    showToast(`${res.message}`.replace(/^[✓\s]+/u, ''), 'success');
-                    appendLog(`[OPRAVA PÁDU] ${res.message}`);
-                    closeCrashModal();
-
-                    if (typeof loadInstalledMods === 'function') {
-                        loadInstalledMods();
+        btnApplyCrashFix.addEventListener('click', () => {
+            if (activeCrashFixPromise) {
+                userAcknowledgedWhileFixing = true;
+                showToast('Dokončuji opravu... Hra se za okamžik spustí.', 'info');
+                closeCrashModal();
+                return;
+            }
+            const shouldRelaunch = !!(
+                currentCrashData?.fixed ||
+                currentCrashData?.autoFixed ||
+                currentCrashData?.autoFix?.id === 'RELAUNCH_GAME'
+            );
+            closeCrashModal();
+            if (shouldRelaunch) {
+                setTimeout(() => {
+                    const btnLaunch = document.getElementById('btnLaunchGame');
+                    if (btnLaunch && !btnLaunch.disabled) {
+                        btnLaunch.click();
                     }
-
-                    // Refresh config and UI
-                    const updatedCfg = await window.api.getConfig();
-                    if (updatedCfg) {
-                        currentConfig = updatedCfg;
-                        if (ramSlider && updatedCfg.ramMax) {
-                            if (ramSliderController) {
-                                ramSliderController.setValue(updatedCfg.ramMax, true);
-                            } else {
-                                ramSlider.value = updatedCfg.ramMax;
-                                updateSliderVisuals(ramSlider, ramValueBadge);
-                            }
-                        }
-                        if (javaPathInput && updatedCfg.javaPath) {
-                            javaPathInput.value = updatedCfg.javaPath;
-                        }
-                    }
-
-                    if (isRelaunch || res.relaunch) {
-                        setTimeout(() => {
-                            const btnLaunch = document.getElementById('btnLaunchGame');
-                            if (btnLaunch && !btnLaunch.disabled) {
-                                btnLaunch.click();
-                            }
-                        }, 300);
-                    }
-                } else {
-                    showToast('Chyba: ' + (res?.error || 'Opravu se nepodařilo aplikovat'), 'error');
-                }
-            } catch (err) {
-                showToast('Chyba: ' + err.message, 'error');
-            } finally {
-                btnApplyCrashFix.disabled = false;
-                btnApplyCrashFix.innerHTML = '<span id="btnApplyCrashFixText"><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold ui-icon-pulse" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg> <span>Automatická oprava</span></span>';
+                }, 200);
             }
         });
     }

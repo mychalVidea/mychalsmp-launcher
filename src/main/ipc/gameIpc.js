@@ -11,7 +11,9 @@ const {
     killGame,
     cancelLaunch,
     detectJavaPath,
-    ensureSelfNametagModInstalled
+    ensureSelfNametagModInstalled,
+    markIntentionalTermination,
+    wasTerminationIntentional
 } = require('../launcher');
 const { checkProfileModUpdates } = require('../modrinth');
 const { scanProfileForBlacklistedMods } = require('../wardenProbeChecker');
@@ -43,6 +45,7 @@ function registerGameIpc({ getMainWindow, setupTray, updateTrayMenu }) {
     });
 
     ipcMain.handle('kill-game', () => {
+        markIntentionalTermination();
         const session = getActiveSessionData();
         if (session && isProcessAlive(session.pid)) {
             try {
@@ -446,17 +449,33 @@ function registerGameIpc({ getMainWindow, setupTray, updateTrayMenu }) {
                         }
                     });
 
-                    // Trigger Crash Analyzer on crash
+                    // Trigger Crash Analyzer on crash (unless termination was intentional or clean shutdown)
                     if (exitCode !== 0) {
-                        if (exitCode === 4294967288 || exitCode === -8) {
-                            console.log('[LAUNCHER] Detekováno běžné ukončení hry (Client shutdown watchdog 4294967288), ignoruji.');
+                        if (wasTerminationIntentional()) {
+                            console.log('[LAUNCHER] Hra byla ukončena záměrně přes launcher (killGame), neotevírám dialog pádu.');
+                            return;
+                        }
+
+                        if (
+                            exitCode === 4294967288 || 
+                            exitCode === -8 ||
+                            exitCode === 130 || // SIGINT
+                            exitCode === 143 || // SIGTERM
+                            exitCode === 137 || // SIGKILL
+                            exitCode === 3221225786 || // STATUS_CONTROL_C_EXIT
+                            exitCode === -1073741510
+                        ) {
+                            console.log(`[LAUNCHER] Detekováno běžné/řízené ukončení hry (kód ${exitCode}), neotevírám dialog pádu.`);
                             return;
                         }
 
                         try {
-                            const crashData = await analyzeCrash(launchConfig.baseDir, exitCode, recentGameLogs, launchConfig);
+                            const crashData = await analyzeCrash(launchConfig.baseDir, exitCode, recentGameLogs, {
+                                ...launchConfig,
+                                intentionalStop: wasTerminationIntentional()
+                            });
                             if (crashData && (crashData.isCleanShutdown || crashData.hasCrash === false)) {
-                                console.log('[LAUNCHER] Detekováno běžné ukončení hry (post-main watchdog), neotevírám dialog pádu.');
+                                console.log('[LAUNCHER] Detekováno běžné ukončení hry (post-main watchdog / clean shutdown), neotevírám dialog pádu.');
                                 return;
                             }
                             if (win && !win.isDestroyed()) {
@@ -474,6 +493,10 @@ function registerGameIpc({ getMainWindow, setupTray, updateTrayMenu }) {
             }
 
             if (hasExited || proc.exitCode !== null || proc.killed) {
+                if (wasTerminationIntentional()) {
+                    console.log('[LAUNCHER] Spuštění hry bylo záměrně zrušeno uživatelem.');
+                    return { success: false, cancelled: true };
+                }
                 const finalCode = proc.exitCode ?? earlyExitCode ?? 1;
                 console.error(`[LAUNCHER] Proces hry selhal bezprostředně po spuštění (kód: ${finalCode})`);
                 if (win && !win.isDestroyed()) {

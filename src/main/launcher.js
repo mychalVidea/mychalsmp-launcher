@@ -17,6 +17,19 @@ const nativeLoader = require('./nativeLoader');
 let activeMinecraftProcess = null;
 let activeLauncherClient = null;
 let currentLaunchInfo = null;
+let isIntentionalTermination = false;
+
+function markIntentionalTermination() {
+    isIntentionalTermination = true;
+}
+
+function wasTerminationIntentional() {
+    return isIntentionalTermination;
+}
+
+function resetTerminationIntent() {
+    isIntentionalTermination = false;
+}
 
 function verifyFileSha1(filePath, expectedSha1) {
     if (!expectedSha1) return true;
@@ -3450,6 +3463,7 @@ async function ensureProfileModsDependencies(gameInstanceDir, config, onLog) {
  * Launches Minecraft with the specified profile & configuration.
  */
 async function launchGame(config, authData, customServer, onProgress, onLog, onExit) {
+    isIntentionalTermination = false;
     if (activeMinecraftProcess) {
         throw new Error("Minecraft již běží!");
     }
@@ -4326,6 +4340,8 @@ function cancelLaunch() {
         }
     }
 
+    isIntentionalTermination = true;
+
     if (activeMinecraftProcess) {
         try {
             activeMinecraftProcess.kill();
@@ -4339,6 +4355,7 @@ function cancelLaunch() {
 }
 
 function killGame() {
+    isIntentionalTermination = true;
     return cancelLaunch();
 }
 
@@ -4750,5 +4767,8 @@ module.exports = {
     isJarFileValid,
     ensureSelfNametagModInstalled,
     ensureMojangVersionUpToDate,
-    prewarmLaunchEnvironment
+    prewarmLaunchEnvironment,
+    markIntentionalTermination,
+    wasTerminationIntentional,
+    resetTerminationIntent
 };
