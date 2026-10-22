@@ -203,11 +203,20 @@ function endSessionTracking(exitCode = 0, callbacks = {}) {
     if (activeSessionData) {
         saveSessionTick(activeSessionData, true, callbacks.onPlaytimeUpdated);
         const finishedProfileId = activeSessionData.profileId;
+        const finishedInstanceDir = activeSessionData.instanceDir;
         activeSessionData = null;
 
         try {
             if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE);
         } catch (_) { }
+
+        // Automatický převod logů ukončené relace do .myco (max komprese, regex sanitace)
+        try {
+            const { archiveSessionLogs } = require('./mycoLogManager');
+            archiveSessionLogs(finishedInstanceDir, finishedProfileId);
+        } catch (err) {
+            console.error('[MYCO LOG] Selhala archivace do .myco:', err);
+        }
 
         if (typeof callbacks.onGameStopped === 'function') {
             callbacks.onGameStopped({ exitCode, profileId: finishedProfileId });

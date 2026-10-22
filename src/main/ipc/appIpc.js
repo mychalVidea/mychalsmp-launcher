@@ -1,4 +1,4 @@
-const { ipcMain, shell, clipboard, nativeImage } = require('electron');
+const { ipcMain, shell, clipboard, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -8,6 +8,7 @@ const { pingServer } = require('../serverPing');
 const { getInstalledVersions, getAvailableJavas, detectJavaPath, isGameRunning } = require('../launcher');
 const keybindManager = require('../keybindManager');
 const { discordRpc } = require('../discordRpc');
+const mycoLogManager = require('../mycoLogManager');
 
 function registerAppIpc({ getMainWindow, setupTray }) {
     ipcMain.handle('get-config', () => {
@@ -158,18 +159,62 @@ function registerAppIpc({ getMainWindow, setupTray }) {
         try {
             const config = loadConfig();
             const activeProfileId = config.activeProfileId || 'minecraft-26.2';
-            const candidatePaths = [
-                path.join(BASE_DIR, 'profiles', activeProfileId, 'logs', 'latest.log'),
-                path.join(BASE_DIR, 'instances', activeProfileId, 'logs', 'latest.log'),
-                path.join(BASE_DIR, 'logs', 'latest.log')
-            ];
-            for (const p of candidatePaths) {
-                if (fs.existsSync(p)) {
-                    return fs.readFileSync(p, 'utf8');
-                }
-            }
+            return mycoLogManager.getLatestLogContent(activeProfileId);
         } catch (_) {}
         return null;
+    });
+
+    ipcMain.handle('open-log-in-editor', async () => {
+        try {
+            const config = loadConfig();
+            const activeProfileId = config.activeProfileId || 'minecraft-26.2';
+            return await mycoLogManager.openLogInEditor(activeProfileId);
+        } catch (err) {
+            console.error('[IPC] Selhalo otevření logu v editoru:', err);
+            return false;
+        }
+    });
+
+    ipcMain.handle('download-log-myco', async (event, customText) => {
+        try {
+            const win = getMainWindow();
+            const config = loadConfig();
+            const activeProfileId = config.activeProfileId || 'minecraft-26.2';
+            const textToCompress = customText || mycoLogManager.getLatestLogContent(activeProfileId);
+
+            if (!textToCompress || !textToCompress.trim()) {
+                return { success: false, error: 'Žádný log k uložení.' };
+            }
+
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+            const defaultFilename = `mychalsmp-log-${dateStr}.myco`;
+
+            const { canceled, filePath } = await dialog.showSaveDialog(win, {
+                title: 'Uložit komprimovaný log (.myco)',
+                defaultPath: defaultFilename,
+                filters: [
+                    { name: 'MYCO Log Archiv (*.myco)', extensions: ['myco'] },
+                    { name: 'Všechny soubory (*.*)', extensions: ['*'] }
+                ]
+            });
+
+            if (canceled || !filePath) {
+                return { success: false, canceled: true };
+            }
+
+            const mycoBuffer = mycoLogManager.compressToMyco(textToCompress);
+            fs.writeFileSync(filePath, mycoBuffer);
+            return {
+                success: true,
+                path: filePath,
+                originalSize: Buffer.byteLength(textToCompress, 'utf8'),
+                compressedSize: mycoBuffer.length
+            };
+        } catch (err) {
+            console.error('[IPC] Selhalo uložení logu do .myco:', err);
+            return { success: false, error: err.message };
+        }
     });
 
     ipcMain.on('open-game-dir', () => {

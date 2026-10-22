@@ -130,6 +130,8 @@ contextBridge.exposeInMainWorld('api', {
     openUrl: (url) => ipcRenderer.send('open-url', url),
     copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
     getLatestGameLog: () => ipcRenderer.invoke('get-latest-game-log'),
+    openLogInEditor: () => ipcRenderer.invoke('open-log-in-editor'),
+    downloadLogMyco: (customText) => ipcRenderer.invoke('download-log-myco', customText),
     onAuthStatus: (callback) => {
         ipcRenderer.on('auth-status', (event, status) => callback(status));
     },

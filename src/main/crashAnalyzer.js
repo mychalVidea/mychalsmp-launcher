@@ -80,7 +80,20 @@ function readLatestLogTail(gameDir, maxLines = 600) {
     if (!gameDir || typeof gameDir !== 'string') return '';
     try {
         const logPath = path.join(gameDir, 'logs', 'latest.log');
-        if (!fs.existsSync(logPath)) return '';
+        if (!fs.existsSync(logPath)) {
+            const mycoPath = path.join(gameDir, 'logs', 'latest.myco');
+            if (fs.existsSync(mycoPath)) {
+                try {
+                    const { decompressFromMyco } = require('./mycoLogManager');
+                    const decompressed = decompressFromMyco(mycoPath);
+                    if (decompressed) {
+                        const lines = decompressed.split('\n');
+                        return lines.slice(-maxLines).join('\n');
+                    }
+                } catch (_) {}
+            }
+            return '';
+        }
 
         const stat = fs.statSync(logPath);
         // Read up to last 512KB

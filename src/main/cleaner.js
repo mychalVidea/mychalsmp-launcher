@@ -115,8 +115,8 @@ function scanLauncherCache(baseDir, profiles = []) {
             const logsDir = path.join(dir, 'logs');
             if (fs.existsSync(logsDir)) {
                 const logFiles = scanDir(logsDir, (fPath, name, stat) => {
-                    if (name === 'latest.log') return false;
-                    if (name.endsWith('.log.gz')) {
+                    if (name === 'latest.log' || name === 'latest.myco') return false;
+                    if (name.endsWith('.log.gz') || name.endsWith('.myco')) {
                         return (now - stat.mtimeMs) > THIRTY_DAYS_MS;
                     }
                     if (name.endsWith('.log')) {

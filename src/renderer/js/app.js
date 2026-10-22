@@ -268,6 +268,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const consoleOutput = document.getElementById('consoleOutput');
     const btnClearLog = document.getElementById('btnClearLog');
     const btnCopyLog = document.getElementById('btnCopyLog');
+    const btnOpenLogEditor = document.getElementById('btnOpenLogEditor');
     const btnDownloadLog = document.getElementById('btnDownloadLog');
 
     // State
@@ -7254,10 +7255,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    if (btnOpenLogEditor) {
+        btnOpenLogEditor.addEventListener('click', async () => {
+            try {
+                showToast('Otevírám log v textovém editoru...', 'info');
+                if (window.api && typeof window.api.openLogInEditor === 'function') {
+                    const ok = await window.api.openLogInEditor();
+                    if (!ok) {
+                        showToast('Nepodařilo se otevřít log v editoru.', 'error');
+                    }
+                }
+            } catch (err) {
+                console.error('[OPEN LOG EDITOR]', err);
+                showToast('Chyba při otevírání logu.', 'error');
+            }
+        });
+    }
+
     if (btnDownloadLog) {
         btnDownloadLog.addEventListener('click', async () => {
             try {
                 const logText = await getFullLogContent();
+                if (window.api && typeof window.api.downloadLogMyco === 'function') {
+                    const res = await window.api.downloadLogMyco(logText);
+                    if (res && res.success) {
+                        const ratio = res.originalSize && res.compressedSize 
+                            ? ` (úspora ${((1 - res.compressedSize / res.originalSize) * 100).toFixed(0)} %)` 
+                            : '';
+                        showToast(`Log byl úspěšně uložen do .myco${ratio}!`, 'success');
+                        return;
+                    } else if (res && res.canceled) {
+                        return;
+                    }
+                }
+
+                // Fallback pro prohlížečové stažení
                 const blob = new Blob([logText], { type: 'text/plain;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
