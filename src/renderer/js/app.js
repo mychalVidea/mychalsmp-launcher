@@ -270,6 +270,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnCopyLog = document.getElementById('btnCopyLog');
     const btnOpenLogEditor = document.getElementById('btnOpenLogEditor');
     const btnDownloadLog = document.getElementById('btnDownloadLog');
+    const btnOpenLogFolder = document.getElementById('btnOpenLogFolder');
 
     // State
     let currentConfig = {};
@@ -7304,6 +7305,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (err) {
                 console.error('[DOWNLOAD LOG]', err);
                 showToast('Nepodařilo se stáhnout log.', 'error');
+            }
+        });
+    }
+
+    if (btnOpenLogFolder) {
+        btnOpenLogFolder.addEventListener('click', () => {
+            if (window.api && typeof window.api.openLogsFolder === 'function') {
+                window.api.openLogsFolder();
+                showToast('Otevírám složku s logy...', 'info');
             }
         });
     }

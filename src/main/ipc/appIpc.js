@@ -221,6 +221,21 @@ function registerAppIpc({ getMainWindow, setupTray }) {
         shell.openPath(BASE_DIR);
     });
 
+    ipcMain.on('open-logs-folder', () => {
+        try {
+            const config = loadConfig();
+            const activeProfileId = config.activeProfileId || 'minecraft-26.2';
+            const logsDir = mycoLogManager.resolveLogsDir(null, activeProfileId);
+            if (logsDir && fs.existsSync(logsDir)) {
+                shell.openPath(logsDir);
+            } else {
+                shell.openPath(BASE_DIR);
+            }
+        } catch (err) {
+            console.error('[IPC] Selhalo otevření složky s logy:', err);
+        }
+    });
+
     ipcMain.on('open-url', (event, url) => {
         if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
             shell.openExternal(url);
