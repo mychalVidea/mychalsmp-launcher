@@ -50,6 +50,105 @@ function sanitizeLog(text) {
 }
 
 /**
+ * Inteligentní redukce, deduplikace a čištění Minecraft a launcher logů pro formát .mog
+ * 
+ * Co dělá:
+ * 1. Sanitace hesel, tokenů a citlivých údajů
+ * 2. Odstranění terminálových ANSI únikových sekvencí (\x1B[...)
+ * 3. Skládání po sobě jdoucích identických zpráv (i přes různé timestampy):
+ *    Např. 500x OpenGL error -> první řádek + "    ↳ [... stejná zpráva se opakovala 499× ...]"
+ * 4. Sloučení vícenásobných prázdných řádků
+ * 5. Statistika úspory řádků pro záhlaví archivu
+ * 
+ * @param {string} rawText 
+ * @param {Object} [meta]
+ * @returns {{ text: string, originalLines: number, optimizedLines: number, savedLines: number }}
+ */
+function optimizeLogContent(rawText, meta = {}) {
+    if (!rawText || typeof rawText !== 'string') {
+        return { text: '', originalLines: 0, optimizedLines: 0, savedLines: 0 };
+    }
+
+    // 1. Sanitace hesel a tokenů
+    const sanitized = sanitizeLog(rawText);
+
+    // 2. Odstranění terminálových ANSI escape sekvencí
+    const cleanAnsi = sanitized.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+
+    const lines = cleanAnsi.split(/\r?\n/);
+    const originalLines = lines.length;
+
+    const result = [];
+    let prevPattern = null;
+    let prevFullLine = null;
+    let repeatCount = 0;
+    let totalDeduplicated = 0;
+
+    // Extrakce sémantického těla zprávy bez timestampu:
+    // Podporuje "[HH:MM:SS] [thread/LEVEL]: ...", "[GAME] ...", "YYYY-MM-DD ..."
+    function extractPattern(line) {
+        return line
+            .replace(/^\[GAME\]\s*/, '')
+            .replace(/^\[\d{2}:\d{2}:\d{2}(?:\.\d+)?\]\s*/, '')
+            .replace(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?\s*/, '')
+            .trim();
+    }
+
+    function flushRepeats() {
+        if (repeatCount > 0) {
+            if (repeatCount === 1) {
+                result.push(prevFullLine);
+            } else {
+                result.push(`    ↳ [... stejná zpráva se opakovala ${repeatCount}× ...]`);
+                totalDeduplicated += (repeatCount - 1);
+            }
+            repeatCount = 0;
+        }
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        // Ošetření vícenásobných prázdných řádků
+        if (!trimmed) {
+            if (result.length > 0 && result[result.length - 1] !== '') {
+                flushRepeats();
+                result.push('');
+            }
+            continue;
+        }
+
+        const pattern = extractPattern(line);
+
+        // Pokud je zpráva neprázdná a shoduje se s předchozím vzorem
+        const isRepeated = (prevPattern !== null && pattern.length > 5 && pattern === prevPattern);
+
+        if (isRepeated) {
+            repeatCount++;
+        } else {
+            flushRepeats();
+            result.push(line);
+            prevPattern = pattern;
+            prevFullLine = line;
+        }
+    }
+
+    flushRepeats();
+
+    const finalBody = result.join('\n');
+    const optimizedLines = result.length;
+    const savedLines = Math.max(0, originalLines - optimizedLines);
+
+    return {
+        text: finalBody,
+        originalLines,
+        optimizedLines,
+        savedLines
+    };
+}
+
+/**
  * Vygeneruje přehlednou hlavičku pro .mog (Mychal Log) čitelnou pro lidi i webové AI
  * @param {Object} [meta]
  * @returns {string}
@@ -60,16 +159,26 @@ function createMogHeader(meta = {}) {
     const version = meta.version || '26.2';
     const profile = meta.profileName || 'Minecraft 26.2';
 
-    return [
+    const headerLines = [
         '================================================================================',
         '  MYCHAL SMP LOG ARCHIVE (.mog / Mychal Log)',
-        `  Server: mychalsmp.xyz | Verze: ${version} | Profil: ${profile} | Vytvořeno: ${dateStr}`,
+        `  Server: mychalsmp.xyz | Verze: ${version} | Profil: ${profile} | Vytvořeno: ${dateStr}`
+    ];
+
+    if (meta.savedLines && meta.savedLines > 0) {
+        const percent = ((meta.savedLines / Math.max(1, meta.originalLines)) * 100).toFixed(0);
+        headerLines.push(`  Optimalizace: ${meta.originalLines} řádků zredukováno na ${meta.optimizedLines} (odstraněno ${meta.savedLines} duplicitních řádků, úspora ~${percent} %)`);
+    }
+
+    headerLines.push(
         '  Ochrana soukromí: Hesla (/login, /register, /auth), tokeny a klíče byly zamazány.',
         '  Tento soubor (.mog) lze přímo otevřít v Poznámkovém bloku nebo nahrát do webové AI.',
         '================================================================================',
         '',
         ''
-    ].join('\n');
+    );
+
+    return headerLines.join('\n');
 }
 
 function createMycoHeader(meta = {}) {
@@ -84,16 +193,22 @@ function createMycoHeader(meta = {}) {
  * @returns {Buffer}
  */
 function formatMogLog(rawText, meta = {}) {
-    const sanitized = sanitizeLog(rawText);
-    
+    if (!rawText) return Buffer.alloc(0);
+
     // Pokud text již hlavičku obsahuje, nepřidáváme ji znovu
-    let finalText = sanitized;
-    if (!sanitized.includes('MYCHAL SMP LOG ARCHIVE')) {
-        const header = createMogHeader(meta);
-        finalText = header + sanitized;
+    if (rawText.includes('MYCHAL SMP LOG ARCHIVE')) {
+        return Buffer.from(rawText, 'utf8');
     }
 
-    return Buffer.from(finalText, 'utf8');
+    const { text, originalLines, optimizedLines, savedLines } = optimizeLogContent(rawText, meta);
+    const header = createMogHeader({
+        ...meta,
+        originalLines,
+        optimizedLines,
+        savedLines
+    });
+
+    return Buffer.from(header + text, 'utf8');
 }
 
 function compressToMyco(rawText, meta = {}) {
@@ -502,6 +617,7 @@ async function openLogInEditor(profileId) {
 
 module.exports = {
     sanitizeLog,
+    optimizeLogContent,
     createMogHeader,
     createMycoHeader,
     formatMogLog,
