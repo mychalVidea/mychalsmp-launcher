@@ -52,6 +52,10 @@ function scanDir(dirPath, filterFn, maxDepth = 4, currentDepth = 0) {
  * Scans for all cleanable cache and old log files
  */
 function scanLauncherCache(baseDir, profiles = []) {
+    try {
+        const { convertAllPendingLogsToMyco } = require('./mycoLogManager');
+        convertAllPendingLogsToMyco();
+    } catch (_) {}
     const now = Date.now();
     const directoriesToScan = new Set();
     directoriesToScan.add(baseDir);
@@ -115,8 +119,8 @@ function scanLauncherCache(baseDir, profiles = []) {
             const logsDir = path.join(dir, 'logs');
             if (fs.existsSync(logsDir)) {
                 const logFiles = scanDir(logsDir, (fPath, name, stat) => {
-                    if (name === 'latest.log' || name === 'latest.myco') return false;
-                    if (name.endsWith('.log.gz') || name.endsWith('.myco')) {
+                    if (name === 'latest.log' || name === 'latest.mog' || name === 'latest.myco') return false;
+                    if (name.endsWith('.log.gz') || name.endsWith('.mog') || name.endsWith('.myco')) {
                         return (now - stat.mtimeMs) > THIRTY_DAYS_MS;
                     }
                     if (name.endsWith('.log')) {

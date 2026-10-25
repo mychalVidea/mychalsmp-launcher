@@ -388,7 +388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             heroSkinViewer.renderPaused = (curTab !== 'play');
             if (curTab === 'play') {
                 heroSkinViewer.setSize(220, 280);
-                try { heroSkinViewer.draw(); } catch (_) { }
+                try { heroSkinViewer.render(); } catch (_) { }
                 if (typeof scheduleHeroReturn === 'function') scheduleHeroReturn();
                 if (typeof triggerHeroWave === 'function') triggerHeroWave(true);
             }
@@ -397,7 +397,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             skinViewer.renderPaused = (curTab !== 'character');
             if (curTab === 'character') {
                 skinViewer.setSize(200, 235);
-                try { skinViewer.draw(); } catch (_) { }
+                try { skinViewer.render(); } catch (_) { }
             }
         }
 
@@ -5266,9 +5266,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         isHeroLaunchSpinning = !!active;
         if (!active) {
             heroCelebrationWeight = 0;
+            heroSpinAngle = 0;
             if (heroSkinViewer && heroSkinViewer.playerObject) {
                 heroSkinViewer.playerObject.position.y = -1;
             }
+        } else {
+            heroSpinAngle = 0;
         }
     }
 
@@ -5445,6 +5448,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         return null;
     }
 
+    // 🛡️ Globální pojistka smyčky: zamezuje duplicitnímu spouštění requestAnimationFrame smyček v skinview3d
+    function ensureSkinViewerLoopGuarded() {
+        if (window.skinview3d && window.skinview3d.SkinViewer && !window.skinview3d.SkinViewer._loopGuarded) {
+            window.skinview3d.SkinViewer._loopGuarded = true;
+            const origDraw = window.skinview3d.SkinViewer.prototype.draw;
+            window.skinview3d.SkinViewer.prototype.draw = function () {
+                if (this._disposed || this._renderPaused) return;
+                if (this.animationID !== null) {
+                    window.cancelAnimationFrame(this.animationID);
+                    this.animationID = null;
+                }
+                origDraw.call(this);
+            };
+        }
+    }
+
     /**
      * Inteligentní animace hlavní postavy na dashboardu:
      * 1. Organické vlnění pláště ve větru.
@@ -5454,6 +5473,7 @@ document.addEventListener('DOMContentLoaded', async () => {
      */
     function createHeroIdleAnimation() {
         if (!window.skinview3d) return null;
+        ensureSkinViewerLoopGuarded();
         try {
             class HeroIdleAnimation extends window.skinview3d.IdleAnimation {
                 constructor() {
@@ -5463,8 +5483,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 animate(player) {
                     super.animate(player);
                     const perfNow = performance.now();
-                    const dt = Math.min((perfNow - (this.lastFrameTime || perfNow)) / 1000, 0.08) || 0.016;
+                    const rawDt = (perfNow - (this.lastFrameTime || perfNow)) / 1000;
                     this.lastFrameTime = perfNow;
+                    const dt = (rawDt > 0 && rawDt < 0.2) ? Math.min(rawDt, 0.05) : 0.016;
                     const t = this.progress * 3;
                     const now = Date.now();
 
@@ -5951,7 +5972,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.body.classList.remove('app-in-tray-paused');
             heroSkinViewer.renderPaused = false;
             heroSkinViewer.setSize(220, 280);
-            try { heroSkinViewer.draw(); } catch (_) { }
+            try { heroSkinViewer.render(); } catch (_) { }
             return;
         }
 
@@ -6062,7 +6083,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (pSkin && typeof pSkin.then === 'function') {
                     pSkin.then(() => {
                         if (heroSkinImg) heroSkinImg.classList.add('is-hidden');
-                        try { heroSkinViewer?.draw(); } catch (_) { }
+                        try { heroSkinViewer?.render(); } catch (_) { }
                     }).catch(err => {
                         console.warn('[HERO 3D] loadSkin init failed:', err);
                         if (heroSkinImg) heroSkinImg.classList.remove('is-hidden');
@@ -6075,7 +6096,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 }
             }
-            try { heroSkinViewer.draw(); } catch (_) { }
+            try { heroSkinViewer.render(); } catch (_) { }
         } catch (e) {
             console.warn('[HERO 3D] Inicializace hero 3D prohlížeče selhala:', e);
             if (heroSkinImg) {
@@ -6106,7 +6127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (pSkin && typeof pSkin.then === 'function') {
                     pSkin.then(() => {
                         if (heroSkinImg) heroSkinImg.classList.add('is-hidden');
-                        try { heroSkinViewer?.draw(); } catch (_) { }
+                        try { heroSkinViewer?.render(); } catch (_) { }
                     }).catch(err => {
                         console.warn('[HERO 3D] loadSkin failed:', err);
                         if (heroSkinImg) heroSkinImg.classList.remove('is-hidden');
@@ -6122,7 +6143,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 heroSkinViewer.loadCape(null);
             }
-            try { heroSkinViewer.draw(); } catch (_) { }
+            try { heroSkinViewer.render(); } catch (_) { }
         } catch (e) {
             console.warn('[HERO 3D] Chyba při aktualizaci 3D modelu na dashboardu:', e);
         }
@@ -7277,13 +7298,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnDownloadLog.addEventListener('click', async () => {
             try {
                 const logText = await getFullLogContent();
-                if (window.api && typeof window.api.downloadLogMyco === 'function') {
-                    const res = await window.api.downloadLogMyco(logText);
+                const downloadFn = (window.api && typeof window.api.downloadLogMog === 'function') 
+                    ? window.api.downloadLogMog 
+                    : (window.api ? window.api.downloadLogMyco : null);
+                if (downloadFn) {
+                    const res = await downloadFn(logText);
                     if (res && res.success) {
-                        const ratio = res.originalSize && res.compressedSize 
-                            ? ` (úspora ${((1 - res.compressedSize / res.originalSize) * 100).toFixed(0)} %)` 
-                            : '';
-                        showToast(`Log byl úspěšně uložen do .myco${ratio}!`, 'success');
+                        showToast('Log byl úspěšně uložen do .mog (připraven pro Poznámkový blok i AI)!', 'success');
                         return;
                     } else if (res && res.canceled) {
                         return;

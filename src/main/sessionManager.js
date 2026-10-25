@@ -210,12 +210,12 @@ function endSessionTracking(exitCode = 0, callbacks = {}) {
             if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE);
         } catch (_) { }
 
-        // Automatický převod logů ukončené relace do .myco (max komprese, regex sanitace)
+        // Automatický převod logů ukončené relace do .mog (Mychal Log, regex sanitace)
         try {
             const { archiveSessionLogs } = require('./mycoLogManager');
             archiveSessionLogs(finishedInstanceDir, finishedProfileId);
         } catch (err) {
-            console.error('[MYCO LOG] Selhala archivace do .myco:', err);
+            console.error('[MYCHAL LOG] Selhala archivace do .mog:', err);
         }
 
         if (typeof callbacks.onGameStopped === 'function') {
@@ -325,6 +325,12 @@ function checkAndResumeActiveSession(callbacks = {}) {
                     saveConfig({ profiles: updated });
                     console.log(`[PLAYTIME] Připsán nezaznamenaný čas z offline běhu: +${actualUnrecorded}s.`);
                 } catch (_) { }
+            }
+            try {
+                const { archiveSessionLogs } = require('./mycoLogManager');
+                archiveSessionLogs(session.instanceDir, session.profileId);
+            } catch (err) {
+                console.error('[MYCHAL LOG] Selhala archivace do .mog po offline relaci:', err);
             }
             try { fs.unlinkSync(SESSION_FILE); } catch (_) { }
             return false;

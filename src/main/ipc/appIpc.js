@@ -175,26 +175,28 @@ function registerAppIpc({ getMainWindow, setupTray }) {
         }
     });
 
-    ipcMain.handle('download-log-myco', async (event, customText) => {
+    const handleDownloadLog = async (event, customText) => {
         try {
             const win = getMainWindow();
             const config = loadConfig();
             const activeProfileId = config.activeProfileId || 'minecraft-26.2';
-            const textToCompress = customText || mycoLogManager.getLatestLogContent(activeProfileId);
+            const textToSave = customText || mycoLogManager.getLatestLogContent(activeProfileId);
 
-            if (!textToCompress || !textToCompress.trim()) {
+            if (!textToSave || !textToSave.trim()) {
                 return { success: false, error: 'Žádný log k uložení.' };
             }
 
             const now = new Date();
             const dateStr = now.toISOString().slice(0, 19).replace(/[:T]/g, '-');
-            const defaultFilename = `mychalsmp-log-${dateStr}.myco`;
+            const defaultFilename = `mychalsmp-log-${dateStr}.mog`;
 
             const { canceled, filePath } = await dialog.showSaveDialog(win, {
-                title: 'Uložit komprimovaný log (.myco)',
+                title: 'Uložit Mychal Log (.mog pro Poznámkový blok i AI)',
                 defaultPath: defaultFilename,
                 filters: [
-                    { name: 'MYCO Log Archiv (*.myco)', extensions: ['myco'] },
+                    { name: 'Mychal Log (*.mog)', extensions: ['mog'] },
+                    { name: 'MYCO Log (*.myco)', extensions: ['myco'] },
+                    { name: 'Textový dokument (*.txt, *.log)', extensions: ['txt', 'log'] },
                     { name: 'Všechny soubory (*.*)', extensions: ['*'] }
                 ]
             });
@@ -203,19 +205,26 @@ function registerAppIpc({ getMainWindow, setupTray }) {
                 return { success: false, canceled: true };
             }
 
-            const mycoBuffer = mycoLogManager.compressToMyco(textToCompress);
-            fs.writeFileSync(filePath, mycoBuffer);
+            const activeProfile = (config.profiles || []).find(p => p.id === activeProfileId);
+            const mogBuffer = mycoLogManager.formatMogLog(textToSave, {
+                version: activeProfile ? activeProfile.version : config.version,
+                profileName: activeProfile ? activeProfile.name : activeProfileId
+            });
+            fs.writeFileSync(filePath, mogBuffer);
             return {
                 success: true,
                 path: filePath,
-                originalSize: Buffer.byteLength(textToCompress, 'utf8'),
-                compressedSize: mycoBuffer.length
+                originalSize: Buffer.byteLength(textToSave, 'utf8'),
+                compressedSize: mogBuffer.length
             };
         } catch (err) {
-            console.error('[IPC] Selhalo uložení logu do .myco:', err);
+            console.error('[IPC] Selhalo uložení logu do .mog:', err);
             return { success: false, error: err.message };
         }
-    });
+    };
+
+    ipcMain.handle('download-log-mog', handleDownloadLog);
+    ipcMain.handle('download-log-myco', handleDownloadLog);
 
     ipcMain.on('open-game-dir', () => {
         shell.openPath(BASE_DIR);
@@ -225,6 +234,9 @@ function registerAppIpc({ getMainWindow, setupTray }) {
         try {
             const config = loadConfig();
             const activeProfileId = config.activeProfileId || 'minecraft-26.2';
+            try {
+                mycoLogManager.convertAllPendingLogsToMyco();
+            } catch (_) {}
             const logsDir = mycoLogManager.resolveLogsDir(null, activeProfileId);
             if (logsDir && fs.existsSync(logsDir)) {
                 shell.openPath(logsDir);

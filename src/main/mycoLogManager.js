@@ -1,34 +1,34 @@
 /**
- * MYCO Log Manager – Zero-Overhead, Ultra-Compressed, Unencrypted .myco Log System
+ * MYCO Log Manager – Human & AI-Readable, Sanitized .myco Log System
  * 
- * Specifikace nezašifrovaného kontejneru .myco v2:
+ * Specifikace formátu .myco:
  * 1. Sanitace citlivých údajů:
  *    - Automatické maskování hesel v příkazech (/login, /register, /l, /reg, /changepassword, /auth)
  *    - Maskování serverových chat řádků s přihlašováním
  *    - Maskování auth tokenů (Bearer, JWT, Minecraft refresh tokeny, enc:v2: secrets)
- * 2. Hlavička kontejneru (16 bajtů):
- *    - [0..3]:   'MYCO' (4 bajty Magic)
- *    - [4]:      0x02   (1 bajt: Verze 2 = nezašifrovaný Brotli archiv)
- *    - [5]:      0x01   (1 bajt Flags: 0x01 = Minecraft Log stream)
- *    - [6..7]:   0x0000 (2 bajty rezervováno)
- *    - [8..11]:  Původní délka textu v bajtech (UInt32BE)
- *    - [12..15]: Časové razítko vytvoření v sekundách (UInt32BE)
- * 3. Tělo archivu:
- *    - Brotli komprese na maximální úroveň (Quality 11, LGWIN 24, Text mode)
- *    - Ušetří 90 až 98 % velikosti souboru oproti běžnému .log / .txt
- * 4. Transparentní otevírání:
- *    - Blesková dekomprese do dočasného souboru a otevření ve výchozím textovém editoru OS (Poznámkový blok apod.)
+ * 2. Formát textu:
+ *    - Čisté UTF-8 kódování, které lze bez jakýchkoliv pluginů otevřít v Poznámkovém bloku (Notepad)
+ *    - Přenositelný formát pro nahrání do webové AI (ChatGPT, Claude, Gemini), která z něj okamžitě vyčte chybu
+ *    - Standardní strukturovaná záhlaví s verzí, profilem a časovým razítkem
+ * 3. Zpětná kompatibilita:
+ *    - Automatické rozpoznání a dekomprese dřívějších binárních Brotli/Gzip .myco archivů
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const zlib = require('zlib');
-const { shell } = require('electron');
+let shell = null;
+try {
+    const electron = require('electron');
+    if (electron && typeof electron === 'object' && electron.shell) {
+        shell = electron.shell;
+    }
+} catch (_) {}
 const { BASE_DIR, loadConfig } = require('./config');
 
 const MAGIC_HEADER = Buffer.from('MYCO', 'utf8');
-const FORMAT_VERSION = 2; // v2 = nezašifrovaný komprimovaný log
+const FORMAT_VERSION = 2; // Zpětná kompatibilita pro binární Brotli
 
 /**
  * Sanitace citlivých údajů z Minecraft a launcher logů
@@ -50,36 +50,59 @@ function sanitizeLog(text) {
 }
 
 /**
- * Zkomprimuje textový log do .myco binárního kontejneru (Brotli Quality 11, unencrypted)
- * @param {string} rawText 
- * @returns {Buffer}
+ * Vygeneruje přehlednou hlavičku pro .mog (Mychal Log) čitelnou pro lidi i webové AI
+ * @param {Object} [meta]
+ * @returns {string}
  */
-function compressToMyco(rawText) {
-    const sanitized = sanitizeLog(rawText);
-    const inputBuf = Buffer.from(sanitized, 'utf8');
+function createMogHeader(meta = {}) {
+    const now = new Date();
+    const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
+    const version = meta.version || '26.2';
+    const profile = meta.profileName || 'Minecraft 26.2';
 
-    const header = Buffer.alloc(16);
-    header.write('MYCO', 0, 4, 'utf8');
-    header.writeUInt8(FORMAT_VERSION, 4);
-    header.writeUInt8(1, 5); // Flags: log
-    header.writeUInt16BE(0, 6);
-    header.writeUInt32BE(inputBuf.length, 8);
-    header.writeUInt32BE(Math.floor(Date.now() / 1000), 12);
+    return [
+        '================================================================================',
+        '  MYCHAL SMP LOG ARCHIVE (.mog / Mychal Log)',
+        `  Server: mychalsmp.xyz | Verze: ${version} | Profil: ${profile} | Vytvořeno: ${dateStr}`,
+        '  Ochrana soukromí: Hesla (/login, /register, /auth), tokeny a klíče byly zamazány.',
+        '  Tento soubor (.mog) lze přímo otevřít v Poznámkovém bloku nebo nahrát do webové AI.',
+        '================================================================================',
+        '',
+        ''
+    ].join('\n');
+}
 
-    const compressed = zlib.brotliCompressSync(inputBuf, {
-        params: {
-            [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
-            [zlib.constants.BROTLI_PARAM_QUALITY]: 11, // Maximální komprese
-            [zlib.constants.BROTLI_PARAM_LGWIN]: 24,   // 16 MB okno pro maximální kompresní poměr
-            [zlib.constants.BROTLI_PARAM_SIZE_HINT]: inputBuf.length
-        }
-    });
-
-    return Buffer.concat([header, compressed]);
+function createMycoHeader(meta = {}) {
+    return createMogHeader(meta);
 }
 
 /**
- * Dekomprimuje .myco kontejner zpět na čistý UTF-8 text
+ * Převede a naformátuje textový log do .mog standardu (Mychal Log – čistý UTF-8 text se sanitací hesel a AI hlavičkou)
+ * Plně kompatibilní s Poznámkovým blokem, ChatGPT, Claude i Gemini bez nutnosti speciálních dekompresorů.
+ * @param {string} rawText 
+ * @param {Object} [meta] 
+ * @returns {Buffer}
+ */
+function formatMogLog(rawText, meta = {}) {
+    const sanitized = sanitizeLog(rawText);
+    
+    // Pokud text již hlavičku obsahuje, nepřidáváme ji znovu
+    let finalText = sanitized;
+    if (!sanitized.includes('MYCHAL SMP LOG ARCHIVE')) {
+        const header = createMogHeader(meta);
+        finalText = header + sanitized;
+    }
+
+    return Buffer.from(finalText, 'utf8');
+}
+
+function compressToMyco(rawText, meta = {}) {
+    return formatMogLog(rawText, meta);
+}
+
+/**
+ * Dekomprimuje nebo přečte .myco kontejner zpět na čistý UTF-8 text
+ * Zpětně plně kompatibilní se staršími binárními Brotli archivy i novým čistým UTF-8 standardem.
  * @param {Buffer|string} bufferOrPath 
  * @returns {string}
  */
@@ -91,7 +114,7 @@ function decompressFromMyco(bufferOrPath) {
     }
     if (!buf || buf.length === 0) return '';
 
-    // Ověření hlavičky MYCO v2
+    // 1. Zpětná kompatibilita: starý binární formát v2 (Brotli s 16B hlavičkou)
     if (buf.length >= 16 && buf.subarray(0, 4).equals(MAGIC_HEADER)) {
         const ver = buf.readUInt8(4);
         if (ver === 2) {
@@ -100,25 +123,63 @@ function decompressFromMyco(bufferOrPath) {
                 const decompressed = zlib.brotliDecompressSync(payload);
                 return decompressed.toString('utf8');
             } catch (err) {
-                console.error('[MYCO LOG] Selhala dekomprese payloadu v2:', err);
+                console.error('[MYCO LOG] Selhala dekomprese starého binárního payloadu v2:', err);
             }
         }
     }
 
-    // Fallback: přímý Brotli stream
+    // 2. Fallback: přímý starší Brotli stream bez hlavičky
     try {
         const decompressed = zlib.brotliDecompressSync(buf);
-        return decompressed.toString('utf8');
+        const text = decompressed.toString('utf8');
+        if (text && text.length > 0) return text;
     } catch (_) {}
 
-    // Fallback: Gzip stream (např. starší log.gz)
+    // 3. Fallback: Gzip stream (např. starší log.gz)
     try {
         const decompressed = zlib.gunzipSync(buf);
         return decompressed.toString('utf8');
     } catch (_) {}
 
-    // Fallback: Plaintext
+    // 4. Nativní UTF-8 text (nový standard pro .myco – Poznámkový blok, webové AI, editory)
     return buf.toString('utf8');
+}
+
+/**
+ * Vyhledá všechny existující adresáře logů (výchozí BASE_DIR, profily, instance, vlastní gameDir)
+ * @returns {string[]}
+ */
+function getAllCandidateLogsDirs() {
+    const dirs = new Set();
+    const baseLogs = path.join(BASE_DIR, 'logs');
+    if (fs.existsSync(baseLogs)) dirs.add(baseLogs);
+
+    for (const sub of ['profiles', 'instances']) {
+        const parent = path.join(BASE_DIR, sub);
+        if (fs.existsSync(parent)) {
+            try {
+                const entries = fs.readdirSync(parent);
+                for (const entry of entries) {
+                    const lDir = path.join(parent, entry, 'logs');
+                    if (fs.existsSync(lDir)) dirs.add(lDir);
+                }
+            } catch (_) {}
+        }
+    }
+
+    try {
+        const cfg = loadConfig();
+        if (Array.isArray(cfg.profiles)) {
+            for (const p of cfg.profiles) {
+                if (p.gameDir) {
+                    const lDir = path.join(p.gameDir, 'logs');
+                    if (fs.existsSync(lDir)) dirs.add(lDir);
+                }
+            }
+        }
+    } catch (_) {}
+
+    return Array.from(dirs);
 }
 
 /**
@@ -144,49 +205,198 @@ function resolveLogsDir(instanceDir, profileId) {
 }
 
 /**
- * Zpracuje a převede ukončenou relaci do .myco kontejneru
+/**
+ * ⚡ Hromadný automatický převod všech existujících .log.gz, starých .log a .myco souborů do formátu .mog (Mychal Log)
+ * Projde všechny složky logů, aplikuje sanitaci hesel a tokenů,
+ * převede je do čistého čitelného UTF-8 textového formátu .mog a bezpečně odstraní původní nebezpečný .log.gz.
+ * @returns {number} Počet úspěšně převedených archivů
+ */
+function convertAllPendingLogsToMyco() {
+    let convertedCount = 0;
+    try {
+        const dirs = getAllCandidateLogsDirs();
+        for (const logsDir of dirs) {
+            let files = [];
+            try {
+                files = fs.readdirSync(logsDir);
+            } catch (_) {
+                continue;
+            }
+
+            for (const file of files) {
+                const fullPath = path.join(logsDir, file);
+                try {
+                    const stat = fs.statSync(fullPath);
+                    if (!stat.isFile()) continue;
+
+                    // 1. Staré Mojang logy komprimované v Gzipu (*.log.gz) -> *.mog
+                    // Příklad: 2026-10-25-1.log.gz -> 2026-10-25-1.mog
+                    if (file.endsWith('.log.gz')) {
+                        const mogName = file.replace(/\.log\.gz$/, '.mog');
+                        const mogPath = path.join(logsDir, mogName);
+
+                        let rawText = '';
+                        try {
+                            const gzBuf = fs.readFileSync(fullPath);
+                            rawText = zlib.gunzipSync(gzBuf).toString('utf8');
+                        } catch (gzErr) {
+                            try {
+                                const rawBuf = fs.readFileSync(fullPath);
+                                rawText = rawBuf.toString('utf8');
+                            } catch (_) {
+                                continue;
+                            }
+                        }
+
+                        if (rawText && rawText.trim().length > 0) {
+                            const mogBuf = formatMogLog(rawText);
+                            fs.writeFileSync(mogPath, mogBuf);
+
+                            if (fs.existsSync(mogPath) && fs.statSync(mogPath).size >= 16) {
+                                try { fs.unlinkSync(fullPath); } catch (_) {}
+                                convertedCount++;
+                                console.log(`[MYCHAL LOG] Převeden archiv: ${file} -> ${mogName} (${stat.size} B -> ${mogBuf.length} B)`);
+                            }
+                        }
+                        continue;
+                    }
+
+                    // 2. Staré nekomprimované .log soubory (kromě aktivního latest.log) -> *.mog
+                    if (file.endsWith('.log') && file !== 'latest.log') {
+                        const mogName = file.replace(/\.log$/, '.mog');
+                        const mogPath = path.join(logsDir, mogName);
+
+                        const rawText = fs.readFileSync(fullPath, 'utf8');
+                        if (rawText && rawText.trim().length > 0) {
+                            const mogBuf = formatMogLog(rawText);
+                            fs.writeFileSync(mogPath, mogBuf);
+
+                            if (fs.existsSync(mogPath) && fs.statSync(mogPath).size >= 16) {
+                                try { fs.unlinkSync(fullPath); } catch (_) {}
+                                convertedCount++;
+                                console.log(`[MYCHAL LOG] Převeden textový log: ${file} -> ${mogName} (${stat.size} B -> ${mogBuf.length} B)`);
+                            }
+                        }
+                        continue;
+                    }
+
+                    // 3. Migrace starých .myco souborů na čistý .mog (Mychal Log)
+                    if (file.endsWith('.myco')) {
+                        const mogName = file.replace(/\.myco$/, '.mog');
+                        const mogPath = path.join(logsDir, mogName);
+                        try {
+                            const plain = decompressFromMyco(fullPath);
+                            if (plain && plain.trim().length > 0) {
+                                const mogBuf = formatMogLog(plain);
+                                fs.writeFileSync(mogPath, mogBuf);
+                                try { fs.unlinkSync(fullPath); } catch (_) {}
+                                console.log(`[MYCHAL LOG] Převeden starší soubor: ${file} -> ${mogName}`);
+                                convertedCount++;
+                            }
+                        } catch (_) {}
+                        continue;
+                    }
+
+                    // 4. latest.log – synchronizace do latest.mog (a zrcadlení latest.myco)
+                    if (file === 'latest.log') {
+                        const mogPath = path.join(logsDir, 'latest.mog');
+                        const mycoPath = path.join(logsDir, 'latest.myco');
+                        let needsUpdate = true;
+                        if (fs.existsSync(mogPath)) {
+                            const mogStat = fs.statSync(mogPath);
+                            if (mogStat.mtimeMs >= stat.mtimeMs) {
+                                needsUpdate = false;
+                            }
+                        }
+
+                        if (needsUpdate && stat.size > 0) {
+                            try {
+                                const rawContent = fs.readFileSync(fullPath, 'utf8');
+                                if (rawContent && rawContent.trim().length > 0) {
+                                    const mogBuffer = formatMogLog(rawContent);
+                                    fs.writeFileSync(mogPath, mogBuffer);
+                                    try { fs.writeFileSync(mycoPath, mogBuffer); } catch (_) {}
+
+                                    // Okamžitá sanitace hesla na disku v latest.log
+                                    const sanitizedPlain = sanitizeLog(rawContent);
+                                    if (sanitizedPlain !== rawContent) {
+                                        fs.writeFileSync(fullPath, sanitizedPlain, 'utf8');
+                                    }
+                                    console.log(`[MYCHAL LOG] Synchronizován latest.log -> latest.mog (${stat.size} B -> ${mogBuffer.length} B)`);
+                                }
+                            } catch (e) {
+                                console.error(`[MYCHAL LOG] Chyba při synchronizaci latest.log:`, e);
+                            }
+                        }
+                    }
+                } catch (itemErr) {
+                    console.error(`[MYCHAL LOG] Chyba při zpracování souboru ${file}:`, itemErr);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('[MYCHAL LOG] Chyba při hromadném převodu logů do .mog:', err);
+    }
+    return convertedCount;
+}
+
+/**
+ * Zpracuje a převede ukončenou relaci do .mog (Mychal Log) kontejneru
  * Voláno při ukončení hry v sessionManageru.
  * @param {string} instanceDir 
  * @param {string} profileId 
+ * @param {string} [fallbackText]
  */
-function archiveSessionLogs(instanceDir, profileId) {
+function archiveSessionLogs(instanceDir, profileId, fallbackText) {
     try {
+        // Nejprve převedeme všechny existující .log.gz a pending logy
+        convertAllPendingLogsToMyco();
+
         const logsDir = resolveLogsDir(instanceDir, profileId);
         const latestLogPath = path.join(logsDir, 'latest.log');
+        const latestMogPath = path.join(logsDir, 'latest.mog');
         const latestMycoPath = path.join(logsDir, 'latest.myco');
 
-        if (!fs.existsSync(latestLogPath)) {
-            console.log(`[MYCO LOG] Soubor ${latestLogPath} nenalezen pro archivaci.`);
-            return false;
+        let rawContent = '';
+        if (fs.existsSync(latestLogPath)) {
+            try {
+                rawContent = fs.readFileSync(latestLogPath, 'utf8');
+            } catch (_) {}
         }
 
-        const rawContent = fs.readFileSync(latestLogPath, 'utf8');
+        if ((!rawContent || !rawContent.trim()) && fallbackText && fallbackText.trim()) {
+            rawContent = fallbackText;
+        }
+
         if (!rawContent || !rawContent.trim()) {
+            console.log(`[MYCHAL LOG] Žádný obsah k archivaci relace v ${logsDir}.`);
             return false;
         }
 
-        // 1. Sanitace a komprese do .myco s maximálním poměrem
-        const mycoBuffer = compressToMyco(rawContent);
-        fs.writeFileSync(latestMycoPath, mycoBuffer);
+        // 1. Sanitace a převedení do čitelného .mog s AI hlavičkou
+        const mogBuffer = formatMogLog(rawContent, { profileName: profileId });
+        fs.writeFileSync(latestMogPath, mogBuffer);
+        try { fs.writeFileSync(latestMycoPath, mogBuffer); } catch (_) {}
 
-        // 2. Vytvoření časově označeného archivu relace (session-YYYY-MM-DD_HH-mm-ss.myco)
+        // 2. Vytvoření časově označeného archivu relace (session-YYYY-MM-DD_HH-mm-ss.mog)
         const now = new Date();
         const dateStr = now.toISOString().slice(0, 19).replace(/[:T]/g, '-');
-        const sessionArchiveName = `session-${dateStr}.myco`;
+        const sessionArchiveName = `session-${dateStr}.mog`;
         const sessionArchivePath = path.join(logsDir, sessionArchiveName);
-        fs.writeFileSync(sessionArchivePath, mycoBuffer);
+        fs.writeFileSync(sessionArchivePath, mogBuffer);
 
         // 3. Sanitace původního latest.log na disku, aby nezůstala v plain textu hesla
-        const sanitizedPlain = sanitizeLog(rawContent);
-        if (sanitizedPlain !== rawContent) {
-            fs.writeFileSync(latestLogPath, sanitizedPlain, 'utf8');
+        if (fs.existsSync(latestLogPath)) {
+            const sanitizedPlain = sanitizeLog(rawContent);
+            if (sanitizedPlain !== rawContent) {
+                fs.writeFileSync(latestLogPath, sanitizedPlain, 'utf8');
+            }
         }
 
-        const ratio = ((1 - (mycoBuffer.length / Math.max(1, rawContent.length))) * 100).toFixed(1);
-        console.log(`[MYCO LOG] Relace úspěšně převedena do .myco: ${rawContent.length} B -> ${mycoBuffer.length} B (úspora ${ratio} %). Uloženo: ${latestMycoPath}`);
+        console.log(`[MYCHAL LOG] Relace úspěšně archivována do čitelného .mog textu (${sessionArchiveName}). Uloženo v: ${sessionArchivePath}`);
         return true;
     } catch (err) {
-        console.error('[MYCO LOG] Chyba při archivaci relace do .myco:', err);
+        console.error('[MYCHAL LOG] Chyba při archivaci relace do .mog:', err);
         return false;
     }
 }
@@ -207,22 +417,58 @@ function getLatestLogContent(profileId) {
         ];
 
         for (const dir of candidateDirs) {
+            const mogPath = path.join(dir, 'latest.mog');
             const mycoPath = path.join(dir, 'latest.myco');
+            const logPath = path.join(dir, 'latest.log');
+
+            if (fs.existsSync(mogPath)) {
+                const text = decompressFromMyco(mogPath);
+                if (text && text.trim().length > 0) return text;
+            }
             if (fs.existsSync(mycoPath)) {
                 const text = decompressFromMyco(mycoPath);
                 if (text && text.trim().length > 0) return text;
             }
-
-            const logPath = path.join(dir, 'latest.log');
             if (fs.existsSync(logPath)) {
                 const raw = fs.readFileSync(logPath, 'utf8');
                 return sanitizeLog(raw);
             }
         }
     } catch (err) {
-        console.error('[MYCO LOG] Chyba při čtení nejnovějšího logu:', err);
+        console.error('[MYCHAL LOG] Chyba při čtení nejnovějšího logu:', err);
     }
     return '';
+}
+
+/**
+ * Dekomprimuje konkrétní .mog nebo .myco soubor do dočasného .txt a otevře jej v systémovém editoru
+ * @param {string} filePath 
+ * @returns {Promise<boolean>}
+ */
+async function openMycoFileInEditor(filePath) {
+    try {
+        if (!filePath || !fs.existsSync(filePath)) {
+            throw new Error(`Soubor neexistuje: ${filePath}`);
+        }
+        const text = decompressFromMyco(filePath);
+        if (!text || !text.trim()) {
+            throw new Error(`Soubor ${filePath} je prázdný nebo se nepodařilo jej přečíst.`);
+        }
+
+        const baseName = path.basename(filePath, path.extname(filePath));
+        const tempPath = path.join(os.tmpdir(), `${baseName}-view.txt`);
+        fs.writeFileSync(tempPath, text, 'utf8');
+
+        console.log(`[MYCHAL LOG] Otevírám soubor ${filePath} v textovém editoru: ${tempPath}`);
+        const result = await shell.openPath(tempPath);
+        if (result) {
+            console.warn(`[MYCHAL LOG] shell.openPath vrátil varování: ${result}`);
+        }
+        return true;
+    } catch (err) {
+        console.error('[MYCHAL LOG] Chyba při otevírání log souboru v editoru:', err);
+        return false;
+    }
 }
 
 /**
@@ -242,24 +488,30 @@ async function openLogInEditor(profileId) {
         const tempPath = path.join(os.tmpdir(), `mychalsmp-log-${dateStr}.txt`);
         fs.writeFileSync(tempPath, content, 'utf8');
 
-        console.log(`[MYCO LOG] Otevírám dekomprimovaný log v editoru: ${tempPath}`);
+        console.log(`[MYCHAL LOG] Otevírám log v editoru: ${tempPath}`);
         const result = await shell.openPath(tempPath);
         if (result) {
-            console.warn(`[MYCO LOG] shell.openPath vrátil varování: ${result}`);
+            console.warn(`[MYCHAL LOG] shell.openPath vrátil varování: ${result}`);
         }
         return true;
     } catch (err) {
-        console.error('[MYCO LOG] Chyba při otevírání logu v editoru:', err);
+        console.error('[MYCHAL LOG] Chyba při otevírání logu v editoru:', err);
         return false;
     }
 }
 
 module.exports = {
     sanitizeLog,
+    createMogHeader,
+    createMycoHeader,
+    formatMogLog,
     compressToMyco,
     decompressFromMyco,
+    getAllCandidateLogsDirs,
     resolveLogsDir,
+    convertAllPendingLogsToMyco,
     archiveSessionLogs,
     getLatestLogContent,
+    openMycoFileInEditor,
     openLogInEditor
 };

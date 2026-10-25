@@ -1034,7 +1034,9 @@ pub fn fast_scan_cleaner_cache(
                 let age_ms = now_ms - mtime_ms;
 
                 // 1. Logs
-                if (lower.ends_with(".log.gz") || (lower.ends_with(".log") && fname != "latest.log"))
+                if (lower.ends_with(".log.gz")
+                    || (lower.ends_with(".myco") && fname != "latest.myco")
+                    || (lower.ends_with(".log") && fname != "latest.log"))
                     && age_ms > max_age_ms
                 {
                     found.push(CleanableCacheItem {

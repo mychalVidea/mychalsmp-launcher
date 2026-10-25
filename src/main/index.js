@@ -515,6 +515,7 @@ Terminal=false
 Type=Application
 Categories=Game;ActionGame;AdventureGame;
 StartupWMClass=xyz.mychalsmp.launcher
+MimeType=x-scheme-handler/mychalsmp;text/x-mog;text/plain;application/x-myco-log;text/x-myco;
 `;
 
         const appsDir = path.join(homeDir, '.local', 'share', 'applications');
@@ -539,6 +540,27 @@ StartupWMClass=xyz.mychalsmp.launcher
     }
 }
 
+/**
+ * Zkontroluje, zda nebyl launcheru předán .myco soubor jako argument (např. při poklepání v OS)
+ * @param {string[]} argv 
+ * @returns {boolean}
+ */
+function handleFileArgOpen(argv) {
+    if (!Array.isArray(argv)) return false;
+    for (const arg of argv) {
+        if (typeof arg === 'string' && (arg.toLowerCase().endsWith('.mog') || arg.toLowerCase().endsWith('.myco')) && fs.existsSync(arg)) {
+            try {
+                const { openMycoFileInEditor } = require('./mycoLogManager');
+                openMycoFileInEditor(arg);
+                return true;
+            } catch (err) {
+                console.error('[MYCHAL LOG] Chyba při otevírání log souboru z argumentu:', err);
+            }
+        }
+    }
+    return false;
+}
+
 function startMainApplication() {
     // ⚡ Registrace všech modulárních IPC handlerů
     registerAllIpcHandlers({
@@ -549,7 +571,10 @@ function startMainApplication() {
         restoreAndFocusMainWindow
     });
 
-    app.on('second-instance', () => {
+    app.on('second-instance', (event, commandLine) => {
+        if (handleFileArgOpen(commandLine)) {
+            return;
+        }
         if (mainWindow && !mainWindow.isDestroyed()) {
             restoreAndFocusMainWindow();
         } else if (splashWindow && !splashWindow.isDestroyed()) {
@@ -559,11 +584,23 @@ function startMainApplication() {
     });
 
     app.whenReady().then(() => {
+        handleFileArgOpen(process.argv);
         checkAndResumeActiveSession({ updateTrayMenu });
         ensureLinuxDesktopShortcut();
         setupTray();
         createSplashWindow();
         createWindow();
+
+        // ⚡ Automatický převod starých logů (.log.gz, uncompressed) do .myco na pozadí při startu
+        setTimeout(() => {
+            try {
+                const { convertAllPendingLogsToMyco } = require('./mycoLogManager');
+                const count = convertAllPendingLogsToMyco();
+                if (count > 0) {
+                    console.log(`[MYCO LOG] Při startu launcher převedl ${count} logů do formátu .myco.`);
+                }
+            } catch (_) {}
+        }, 1500);
 
         setTimeout(() => {
             try {

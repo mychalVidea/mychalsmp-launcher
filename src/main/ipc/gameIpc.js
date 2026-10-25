@@ -547,6 +547,15 @@ function registerGameIpc({ getMainWindow, setupTray, updateTrayMenu }) {
                         }
                     }
                 });
+
+                // ⚡ Mojang Log4j při startu odrotuje předchozí latest.log do .log.gz.
+                // Po krátké prodlevě (7s) automaticky převedeme nově vzniklý .log.gz do .myco.
+                setTimeout(() => {
+                    try {
+                        const { convertAllPendingLogsToMyco } = require('../mycoLogManager');
+                        convertAllPendingLogsToMyco();
+                    } catch (_) {}
+                }, 7000);
             }
 
             setupTray();

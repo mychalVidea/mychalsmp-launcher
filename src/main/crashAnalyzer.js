@@ -81,11 +81,13 @@ function readLatestLogTail(gameDir, maxLines = 600) {
     try {
         const logPath = path.join(gameDir, 'logs', 'latest.log');
         if (!fs.existsSync(logPath)) {
+            const mogPath = path.join(gameDir, 'logs', 'latest.mog');
             const mycoPath = path.join(gameDir, 'logs', 'latest.myco');
-            if (fs.existsSync(mycoPath)) {
+            const targetPath = fs.existsSync(mogPath) ? mogPath : (fs.existsSync(mycoPath) ? mycoPath : null);
+            if (targetPath) {
                 try {
                     const { decompressFromMyco } = require('./mycoLogManager');
-                    const decompressed = decompressFromMyco(mycoPath);
+                    const decompressed = decompressFromMyco(targetPath);
                     if (decompressed) {
                         const lines = decompressed.split('\n');
                         return lines.slice(-maxLines).join('\n');

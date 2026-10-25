@@ -45,3 +45,15 @@ linux:
         - x64
   category: Game
   icon: build/icon.png
+
+fileAssociations:
+  - ext: mog
+    name: Mychal Log
+    description: MYCHAL SMP Log Archive
+    mimeType: text/plain
+    role: Viewer
+  - ext: myco
+    name: MYCO Log
+    description: MYCHAL SMP Log Archive
+    mimeType: text/plain
+    role: Viewer
