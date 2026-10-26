@@ -147,8 +147,7 @@ npm run pack
 
 ## 🌐 O síti MYCHAL SMP
 
-* **Oficiální herní server:** `mychalsmp.xyz` (Port: `25565`)
-* **Záložní IP adresa:** `130.61.89.37`
+* **Oficiální herní server:** `mychalsmp.xyz`
 * **Oficiální web:** [mychalsmp.xyz](https://mychalsmp.xyz)
 * **Návod k připojení:** [join.mychalsmp.xyz](https://join.mychalsmp.xyz)
 * **Autor & správa projektu:** **mychalVidea** ([admin@mychalsmp.xyz](mailto:admin@mychalsmp.xyz))
