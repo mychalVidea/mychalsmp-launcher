@@ -2248,7 +2248,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     `;
                     const versionStatus = document.getElementById('launcherVersionStatus');
                     if (versionStatus && update && update.currentVersion) {
-                        versionStatus.innerHTML = `Nainstalovaná verze: <strong>v${update.currentVersion}</strong> • <span class="update-status-fresh">Aktuální ✓</span>`;
+                        versionStatus.innerHTML = `Nainstalovaná verze: <strong>v${update.currentVersion}</strong> • <span class="update-status-fresh" style="display: inline-flex; align-items: center; gap: 4px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Aktuální</span>`;
                     }
                     showToast('Launcher je plně aktuální (v' + (update?.currentVersion || '1.4.7') + ')', 'info');
 
@@ -3355,10 +3355,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 directUrl: u.directUrl,
                                 filename: u.newFilename
                             });
-                            appendLog(`[AKTUALIZACE MÓDŮ] ✔ ${u.title} úspěšně aktualizován.`);
+                            appendLog(`[AKTUALIZACE MÓDŮ] [OK] ${u.title} úspěšně aktualizován.`);
                         } catch (dlErr) {
                             console.warn(`Chyba při stahování aktualizace módu ${u.title}:`, dlErr);
-                            appendLog(`[AKTUALIZACE MÓDŮ] ⚠ Selhalo stažení ${u.title}: ${dlErr.message}`);
+                            appendLog(`[AKTUALIZACE MÓDŮ] [VAROVÁNÍ] Selhalo stažení ${u.title}: ${dlErr.message}`);
                         } finally {
                             activePreLaunchModUpdate = null;
                         }
@@ -3518,7 +3518,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (barFill) barFill.style.width = '0%';
         if (btnOpt) {
             btnOpt.disabled = false;
-            btnOpt.innerHTML = '<span>⚡ Spustit s optimalizací</span>';
+            btnOpt.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Spustit s optimalizací</span>';
         }
         if (btnVan) btnVan.disabled = false;
         modal.style.display = 'flex';
@@ -3529,7 +3529,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (btnOpt) {
                 btnOpt.onclick = null;
                 btnOpt.disabled = false;
-                btnOpt.innerHTML = '<span>⚡ Spustit s optimalizací</span>';
+                btnOpt.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Spustit s optimalizací</span>';
             }
             if (btnVan) {
                 btnVan.onclick = null;
@@ -8122,7 +8122,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             Změnit klávesu
                         </button>
                         <button type="button" class="mc-btn mc-btn-secondary btn-sm btn-unbind-action" title="Zrušit přiřazení">
-                            ✕
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                         </button>
                     </div>
                 `;
@@ -8168,7 +8168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="modal-title-box">
                         <h3>Přiřadit akci ke klávese ${escapeHtml(getKeyDisplay(targetMcKey))}</h3>
                     </div>
-                    <button class="modal-close-btn btn-picker-close">✕</button>
+                    <button class="modal-close-btn btn-picker-close" aria-label="Zavřít"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
                 </div>
                 <div style="padding: 12px 18px; border-bottom: 1px solid var(--surface-border);">
                     <input type="text" class="keybind-search-input picker-search" placeholder="Hledat akci (např. Skok, Útok, Zoom)..." style="width: 100%;">
@@ -8313,7 +8313,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             ${escapeHtml(getKeyDisplay(action.key))}
                         </button>
                         <button type="button" class="key-unbind-btn" title="Zrušit bind">
-                            ✕
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                         </button>
                     </div>
                 `;
@@ -8616,7 +8616,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     badgeElem.style.color = '#0a0a0c';
                 }
                 if (headElem) {
-                    headElem.textContent = '✓ ' + (crashData.title || 'Vyřešeno');
+                    headElem.textContent = crashData.title || 'Vyřešeno';
                     headElem.style.color = '#21DE00';
                 }
                 if (diagCard) {
@@ -8632,7 +8632,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     repairBanner.style.background = 'rgba(33, 222, 0, 0.12)';
                     repairBanner.style.border = '1px solid rgba(33, 222, 0, 0.35)';
                     if (repairTitle) {
-                        repairTitle.textContent = '✓ Automaticky opraveno';
+                        repairTitle.textContent = 'Automaticky opraveno';
                         repairTitle.style.color = '#21DE00';
                     }
                     if (repairDesc) {
@@ -8712,7 +8712,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
 
                 // Autonomously start applying the fix right now while user looks at modal
-                appendLog(`[AUTOPILOT OPRAV] ⚡ Spouštím automatickou opravu v pozadí: ${crashData.autoFix.id}`);
+                appendLog(`[AUTOPILOT OPRAV] [OPRAVA] Spouštím automatickou opravu v pozadí: ${crashData.autoFix.id}`);
                 activeCrashFixPromise = window.api.applyCrashFix(crashData.autoFix, currentConfig.activeProfileId)
                     .then(async (res) => {
                         activeCrashFixPromise = null;
@@ -8735,7 +8735,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 badgeElem.style.color = '#0a0a0c';
                             }
                             if (headElem) {
-                                headElem.textContent = '✓ Problém byl vyřešen';
+                                headElem.textContent = 'Problém byl vyřešen';
                                 headElem.style.color = '#21DE00';
                             }
                             if (diagCard) {
@@ -8750,7 +8750,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 repairBanner.style.background = 'rgba(33, 222, 0, 0.12)';
                                 repairBanner.style.border = '1px solid rgba(33, 222, 0, 0.35)';
                                 if (repairTitle) {
-                                    repairTitle.textContent = '✓ Automaticky opraveno';
+                                    repairTitle.textContent = 'Automaticky opraveno';
                                     repairTitle.style.color = '#21DE00';
                                 }
                                 if (repairDesc) {
@@ -9602,7 +9602,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const btnApplyOpt = document.getElementById('btnApplyProfileOptimization');
                     const profileQuickOptDesc = document.getElementById('profileQuickOptDesc');
                     if (btnApplyOpt) {
-                        btnApplyOpt.innerHTML = '<span>⚡ Optimalizovat</span>';
+                        btnApplyOpt.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Optimalizovat</span>';
                         btnApplyOpt.classList.remove('btn-opt-done');
                         btnApplyOpt.classList.add('mc-btn-green');
                         btnApplyOpt.title = 'Nainstaluje doporučené optimalizační módy';
@@ -9651,11 +9651,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (quickOptBanner) quickOptBanner.style.display = 'none';
                 } else {
                     showToast(res?.error || 'Optimalizace selhala.', 'error');
-                    btnApplyOpt.innerHTML = '<span>⚡ Optimalizovat</span>';
+                    btnApplyOpt.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Optimalizovat</span>';
                 }
             } catch (e) {
                 showToast('Chyba: ' + e.message, 'error');
-                btnApplyOpt.innerHTML = '<span>⚡ Optimalizovat</span>';
+                btnApplyOpt.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Optimalizovat</span>';
             } finally {
                 btnApplyOpt.disabled = false;
                 await loadConfiguration();

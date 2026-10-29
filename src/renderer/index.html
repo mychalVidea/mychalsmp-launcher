@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=1.5.2">
+    <link rel="stylesheet" href="css/style.css?v=1.5.3">
 </head>
 
 <body>
@@ -1818,7 +1818,12 @@
                     <input type="text" id="keybindSearchInput" class="keybind-search-input"
                         placeholder="Hledat akci nebo klávesu (např. W, Sprint, Zoom, Voice)...">
                     <button type="button" id="btnClearKeybindSearch" class="keybind-clear-search"
-                        style="display: none;">✕</button>
+                        style="display: none;" aria-label="Vymazat hledání">
+                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
                 </div>
 
                 <div class="keybind-category-chips" id="keybindCategoryChips">
@@ -1932,8 +1937,13 @@
             </div>
 
             <div style="margin-top: 24px; display: flex; justify-content: center; gap: 10px;">
-                <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnRecorderUnbind">
-                    ✕ Zrušit bind (Neobsazeno)
+                <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnRecorderUnbind"
+                    style="display: inline-flex; align-items: center; gap: 6px;">
+                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span>Zrušit bind (Neobsazeno)</span>
                 </button>
                 <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnRecorderCancel">
                     Zrušit (Esc)
@@ -2488,22 +2498,41 @@
                     <input type="hidden" id="profileSettingsLoaderSelect" value="fabric">
                     <div class="loader-cards-grid" id="loaderCardsContainer">
                         <div class="loader-card active" data-loader="fabric">
-                            <div class="loader-card-icon">⚡</div>
+                            <div class="loader-card-icon">
+                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="currentColor"></polygon>
+                                </svg>
+                            </div>
                             <div class="loader-card-title">Fabric</div>
                             <div class="loader-card-desc">Nejvyšší FPS, Sodium, Iris shadery a plynulost.</div>
                         </div>
                         <div class="loader-card" data-loader="vanilla">
-                            <div class="loader-card-icon">🧊</div>
+                            <div class="loader-card-icon">
+                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                </svg>
+                            </div>
                             <div class="loader-card-title">Vanilla</div>
                             <div class="loader-card-desc">Čistý Minecraft bez módů a vylepšení.</div>
                         </div>
                         <div class="loader-card" data-loader="neoforge">
-                            <div class="loader-card-icon">⚙️</div>
+                            <div class="loader-card-icon">
+                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                </svg>
+                            </div>
                             <div class="loader-card-title">NeoForge</div>
                             <div class="loader-card-desc">Moderní platforma pro velké modpacky.</div>
                         </div>
                         <div class="loader-card" data-loader="forge">
-                            <div class="loader-card-icon">🔨</div>
+                            <div class="loader-card-icon">
+                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                                </svg>
+                            </div>
                             <div class="loader-card-title">Forge</div>
                             <div class="loader-card-desc">Tradiční loader pro starší modpacky.</div>
                         </div>
@@ -2527,8 +2556,11 @@
                             pro maximální FPS a plynulost.</div>
                     </div>
                     <button type="button" class="mc-btn mc-btn-green" id="btnApplyProfileOptimization"
-                        style="padding: 7px 14px; font-size: 11.5px; white-space: nowrap;">
-                        <span>⚡ Optimalizovat</span>
+                        style="padding: 7px 14px; font-size: 11.5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;">
+                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                        <span>Optimalizovat</span>
                     </button>
                 </div>
 
@@ -2662,11 +2694,11 @@
                         </div>
 
                         <ul class="first-launch-features">
-                            <li><span class="feat-check">✓</span> <span><strong>Fabric + Sodium & Lithium</strong> –
+                            <li><span class="feat-check"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span><strong>Fabric + Sodium & Lithium</strong> –
                                     vysoký výkon a plynulost</span></li>
-                            <li><span class="feat-check">✓</span> <span><strong>Iris Shaders</strong> s balíčkem
+                            <li><span class="feat-check"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span><strong>Iris Shaders</strong> s balíčkem
                                     Complementary</span></li>
-                            <li><span class="feat-check">✓</span> <span>Vyladěné herní nastavení pro MYCHAL SMP</span>
+                            <li><span class="feat-check"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span>Vyladěné herní nastavení pro MYCHAL SMP</span>
                             </li>
                         </ul>
 
@@ -3172,7 +3204,7 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <script src="js/lib/skinview3d.bundle.js"></script>
-    <script src="js/app.js?v=1.5.2"></script>
+    <script src="js/app.js?v=1.5.3"></script>
 </body>
 
 </html>
