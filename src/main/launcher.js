@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { execSync, execFileSync } = require('child_process');
-const { Readable } = require('stream');
+const { Readable, Transform } = require('stream');
 const { pipeline } = require('stream/promises');
 const { BASE_DIR, loadConfig } = require('./config');
 const nativeLoader = require('./nativeLoader');
@@ -188,7 +188,14 @@ function isJarFileValid(filePath) {
     if (!filePath || typeof filePath !== 'string') return false;
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
-            return isJarFileValidInternal(filePath);
+            const valid = isJarFileValidInternal(filePath);
+            if (valid) return true;
+            if (attempt < 2) {
+                const end = Date.now() + 150;
+                while (Date.now() < end) { /* sync delay for OS file flush / write buffer release */ }
+                continue;
+            }
+            return false;
         } catch (err) {
             if ((err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'EACCES') && attempt < 2) {
                 const end = Date.now() + 150;
@@ -246,8 +253,13 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
         if (this.client && this.client._activeControllers) {
             this.client._activeControllers.delete(controller);
         }
-        if (fileStream && this.client && this.client._activeStreams) {
-            this.client._activeStreams.delete(fullPath);
+        if (fileStream) {
+            if (this.client && this.client._activeStreams) {
+                this.client._activeStreams.delete(fullPath);
+            }
+            if (!fileStream.destroyed) {
+                try { fileStream.destroy(); } catch (_) { }
+            }
         }
     };
 
@@ -294,29 +306,38 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
             return { failed: false, asset: null };
         }
 
-        // Pro velké soubory (client.jar, archivy) streamujeme na disk s průběžným hlášením postupu
+        // Pro velké soubory (client.jar, archivy) streamujeme na disk s průběžným hlášením postupu přes Transform stream
         fileStream = fs.createWriteStream(fullPath);
         if (this.client && this.client._activeStreams) {
             this.client._activeStreams.set(fullPath, fileStream);
         }
 
         const nodeStream = Readable.fromWeb(res.body);
-        nodeStream.on('data', (chunk) => {
-            if (this.client && this.client._isCancelled) {
-                try { controller.abort(); } catch (e) { }
-                return;
+        const progressStream = new Transform({
+            transform: (chunk, encoding, callback) => {
+                if (this.client && this.client._isCancelled) {
+                    try { controller.abort(); } catch (e) { }
+                    callback(new Error('LAUNCH_CANCELLED'));
+                    return;
+                }
+                receivedBytes += chunk.length;
+                resetTimeout(defaultTimeoutMs);
+                if (this.client) {
+                    this.client.emit('download-status', {
+                        name: name,
+                        type: type,
+                        current: receivedBytes,
+                        total: totalBytes || receivedBytes
+                    });
+                }
+                callback(null, chunk);
             }
-            receivedBytes += chunk.length;
-            resetTimeout(defaultTimeoutMs);
-            this.client.emit('download-status', {
-                name: name,
-                type: type,
-                current: receivedBytes,
-                total: totalBytes || receivedBytes
-            });
         });
 
-        await pipeline(nodeStream, fileStream);
+        await pipeline(nodeStream, progressStream, fileStream);
+
+        // Krátká prodleva pro spolehlivý flush diskových bufferů a uvolnění Windows Defender / AV zámků
+        await new Promise(r => setTimeout(r, 80));
 
         if (totalBytes > 0 && receivedBytes < totalBytes) {
             try { if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath); } catch (e) { }
@@ -334,6 +355,7 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
 
     } catch (err) {
         cleanup();
+        await new Promise(r => setTimeout(r, 100));
         try {
             if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
         } catch (e) { }
@@ -568,7 +590,22 @@ Handler.prototype.getJar = async function () {
         if (copied) break;
     }
 
-    // 3. Pokud není na disku nebo neodpovídá novému patchi, stáhnout z oficiálního Mojang serveru
+    // 3. Pokud není na disku nebo neodpovídá novému patchi, zkontrolovat vanilkový archiv nebo stáhnout z oficiálního Mojang serveru
+    if (!copied) {
+        const vanillaDir = path.join(this.options.root, 'versions', this.options.version.number);
+        const vanillaJarPath = path.join(vanillaDir, `${this.options.version.number}.jar`);
+        if (fs.existsSync(vanillaJarPath) && isJarFileValid(vanillaJarPath)) {
+            try {
+                fs.mkdirSync(this.options.directory, { recursive: true });
+                fs.copyFileSync(vanillaJarPath, targetJarPath);
+                if (isJarFileValid(targetJarPath)) {
+                    copied = true;
+                    this.client.emit('debug', `[OPTIMALIZACE]: Herní klient ${jarName} inicializován z vanilkového jádra ${path.basename(vanillaJarPath)}`);
+                }
+            } catch (_) { }
+        }
+    }
+
     if (!copied) {
         let clientUrl = this.version?.downloads?.client?.url;
         if (!clientUrl && this.options.version.number) {
@@ -580,6 +617,14 @@ Handler.prototype.getJar = async function () {
 
         if (clientUrl) {
             await this.downloadAsync(clientUrl, this.options.directory, jarName, 3, 'version-jar');
+            const vanillaDir = path.join(this.options.root, 'versions', this.options.version.number);
+            const vanillaJarPath = path.join(vanillaDir, `${this.options.version.number}.jar`);
+            if (isJarFileValid(targetJarPath) && (!fs.existsSync(vanillaJarPath) || !isJarFileValid(vanillaJarPath))) {
+                try {
+                    fs.mkdirSync(vanillaDir, { recursive: true });
+                    fs.copyFileSync(targetJarPath, vanillaJarPath);
+                } catch (_) { }
+            }
         } else {
             const baseJar = path.join(this.options.root, 'versions', this.options.version.number, `${this.options.version.number}.jar`);
             if (fs.existsSync(baseJar) && isJarFileValid(baseJar)) {
@@ -3010,6 +3055,27 @@ async function ensureFabricProfile(centralRootDir, targetVersion, onLog = consol
             try { fs.unlinkSync(`${vanillaJar}.brand_sig`); } catch (e) { }
             try { fs.unlinkSync(`${vanillaJar}.vanilla_bak`); } catch (e) { }
         }
+        if (!fs.existsSync(vanillaJar) || !isJarFileValid(vanillaJar)) {
+            const vJson = await getOrFetchVanillaVersionJson(centralRootDir, targetVersion);
+            const clientUrl = vJson?.downloads?.client?.url;
+            if (clientUrl) {
+                onLog(`[FABRIC] Stahuji vanilkové herní jádro pro ${targetVersion}...`);
+                try {
+                    fs.mkdirSync(path.join(versionsDir, targetVersion), { recursive: true });
+                    const dlRes = await fetch(clientUrl, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+                        signal: AbortSignal.timeout(60000)
+                    });
+                    if (dlRes.ok) {
+                        const dlBuf = Buffer.from(await dlRes.arrayBuffer());
+                        fs.writeFileSync(vanillaJar, dlBuf);
+                    }
+                } catch (dlErr) {
+                    onLog(`[FABRIC] ⚠ Nepodařilo se předstáhnout vanilkové jádro: ${dlErr.message}`);
+                }
+            }
+        }
+
         if (fs.existsSync(vanillaJar) && isJarFileValid(vanillaJar) && (!fs.existsSync(fabricJar) || !isJarFileValid(fabricJar))) {
             try { fs.copyFileSync(vanillaJar, fabricJar); } catch (e) { }
         }
