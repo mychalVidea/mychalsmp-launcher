@@ -100,7 +100,7 @@ function restoreAndFocusMainWindow() {
                     discordRpc.updateActivity({
                         username: cfg.username || 'Hráč',
                         server: cfg.serverIp || 'mychalsmp.xyz',
-                        profileName: activeProfile ? activeProfile.name : 'Minecraft 26.2',
+                        profileName: activeProfile ? activeProfile.name : 'Minecraft 26.3',
                         isPlaying: false
                     });
                 }
@@ -386,7 +386,7 @@ function createWindow() {
                         discordRpc.updateActivity({
                             username: cfg.username || 'Hráč',
                             server: cfg.serverIp || 'mychalsmp.xyz',
-                            profileName: activeProfile ? activeProfile.name : 'Minecraft 26.2',
+                            profileName: activeProfile ? activeProfile.name : 'Minecraft 26.3',
                             isPlaying: false
                         });
                     }
@@ -425,7 +425,7 @@ function createWindow() {
                         discordRpc.updateActivity({
                             username: cfg.username || 'Hráč',
                             server: cfg.serverIp || 'mychalsmp.xyz',
-                            profileName: activeProfile ? activeProfile.name : 'Minecraft 26.2',
+                            profileName: activeProfile ? activeProfile.name : 'Minecraft 26.3',
                             isPlaying: false
                         });
                     }
@@ -608,7 +608,7 @@ function startMainApplication() {
             } catch (_) {}
             try {
                 const cfg = loadConfig();
-                const targetVer = cfg.version || '26.2';
+                const targetVer = cfg.version || '26.3';
                 prewarmLaunchEnvironment(BASE_DIR, targetVer, cfg);
 
                 if (cfg.autoUpdateMods !== false) {
@@ -618,7 +618,7 @@ function startMainApplication() {
                         checkProfileModUpdates({
                             profileId: activeProfile.id,
                             gameDir: gDir,
-                            version: activeProfile.version || '26.2',
+                            version: activeProfile.version || '26.3',
                             loader: activeProfile.loader || 'fabric',
                             force: false
                         }).catch(() => {});
@@ -634,7 +634,7 @@ function startMainApplication() {
                 discordRpc.updateActivity({
                     username: config.username || 'Hráč',
                     server: config.serverIp || 'mychalsmp.xyz',
-                    profileName: activeProfile ? activeProfile.name : 'Minecraft 26.2',
+                    profileName: activeProfile ? activeProfile.name : 'Minecraft 26.3',
                     isPlaying: false
                 });
             }

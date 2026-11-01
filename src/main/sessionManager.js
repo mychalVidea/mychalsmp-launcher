@@ -233,7 +233,7 @@ function endSessionTracking(exitCode = 0, callbacks = {}) {
                 discordRpc.updateActivity({
                     username: cfg.username || 'Hráč',
                     server: cfg.serverIp || 'mychalsmp.xyz',
-                    profileName: activeProfile ? activeProfile.name : 'Minecraft 26.2',
+                    profileName: activeProfile ? activeProfile.name : 'Minecraft 26.3',
                     isPlaying: false
                 });
             }

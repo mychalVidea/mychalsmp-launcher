@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://mychalsmp.xyz"><img src="https://img.shields.io/badge/Server-mychalsmp.xyz-0a67e5?style=for-the-badge&logo=minecraft" alt="Server IP"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Doporučená_verze-26.2-21de00?style=for-the-badge" alt="Doporučená verze 26.2"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Doporučená_verze-26.3-21de00?style=for-the-badge" alt="Doporučená verze 26.3"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platformy-Linux_%7C_Windows_11-blue?style=for-the-badge&logo=linux" alt="Platformy"></a>
   <a href="#"><img src="https://img.shields.io/badge/Licence-MIT-94a3b8?style=for-the-badge" alt="Licence"></a>
 </p>
@@ -73,8 +73,8 @@ Síť MYCHAL SMP a SMPClient podporují následující verze:
 
 | Verze | Status | Popis |
 | :--- | :--- | :--- |
-| **`26.3`** | 🚀 **Nejnovější** | Nejnovější herní drop s podporou nejnovějších herních prvků a módů. |
-| **`26.2`** | 🌟 **Doporučeno** | Primární, plně stabilní verze sítě MYCHAL SMP s kompletní optimalizací. |
+| **`26.3`** | 🌟 **Doporučeno & Nativní** | Primární, plně stabilní nativní verze sítě MYCHAL SMP s kompletní optimalizací. |
+| **`26.2`** | 📦 **Podporováno** | Podporovaná verze přes multi-version ProtocolBridge. |
 | **`26.1.2`** | 📦 **Legacy** | Předchozí stabilní verze pro dlouhodobě udržované modpacky. |
 | **`1.21.11`** | 🛡️ **Podporováno** | Verze 1.21 s integrovaným profilem a oficiálním keyartem. |
 

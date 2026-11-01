@@ -25,7 +25,7 @@ async function pingServer(host = 'mychalsmp.xyz', port = 25565, isFallback = fal
                     online: result.players.online || 0,
                     max: result.players.max || 100
                 },
-                version: result.version ? result.version.name : '26.2 / 1.21.4',
+                version: result.version ? result.version.name : '26.3',
                 motd: result.motd ? (result.motd.clean || result.motd.raw) : 'MYCHAL SMP',
                 latency: result.roundTripLatency || 15,
                 favicon: result.favicon || null
@@ -49,7 +49,7 @@ async function pingServer(host = 'mychalsmp.xyz', port = 25565, isFallback = fal
                             online: data.players ? data.players.online : 0,
                             max: data.players ? data.players.max : 100
                         },
-                        version: data.version ? data.version.name_clean : '26.2',
+                        version: data.version ? data.version.name_clean : '26.3',
                         motd: data.motd ? data.motd.clean : 'MYCHAL SMP',
                         latency: 20,
                         favicon: data.icon || null

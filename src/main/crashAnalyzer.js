@@ -498,6 +498,13 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
         /Mod '[^']+' \([^)]+\) is incompatible with mod/i.test(combinedText) ||
         /Could not execute entrypoint stage '[^']+' due to errors, provided by '[^']+'/i.test(combinedText) ||
         /in\s+\[[a-zA-Z0-9_\-]+\.mixins\.json/i.test(combinedText) ||
+        /MixinApplyError/i.test(combinedText) ||
+        /InvalidMixinException/i.test(combinedText) ||
+        /MixinTransformerError/i.test(combinedText) ||
+        /InjectionError/i.test(combinedText) ||
+        /Critical injection failure/i.test(combinedText) ||
+        /from mod\s+[a-zA-Z0-9_\-]+/i.test(combinedText) ||
+        /\.mixins\.json/i.test(combinedText) ||
         /(?:handler|wrapMethod|wrapOperation|modify\w*|redirect|constant)\$[a-z0-9]+\$[a-zA-Z0-9_\-]+\$/i.test(combinedText) ||
         /IncompatibleModException/i.test(combinedText);
 
@@ -574,8 +581,23 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
         }
     }
 
-    // 5. Mixin crash: "in [modid.mixins.json:...]"
-    const mixinRegex = /in\s+\[([a-zA-Z0-9_\-]+)\.mixins\.json/gi;
+    // 5. Mixin crash: "from mod modid", "in [modid.mixins.json:...]", "in config [modid.mixins.json]", "mixins.modid.json"
+    const fromModRegex = /from\s+mod\s+([a-zA-Z0-9_\-]+)/gi;
+    while ((m = fromModRegex.exec(combinedText)) !== null) {
+        const id = m[1];
+        const idLower = id.toLowerCase();
+        if (!['minecraft', 'fabric', 'fabricloader'].includes(idLower) &&
+            !PROTECTED_CORE_MODS.has(idLower) &&
+            !culprits.some(c => c.id.toLowerCase() === idLower)) {
+            culprits.push({
+                name: id,
+                id,
+                reason: 'nekompatibilní Mixin modifikace pro tuto verzi hry'
+            });
+        }
+    }
+
+    const mixinRegex = /(?:in\s+(?:config\s+)?\[|Mixin\s+\[|config\s+\[|\b)([a-zA-Z0-9_\-]+)\.mixins\.json/gi;
     while ((m = mixinRegex.exec(combinedText)) !== null) {
         const id = m[1];
         const idLower = id.toLowerCase();
@@ -586,6 +608,21 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
                 name: id,
                 id,
                 reason: 'kritická chyba v Mixin transformaci kódu hry'
+            });
+        }
+    }
+
+    const mixinsDotRegex = /mixins\.([a-zA-Z0-9_\-]+)\.json/gi;
+    while ((m = mixinsDotRegex.exec(combinedText)) !== null) {
+        const id = m[1];
+        const idLower = id.toLowerCase();
+        if (!['minecraft', 'fabric', 'fabricloader'].includes(idLower) &&
+            !PROTECTED_CORE_MODS.has(idLower) &&
+            !culprits.some(c => c.id.toLowerCase() === idLower)) {
+            culprits.push({
+                name: id,
+                id,
+                reason: 'kritická chyba v Mixin konfiguraci módu'
             });
         }
     }
@@ -662,13 +699,17 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
     for (const culprit of culprits) {
         const cId = (culprit.id || '').toLowerCase();
         const cName = (culprit.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cIdNorm = cId.replace(/[^a-z0-9]/g, '');
 
-        let match = modFiles.find(mf => mf.modId && mf.modId === cId);
+        let match = modFiles.find(mf => mf.modId && mf.modId.toLowerCase() === cId);
         if (!match && cName) {
             match = modFiles.find(mf => mf.modName && mf.modName.replace(/[^a-z0-9]/g, '') === cName);
         }
         if (!match && cId) {
             match = modFiles.find(mf => mf.cleanName.includes(cId));
+        }
+        if (!match && cIdNorm) {
+            match = modFiles.find(mf => mf.cleanName.replace(/[^a-z0-9]/g, '').includes(cIdNorm));
         }
         if (!match && cName) {
             match = modFiles.find(mf => mf.cleanName.replace(/[^a-z0-9]/g, '').includes(cName));
@@ -708,6 +749,17 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
             } catch (e) {
                 console.error(`[CRASH ANALYZER] Nelze automaticky přejmenovat mód ${c.matchedFile}:`, e);
             }
+        } else {
+            const fallbackRes = disableModInModsDir(modsDir, cId, cName);
+            if (fallbackRes) {
+                disabledMods.push({
+                    name: c.name,
+                    id: c.id,
+                    filename: fallbackRes.filename,
+                    disabledFilename: fallbackRes.disabledFilename,
+                    reason: c.reason
+                });
+            }
         }
     }
 
@@ -717,15 +769,22 @@ function autoResolveIncompatibleMods(gameDir, combinedText) {
     if (incompIdx !== -1) {
         excerpt = combinedText.substring(incompIdx, incompIdx + 900).trim();
     } else {
-        const formattedIdx = combinedText.indexOf('FormattedException:');
-        if (formattedIdx !== -1) {
-            excerpt = combinedText.substring(formattedIdx, formattedIdx + 900).trim();
+        const mixinErrMatch = combinedText.match(/(?:MixinApplyError|InvalidMixinException|MixinTransformerError|InjectionError)[^\n]*/i);
+        if (mixinErrMatch) {
+            const idx = mixinErrMatch.index;
+            const start = Math.max(0, idx - 150);
+            excerpt = combinedText.substring(start, start + 900).trim();
         } else {
-            const mixinMatch = combinedText.match(/(?:handler|wrapMethod|wrapOperation|modify\w*|redirect|constant)\$[a-z0-9]+\$[a-zA-Z0-9_\-]+\$/);
-            if (mixinMatch) {
-                const mixinIdx = mixinMatch.index;
-                const start = Math.max(0, mixinIdx - 300);
-                excerpt = combinedText.substring(start, start + 900).trim();
+            const formattedIdx = combinedText.indexOf('FormattedException:');
+            if (formattedIdx !== -1) {
+                excerpt = combinedText.substring(formattedIdx, formattedIdx + 900).trim();
+            } else {
+                const mixinMatch = combinedText.match(/(?:handler|wrapMethod|wrapOperation|modify\w*|redirect|constant)\$[a-z0-9]+\$[a-zA-Z0-9_\-]+\$/);
+                if (mixinMatch) {
+                    const mixinIdx = mixinMatch.index;
+                    const start = Math.max(0, mixinIdx - 300);
+                    excerpt = combinedText.substring(start, start + 900).trim();
+                }
             }
         }
     }
@@ -982,8 +1041,70 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
         };
     }
 
+    // ── Diagnostic Rule 0: Incompatible / Conflicting Mods (Smart Auto-Fix) ────
+    const incompResult = autoResolveIncompatibleMods(gameDir, combinedText);
+    if (incompResult && incompResult.detected) {
+        if (incompResult.fixed) {
+            const names = incompResult.disabledMods.map(m => m.name).join(', ');
+            const files = incompResult.disabledMods.map(m => m.filename).join(', ');
+            const reason = incompResult.disabledMods[0]?.reason ? ` (${incompResult.disabledMods[0].reason})` : '';
+
+            return {
+                hasCrash: true,
+                exitCode,
+                reportPath,
+                fixed: true,
+                autoFixed: true,
+                title: 'Hra opravena – Nekompatibilní mód deaktivován',
+                severity: 'warning',
+                description: `Detekován nekompatibilní mód: ${names}${reason}. Soubor ${files} byl automaticky zakázán (.disabled), aby spuštění hry proběhlo hladce.`,
+                recommendation: 'Nekompatibilní modifikace byla vyřazena. Můžeš hru ihned spustit znovu.',
+                disabledMods: incompResult.disabledMods,
+                logExcerpt: incompResult.logExcerpt || logExcerpt,
+                autoFix: {
+                    id: 'RELAUNCH_GAME',
+                    label: 'Spustit hru znovu',
+                    description: 'Spustí instanci s již opravenými a deaktivovanými módy.'
+                }
+            };
+        } else {
+            const culpritNames = incompResult.culprits.map(c => c.name || c.id).join(', ');
+            const filesToDisable = incompResult.culprits.map(c => c.matchedFile).filter(Boolean);
+            const targetFiles = filesToDisable.length > 0
+                ? filesToDisable
+                : incompResult.culprits.map(c => `${c.id}.jar`);
+            return {
+                hasCrash: true,
+                exitCode,
+                reportPath,
+                fixed: false,
+                title: 'Nekompatibilní modifikace',
+                severity: 'critical',
+                description: `V profilu byl nalezen nekompatibilní mód: ${culpritNames}. Vyžaduje jinou verzi Minecraftu nebo jiný zavaděč.`,
+                recommendation: 'Deaktivace problematického módu pro bezproblémové spuštění.',
+                logExcerpt: incompResult.logExcerpt || logExcerpt,
+                autoFix: {
+                    id: 'DISABLE_INCOMPATIBLE_MODS',
+                    files: targetFiles,
+                    label: `Deaktivovat mód (${culpritNames})`,
+                    description: 'Přejmenuje problematický mód na .disabled pro bezpečné spuštění.'
+                }
+            };
+        }
+    }
+
     // ── Diagnostic Rule: Sodium Graphics PreLaunch Crash ───────────────────────
+    const hasMixinCrash =
+        /MixinApplyError/i.test(combinedText) ||
+        /InvalidMixinException/i.test(combinedText) ||
+        /MixinTransformerError/i.test(combinedText) ||
+        /InjectionError/i.test(combinedText) ||
+        /Critical injection failure/i.test(combinedText) ||
+        /from mod\s+[a-zA-Z0-9_\-]+/i.test(combinedText) ||
+        /\.mixins\.json/i.test(combinedText);
+
     const isSodiumPreLaunch =
+        !hasMixinCrash &&
         (/Could not execute entrypoint stage 'preLaunch' due to errors, provided by 'sodium'/i.test(combinedText) ||
             /SodiumPreLaunch/i.test(combinedText)) &&
         !combinedText.includes('Incompatible mods found!') &&
@@ -1018,58 +1139,6 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
                 description: 'Přidá parametry pro přeskočení striktních kontrol kompatibility GPU v Sodium a restartuje hru.'
             }
         };
-    }
-
-    // ── Diagnostic Rule 0: Incompatible / Conflicting Mods (Smart Auto-Fix) ────
-    const incompResult = autoResolveIncompatibleMods(gameDir, combinedText);
-    if (incompResult && incompResult.detected) {
-        if (incompResult.fixed) {
-            const names = incompResult.disabledMods.map(m => m.name).join(', ');
-            const files = incompResult.disabledMods.map(m => m.filename).join(', ');
-            const reason = incompResult.disabledMods[0]?.reason ? ` (${incompResult.disabledMods[0].reason})` : '';
-
-            return {
-                hasCrash: true,
-                exitCode,
-                reportPath,
-                fixed: true,
-                autoFixed: true,
-                title: 'Hra opravena – Nekompatibilní mód deaktivován',
-                severity: 'warning',
-                description: `Detekován nekompatibilní mód: ${names}${reason}. Soubor ${files} byl automaticky zakázán (.disabled), aby spuštění hry proběhlo hladce.`,
-                recommendation: 'Nekompatibilní modifikace byla vyřazena. Můžeš hru ihned spustit znovu.',
-                disabledMods: incompResult.disabledMods,
-                logExcerpt: incompResult.logExcerpt || logExcerpt,
-                autoFix: {
-                    id: 'RELAUNCH_GAME',
-                    label: 'Spustit hru znovu',
-                    description: 'Spustí instanci s již opravenými a deaktivovanými módy.'
-                }
-            };
-        } else {
-            const culpritNames = incompResult.culprits.map(c => c.name || c.id).join(', ');
-            const filesToDisable = incompResult.culprits.map(c => c.matchedFile).filter(Boolean);
-                const targetFiles = filesToDisable.length > 0
-                    ? filesToDisable
-                    : incompResult.culprits.map(c => `${c.id}.jar`);
-                return {
-                    hasCrash: true,
-                    exitCode,
-                    reportPath,
-                    fixed: false,
-                    title: 'Nekompatibilní modifikace',
-                    severity: 'critical',
-                    description: `V profilu byl nalezen nekompatibilní mód: ${culpritNames}. Vyžaduje jinou verzi Minecraftu nebo jiný zavaděč.`,
-                    recommendation: 'Deaktivace problematického módu pro bezproblémové spuštění.',
-                    logExcerpt: incompResult.logExcerpt || logExcerpt,
-                    autoFix: {
-                        id: 'DISABLE_INCOMPATIBLE_MODS',
-                        files: targetFiles,
-                        label: `Deaktivovat mód (${culpritNames})`,
-                        description: 'Přejmenuje problematický mód na .disabled pro bezpečné spuštění.'
-                    }
-                };
-        }
     }
 
     // ── Diagnostic Rule 0b: Duplicate Mods (Smart Auto-Fix) ──────────────────
@@ -1184,10 +1253,12 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
 
     // ── Diagnostic Rule: Could not find or load main class / Missing Client Class (Corrupted Client JAR) ──
     if (
-        /Could not find or load main class net\.minecraft\.client\.main\.Main/i.test(combinedText) ||
-        /ClassNotFoundException: net\.minecraft\.client\.main\.Main/i.test(combinedText) ||
-        /Failed to load class file for 'net\.minecraft/i.test(combinedText) ||
-        /(?:NoClassDefFoundError|ClassNotFoundException):\s*net[\/\.]minecraft[\/\.]client/i.test(combinedText)
+        !hasMixinCrash && (
+            /Could not find or load main class net\.minecraft\.client\.main\.Main/i.test(combinedText) ||
+            /ClassNotFoundException: net\.minecraft\.client\.main\.Main/i.test(combinedText) ||
+            /Failed to load class file for 'net\.minecraft/i.test(combinedText) ||
+            (!/@Mixin target/i.test(combinedText) && /(?:NoClassDefFoundError|ClassNotFoundException):\s*net[\/\.]minecraft[\/\.]client/i.test(combinedText))
+        )
     ) {
         return {
             hasCrash: true,
@@ -1418,7 +1489,7 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
         let culpritMod = null;
         const modMatch =
             combinedText.match(/from mod\s+([a-zA-Z0-9_\-]+)/i) ||
-            combinedText.match(/in\s+([a-zA-Z0-9_\-]+)\.mixins\.json/i) ||
+            combinedText.match(/(?:in\s+(?:config\s+)?\[|Mixin\s+\[|config\s+\[|\b)([a-zA-Z0-9_\-]+)\.mixins\.json/i) ||
             combinedText.match(/mixins\.([a-zA-Z0-9_\-]+)\.json/i) ||
             combinedText.match(/(?:handler|wrapMethod|wrapOperation|modify\w*|redirect|constant)\$[a-z0-9]+\$([a-zA-Z0-9_\-]+)\$/i);
         if (modMatch && modMatch[1]) {
@@ -1438,7 +1509,7 @@ async function analyzeCrash(gameDir, exitCode = 1, recentMemoryLogs = [], launch
             recommendation: culpritMod
                 ? `Deaktivuj nebo aktualizuj modifikaci "${culpritMod}" v herním profilu.`
                 : 'Zkontroluj herní log a vyřaď problematické modifikace.',
-            logExcerpt: extractRelevantStack(combinedText, /(?:handler\$|wrapMethod|wrapOperation|MixinApplyError|InjectionError|emergencySaveAndCrash)/i) || logExcerpt,
+            logExcerpt: extractRelevantStack(combinedText, /(?:handler\$|wrapMethod|wrapOperation|MixinApplyError|InvalidMixinException|InjectionError|emergencySaveAndCrash)/i) || logExcerpt,
             autoFix: culpritMod ? {
                 id: 'DISABLE_INCOMPATIBLE_MODS',
                 files: [`${culpritMod}.jar`],
@@ -2164,6 +2235,9 @@ async function executeCrashFix(autoFix, gameDir, config, saveConfigFn, detectJav
                     } catch (e) {
                         console.error('Chyba při vypínání módu:', e);
                     }
+                } else {
+                    const fallback = disableModInModsDir(modsDir, f.replace(/\.jar$/i, ''), f);
+                    if (fallback) disabledCount++;
                 }
             }
             return {

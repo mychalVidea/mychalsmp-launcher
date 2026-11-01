@@ -89,9 +89,9 @@ const DEFAULT_CONFIG = {
         height: 720,
         fullscreen: false
     },
-    version: '26.2',
+    version: '26.3',
     loader: 'fabric',
-    activeProfileId: 'minecraft-26.2',
+    activeProfileId: 'minecraft-26.3',
     profiles: DEFAULT_PROFILES,
     servers: DEFAULT_SERVERS,
     autoConnectServer: false,

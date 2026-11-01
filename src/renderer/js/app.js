@@ -3410,6 +3410,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const res = await window.api.launchGame(targetPid, actualServerIp);
             if (res && res.success) {
                 isRunning = true;
+                autoRelaunchAttempts = 0;
                 runningProfileId = targetPid;
                 isLaunching = false;
                 launchingProfileId = null;
@@ -8562,6 +8563,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnCloseCrashModal) btnCloseCrashModal.addEventListener('click', closeCrashModal);
     if (btnDismissCrashModal) btnDismissCrashModal.addEventListener('click', closeCrashModal);
 
+    let autoRelaunchAttempts = 0;
+
     if (window.api && window.api.onCrash) {
         window.api.onCrash((crashData) => {
             setHeroLaunchCelebration(false);
@@ -8573,6 +8576,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentCrashData = crashData;
             activeCrashFixPromise = null;
             userAcknowledgedWhileFixing = false;
+
+            const isAlreadyFixed = !!(crashData.fixed || crashData.autoFixed);
+
+            // Automatické znovuspuštění bez obtěžování hráče dialogem, pokud byl pád automaticky opraven (např. nekompatibilní mód vyřazen)
+            if (isAlreadyFixed && autoRelaunchAttempts < 2) {
+                autoRelaunchAttempts++;
+                const disabledNames = Array.isArray(crashData.disabledMods)
+                    ? crashData.disabledMods.map(m => m.name || m.id).join(', ')
+                    : '';
+                const reasonMsg = disabledNames
+                    ? `Nekompatibilní mód (${disabledNames}) byl automaticky vyřazen (.disabled). Spouštím hru...`
+                    : 'Pád hry byl automaticky opraven. Spouštím hru znovu...';
+
+                showToast(reasonMsg, 'warning');
+                appendLog(`[CRASH AUTO-RECOVER] ${reasonMsg}`);
+
+                setTimeout(() => {
+                    if (sidebarPlayBtn && !sidebarPlayBtn.disabled) {
+                        sidebarPlayBtn.click();
+                    } else if (typeof startLaunch === 'function') {
+                        const targetProfileId = resolveLaunchProfileId();
+                        startLaunch(targetProfileId, null);
+                    }
+                }, 800);
+                return;
+            }
 
             const titleElem = document.getElementById('crashAnalyzerTitle');
             const subElem = document.getElementById('crashAnalyzerSubtitle');
@@ -8589,7 +8618,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             const diagCard = document.getElementById('crashDiagCard');
             const modalIconSvg = document.getElementById('crashModalIconSvg');
 
-            const isAlreadyFixed = !!(crashData.fixed || crashData.autoFixed);
             const hasActionableFix = !!(crashData.autoFix && !isAlreadyFixed);
 
             if (descElem) {
@@ -8795,11 +8823,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                             if (userAcknowledgedWhileFixing) {
                                 closeCrashModal();
                                 setTimeout(() => {
-                                    const btnLaunch = document.getElementById('btnLaunchGame');
-                                    if (btnLaunch && !btnLaunch.disabled) {
-                                        btnLaunch.click();
+                                    if (sidebarPlayBtn && !sidebarPlayBtn.disabled) {
+                                        sidebarPlayBtn.click();
+                                    } else if (typeof startLaunch === 'function') {
+                                        const targetProfileId = resolveLaunchProfileId();
+                                        startLaunch(targetProfileId, null);
                                     }
-                                }, 200);
+                                }, 300);
                             }
                         } else {
                             if (repairBanner) {
@@ -8888,11 +8918,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             closeCrashModal();
             if (shouldRelaunch) {
                 setTimeout(() => {
-                    const btnLaunch = document.getElementById('btnLaunchGame');
-                    if (btnLaunch && !btnLaunch.disabled) {
-                        btnLaunch.click();
+                    if (sidebarPlayBtn && !sidebarPlayBtn.disabled) {
+                        sidebarPlayBtn.click();
+                    } else if (typeof startLaunch === 'function') {
+                        const targetProfileId = resolveLaunchProfileId();
+                        startLaunch(targetProfileId, null);
                     }
-                }, 200);
+                }, 300);
             }
         });
     }
