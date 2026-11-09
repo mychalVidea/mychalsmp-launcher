@@ -53,13 +53,13 @@ const PROHIBITED_MOD_RULES = [
         reason: 'Tento mód není povolený'
     },
 
-    // 3. Freecam Mods
+    // 3. Freecam & Unbound Decoupled Camera
     {
-        pattern: /(freecam|openfreecam|simplefreecam)/i,
-        name: 'Freecam',
+        pattern: /(freecam|openfreecam|simplefreecam|unbound[-_]?third[-_]?person)/i,
+        name: 'Freecam / Unbound Camera',
         category: 'FREECAM',
         categoryLabel: 'Nepovolený mód',
-        reason: 'Tento mód není povolený'
+        reason: 'Tento mód není povolený (umožňuje vidět skrz zdi a pokládat bloky za záda)'
     },
 
     // 4. World Downloader & Exploits
