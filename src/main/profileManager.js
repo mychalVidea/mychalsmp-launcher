@@ -37,7 +37,7 @@ function scanInstanceDirectory(dirPath) {
         throw new Error('Vybraná složka neexistuje.');
     }
 
-    let detectedVersion = '26.2';
+    let detectedVersion = '26.3';
     let detectedLoader = 'fabric';
     let instanceName = path.basename(dirPath);
 
@@ -233,7 +233,7 @@ async function importInstanceProfile(data, baseDir) {
     const newProfile = {
         id: profileId,
         name: name || `Importovaný profil (${version})`,
-        version: version || '26.2',
+        version: version || '26.3',
         loader: loader || 'fabric',
         isImported: true,
         optimizedChosen: (loader === 'fabric' || (!loader && true)) ? 'optimized' : 'vanilla',
@@ -606,7 +606,7 @@ function discoverInstalledProfiles() {
                     else if (vLower.includes('quilt')) detectedLoader = 'fabric';
 
                     const vMatch = vId.match(/(\d+\.\d+(\.\d+)?)/);
-                    const detectedVersion = vMatch ? vMatch[1] : (vId || '26.2');
+                    const detectedVersion = vMatch ? vMatch[1] : (vId || '26.3');
 
                     const effectiveDir = prof.gameDir ? path.resolve(prof.gameDir) : mcDir;
                     if (!fs.existsSync(effectiveDir)) continue;

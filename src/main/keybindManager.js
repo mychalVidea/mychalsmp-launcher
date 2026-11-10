@@ -272,6 +272,11 @@ function readOptionsTxt(targetDir) {
     }
 }
 
+function normalizeKeyId(id) {
+    if (!id) return '';
+    return id.startsWith('key_') ? id : `key_${id}`;
+}
+
 /**
  * Naparsuje řádky options.txt do mapy klíč-hodnota
  */
@@ -299,16 +304,25 @@ function updateOptionsContent(originalContent, updatedBinds) {
     const handledKeys = new Set();
     const newLines = [];
 
+    // Normalizace updatedBinds tak, aby klíče měly vždy korektní Minecraft prefix key_
+    const normalizedBinds = {};
+    for (const [k, v] of Object.entries(updatedBinds || {})) {
+        const norm = normalizeKeyId(k);
+        normalizedBinds[norm] = v;
+    }
+
     for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed.startsWith('key_') && trimmed.includes(':')) {
             const idx = trimmed.indexOf(':');
             const keyId = trimmed.substring(0, idx).trim();
-            if (Object.prototype.hasOwnProperty.call(updatedBinds, keyId)) {
-                newLines.push(`${keyId}:${updatedBinds[keyId]}`);
-                handledKeys.add(keyId);
+            const normKey = normalizeKeyId(keyId);
+            if (Object.prototype.hasOwnProperty.call(normalizedBinds, normKey)) {
+                newLines.push(`${normKey}:${normalizedBinds[normKey]}`);
+                handledKeys.add(normKey);
             } else {
                 newLines.push(line);
+                handledKeys.add(normKey);
             }
         } else {
             newLines.push(line);
@@ -316,9 +330,10 @@ function updateOptionsContent(originalContent, updatedBinds) {
     }
 
     // Doplnění bindů, které v původním souboru ještě nebyly
-    for (const [keyId, keyVal] of Object.entries(updatedBinds)) {
-        if (!handledKeys.has(keyId)) {
-            newLines.push(`${keyId}:${keyVal}`);
+    for (const [normKey, keyVal] of Object.entries(normalizedBinds)) {
+        if (!handledKeys.has(normKey)) {
+            newLines.push(`${normKey}:${keyVal}`);
+            handledKeys.add(normKey);
         }
     }
 
@@ -536,10 +551,10 @@ function resetKeybindsToDefaults() {
  * Synchronizuje globální klávesové zkratky do konkrétního profilu před spuštěním hry
  * @param {string} targetDirOrProfileId Profil ID nebo přímo absolutní cesta k instanci
  */
-function syncKeybindsToProfile(targetDirOrProfileId) {
+function syncKeybindsToProfile(targetDirOrProfileId, explicitGlobalBinds = null) {
     try {
         const curConfig = loadConfig();
-        const globalBinds = curConfig.globalKeybinds;
+        const globalBinds = explicitGlobalBinds || curConfig.globalKeybinds;
         if (!globalBinds || Object.keys(globalBinds).length === 0) {
             return { success: true, message: 'Žádné globální bindy k synchronizaci' };
         }
@@ -557,9 +572,14 @@ function syncKeybindsToProfile(targetDirOrProfileId) {
         }
 
         const optPath = path.join(targetDir, 'options.txt');
-        const existingContent = fs.existsSync(optPath) ? fs.readFileSync(optPath, 'utf-8') : '';
-        const newContent = updateOptionsContent(existingContent, globalBinds);
-        fs.writeFileSync(optPath, newContent, 'utf-8');
+        if (fs.existsSync(optPath)) {
+            // Options.txt již existuje - 100% respektujeme konfiguraci hráče a nepřepisujeme žádná herní nastavení!
+            return { success: true, message: 'Zachováno existující nastavení hráče v options.txt' };
+        } else {
+            // Pouze pokud soubor ještě neexistuje vůbec (čistý nový profil), vytvoříme ho s globálními bindy
+            const newContent = updateOptionsContent('', globalBinds);
+            fs.writeFileSync(optPath, newContent, 'utf-8');
+        }
 
         return { success: true, synced: true };
     } catch (err) {

@@ -138,7 +138,7 @@
                         <div class="hero-character-stage">
                             <div class="stage-keyart-container" id="heroKeyartContainer">
                                 <div class="stage-keyart-layer stage-keyart-active" id="heroKeyartBg"
-                                    style="background-image: url('assets/keyarts/26.2.jpg');"></div>
+                                    style="background-image: url('assets/keyarts/26.3.jpg');"></div>
                             </div>
                             <div class="stage-keyart-overlay"></div>
                             <div class="stage-bg-overlay"></div>
@@ -155,7 +155,7 @@
                                             <line x1="18" y1="13" x2="18.01" y2="13"></line>
                                         </svg>
                                         <span class="hero-stat-label">Profil:</span>
-                                        <span class="hero-stat-val" id="heroActiveProfileName">Minecraft 26.2</span>
+                                        <span class="hero-stat-val" id="heroActiveProfileName">Minecraft 26.3</span>
                                     </div>
                                     <div class="hero-stat-chip" id="heroStatPlaytime" title="Odehraný čas">
                                         <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"
@@ -297,7 +297,7 @@
 
                             <div class="profile-cards-list" id="profileCardsList">
                                 <!-- Profile Card 1: Minecraft 26.3 -->
-                                <div class="profile-row-card" data-profile-id="minecraft-26.3">
+                                <div class="profile-row-card active-profile" data-profile-id="minecraft-26.3">
                                     <div class="profile-card-keyart-bg"
                                         style="background-image: url('assets/keyarts/card-26.3.webp');"></div>
                                     <div class="profile-card-keyart-overlay"></div>
@@ -335,7 +335,7 @@
                                 </div>
 
                                 <!-- Profile Card 2: Minecraft 26.2 -->
-                                <div class="profile-row-card active-profile" data-profile-id="minecraft-26.2">
+                                <div class="profile-row-card" data-profile-id="minecraft-26.2">
                                     <div class="profile-card-keyart-bg"
                                         style="background-image: url('assets/keyarts/card-26.2.webp');"></div>
                                     <div class="profile-card-keyart-overlay"></div>
@@ -573,6 +573,7 @@
                     </div>
 
                     <div class="mods-topbar-switch">
+                        <div class="mods-switch-indicator" id="modsSwitchIndicator"></div>
                         <button type="button" class="mods-switch-btn active" id="btnSwitchCatalogMods"
                             data-subview="catalog">
                             <span>
@@ -628,6 +629,7 @@
 
                     <!-- Installed Sub-type Tabs: Mods vs Resource Packs vs Shaders -->
                     <div class="installed-type-tabs">
+                        <div class="installed-tab-indicator" id="installedTabIndicator"></div>
                         <button type="button" class="installed-type-btn active" data-pack-type="mods"
                             id="tabInstalledMods">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -681,6 +683,7 @@
                 <div class="mods-subview" id="viewCatalogMods">
                     <div class="mods-catalog-header">
                         <div class="catalog-subtabs">
+                            <div class="catalog-tab-indicator" id="catalogTabIndicator"></div>
                             <button class="mod-tab-btn active" data-mod-type="mod">
                                 <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
@@ -738,11 +741,11 @@
                             <div class="filter-group">
                                 <div class="filter-group-title">Verze hry</div>
                                 <label class="filter-label">
-                                    <input type="radio" name="filterVersion" value="26.3">
+                                    <input type="radio" name="filterVersion" value="26.3" checked>
                                     <span>26.3</span>
                                 </label>
                                 <label class="filter-label">
-                                    <input type="radio" name="filterVersion" value="26.2" checked>
+                                    <input type="radio" name="filterVersion" value="26.2">
                                     <span>26.2</span>
                                 </label>
                                 <label class="filter-label">
@@ -1767,6 +1770,7 @@
                     </div>
 
                     <div class="keybind-view-toggle">
+                        <div class="keybind-tab-indicator" id="keybindTabIndicator"></div>
                         <button type="button" class="view-toggle-btn active" id="btnKeybindToggleKeyboard"
                             title="Vizuální klávesnice">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
@@ -3148,7 +3152,7 @@
             <div class="modal-body" style="display: flex; flex-direction: column; gap: 12px;">
                 <!-- Export section -->
                 <div
-                    style="background: rgba(10, 103, 229, 0.06); border: 1px solid rgba(10, 103, 229, 0.2); border-radius: 8px; padding: 12px;">
+                    style="background: #141418; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);">
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <span style="font-size: 13px; font-weight: 600; color: #fff;">Kód balíčku</span>
@@ -3156,7 +3160,7 @@
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" id="profileSeedExportInput" readonly
-                            style="flex: 1; background: #0c0e17; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #60a5fa; font-family: monospace; outline: none;"
+                            style="flex: 1; background: #0a0a0c; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #f1f5f9; font-family: monospace; outline: none;"
                             value="Generuji..." />
                         <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnCopyProfileSeed">
                             <span>Kopírovat</span>
@@ -3166,13 +3170,13 @@
 
                 <!-- Import section -->
                 <div
-                    style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px;">
+                    style="background: #141418; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);">
                     <div style="margin-bottom: 8px;">
                         <span style="font-size: 13px; font-weight: 600; color: #fff;">Importovat balíček</span>
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" id="profileSeedImportInput" placeholder="Vlož kód balíčku..."
-                            style="flex: 1; background: #0c0e17; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #fff; font-family: monospace; outline: none;" />
+                            style="flex: 1; background: #0a0a0c; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #fff; font-family: monospace; outline: none;" />
                         <button type="button" class="mc-btn mc-btn-green btn-sm" id="btnApplyProfileSeed">
                             <span>Stáhnout</span>
                         </button>

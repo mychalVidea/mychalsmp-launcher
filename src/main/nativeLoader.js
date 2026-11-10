@@ -228,90 +228,146 @@ function fastScanLogForCrashes(logPath) {
 /**
  * High-speed native file downloader (Rust streaming directly to disk with SHA-256 calculation)
  */
-async function fastDownloadFile(url, destPath) {
-    if (isLoaded && nativeModule && typeof nativeModule.fastDownloadFile === 'function') {
-        try {
-            const raw = nativeModule.fastDownloadFile(url, destPath);
-            return JSON.parse(raw);
-        } catch (err) {
-            console.warn('[RUST NATIVE] fastDownloadFile selhalo, fallbackuji na JS fetch:', err);
-        }
-    }
-
-    // JS Fallback
+/**
+ * High-speed, non-blocking file downloader with automatic retry and timeout
+ */
+async function fastDownloadFile(url, destPath, maxRetries = 3) {
     const start = Date.now();
     const destDir = path.dirname(destPath);
     if (!fs.existsSync(destDir)) {
-        fs.mkdirSync(destDir, { recursive: true });
+        try { fs.mkdirSync(destDir, { recursive: true }); } catch (_) {}
     }
 
-    const res = await fetch(url, { headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => {
+            try { controller.abort(new Error('ETIMEDOUT')); } catch (_) {}
+        }, 25000);
 
-    const buffer = Buffer.from(await res.arrayBuffer());
-    fs.writeFileSync(destPath, buffer);
-    const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-
-    return {
-        success: true,
-        bytes_downloaded: buffer.length,
-        elapsed_ms: Date.now() - start,
-        sha256,
-        error: null
-    };
-}
-
-/**
- * Parallel batch downloader for mods/assets
- * @param {Array<{ url: string, dest_path: string }>} items
- */
-async function fastDownloadBatch(items) {
-    if (isLoaded && nativeModule && typeof nativeModule.fastDownloadBatch === 'function') {
         try {
-            const raw = nativeModule.fastDownloadBatch(JSON.stringify(items));
-            return JSON.parse(raw);
+            const res = await fetch(url, {
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 mychalsmp-launcher'
+                }
+            });
+            clearTimeout(timeout);
+
+            if (!res.ok) {
+                // If 404, no point in retrying
+                if (res.status === 404) {
+                    throw new Error(`HTTP 404 Not Found: ${url}`);
+                }
+                throw new Error(`HTTP ${res.status}: ${url}`);
+            }
+
+            const buffer = Buffer.from(await res.arrayBuffer());
+            if (buffer.length === 0) {
+                throw new Error(`Prázdná odpověď (0 bajtů): ${url}`);
+            }
+
+            const tempPath = `${destPath}.tmp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            fs.writeFileSync(tempPath, buffer);
+            try {
+                fs.renameSync(tempPath, destPath);
+            } catch (_) {
+                fs.copyFileSync(tempPath, destPath);
+                try { fs.unlinkSync(tempPath); } catch (_) {}
+            }
+
+            const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+            return {
+                success: true,
+                bytes_downloaded: buffer.length,
+                elapsed_ms: Date.now() - start,
+                sha256,
+                error: null
+            };
         } catch (err) {
-            console.warn('[RUST NATIVE] fastDownloadBatch selhalo, fallbackuji na JS:', err);
+            clearTimeout(timeout);
+            lastError = err;
+            if (err.message && err.message.includes('404')) {
+                break;
+            }
+            if (attempt < maxRetries) {
+                // Exponential backoff with jitter
+                const delay = (attempt * 400) + Math.floor(Math.random() * 200);
+                await new Promise(r => setTimeout(r, delay));
+            }
         }
     }
 
-    // JS Fallback
+    throw lastError || new Error(`Stahování selhalo po ${maxRetries} pokusech: ${url}`);
+}
+
+/**
+ * Parallel batch downloader for mods/assets with concurrency limit and retry
+ * Completely non-blocking on Node.js event loop to prevent UI freezing
+ * @param {Array<{ url: string, dest_path: string }>} items
+ * @param {number} concurrency
+ */
+async function fastDownloadBatch(items, concurrency = 12) {
     const start = Date.now();
-    const results = [];
+    if (!Array.isArray(items) || items.length === 0) {
+        return {
+            total: 0,
+            successful: 0,
+            failed: 0,
+            elapsed_ms: 0,
+            total_bytes_downloaded: 0,
+            items: []
+        };
+    }
+
+    const results = new Array(items.length);
     let totalBytes = 0;
     let successful = 0;
     let failed = 0;
 
-    for (const item of items) {
-        try {
-            const single = await fastDownloadFile(item.url, item.dest_path);
-            results.push({
-                url: item.url,
-                dest_path: item.dest_path,
-                success: true,
-                bytes_downloaded: single.bytes_downloaded,
-                error: null
-            });
-            totalBytes += single.bytes_downloaded;
-            successful++;
-        } catch (err) {
-            results.push({
-                url: item.url,
-                dest_path: item.dest_path,
-                success: false,
-                bytes_downloaded: 0,
-                error: err.message
-            });
-            failed++;
+    let cursor = 0;
+    const workerCount = Math.min(concurrency, items.length);
+
+    async function worker() {
+        while (cursor < items.length) {
+            const idx = cursor++;
+            const item = items[idx];
+            try {
+                const single = await fastDownloadFile(item.url, item.dest_path);
+                results[idx] = {
+                    url: item.url,
+                    dest_path: item.dest_path,
+                    success: true,
+                    bytes_downloaded: single.bytes_downloaded,
+                    error: null
+                };
+                totalBytes += single.bytes_downloaded;
+                successful++;
+            } catch (err) {
+                results[idx] = {
+                    url: item.url,
+                    dest_path: item.dest_path,
+                    success: false,
+                    bytes_downloaded: 0,
+                    error: err.message
+                };
+                failed++;
+            }
         }
     }
+
+    const workers = [];
+    for (let i = 0; i < workerCount; i++) {
+        workers.push(worker());
+    }
+    await Promise.all(workers);
 
     return {
         total: items.length,
         successful,
         failed,
-        total_bytes: totalBytes,
         elapsed_ms: Date.now() - start,
+        total_bytes_downloaded: totalBytes,
         items: results
     };
 }

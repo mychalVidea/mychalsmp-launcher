@@ -206,8 +206,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Živý indikátor stahování přímo v kartě spouštěné verze
         const activeProfile = (currentConfig.profiles || []).find(p => p.id === currentConfig.activeProfileId);
-        const activeVer = activeProfile ? activeProfile.version : (currentConfig.version || '26.2');
-        const idSuffix = activeVer ? activeVer.replace(/\./g, '') : '262';
+        const activeVer = activeProfile ? activeProfile.version : (currentConfig.version || '26.3');
+        const idSuffix = activeVer ? activeVer.replace(/\./g, '') : '263';
         const vBox = document.getElementById(`vProgressBox${idSuffix}`);
         const vBar = document.getElementById(`vProgressBar${idSuffix}`);
         const vPct = document.getElementById(`vProgressPercent${idSuffix}`);
@@ -306,7 +306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let availableKeyartsMap = { ...BUNDLED_KEYARTS };
     let currentModFilter = {
         query: '',
-        version: '26.2',
+        version: '26.3',
         loader: 'fabric',
         category: '',
         projectType: 'mod'
@@ -451,13 +451,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         if (tabId === 'mods') {
+            selectedModsProfileId = currentConfig.activeProfileId || selectedModsProfileId;
+            syncModFilterToProfile(selectedModsProfileId);
             renderModsProfileDropdown();
             if (btnSwitchCatalogMods && btnSwitchCatalogMods.classList.contains('active')) {
-                loadModrinthMods();
+                loadModrinthMods(true);
                 loadProfileMods();
             } else {
                 loadProfileMods();
             }
+            setTimeout(() => {
+                if (typeof updateAllSegmentedIndicators === 'function') updateAllSegmentedIndicators();
+            }, 40);
         } else if (tabId === 'servers') {
             renderServersFullTab();
         } else if (tabId === 'character') {
@@ -529,8 +534,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnOpenKeybindEditor = document.getElementById('btnOpenKeybindEditor');
     if (btnOpenKeybindEditor) {
         btnOpenKeybindEditor.addEventListener('click', () => {
-            if (typeof openKeybindEditorModal === 'function') {
-                openKeybindEditorModal();
+            try {
+                if (typeof openKeybindEditorModal === 'function') {
+                    openKeybindEditorModal();
+                }
+            } catch (err) {
+                console.error('[KEYBINDS] Chyba při otevírání modalu:', err);
+                const modal = document.getElementById('modalKeybindEditor');
+                if (modal) modal.style.display = 'flex';
             }
         });
     }
@@ -864,6 +875,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (initialProf) {
                 currentConfig.version = initialProf.version;
                 currentConfig.loader = initialProf.loader || 'fabric';
+            }
+            selectedModsProfileId = currentConfig.activeProfileId;
+            if (typeof syncModFilterToProfile === 'function') {
+                syncModFilterToProfile(currentConfig.activeProfileId);
             }
 
             // Render Server Tracker & Profiles
@@ -1322,7 +1337,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             installedVersions = await window.api.getInstalledVersions();
             const activeProfile = (currentConfig.profiles || []).find(p => p.id === currentConfig.activeProfileId);
-            const activeVersion = activeProfile ? activeProfile.version : (currentConfig.version || '26.2');
+            const activeVersion = activeProfile ? activeProfile.version : (currentConfig.version || '26.3');
 
             const runningProfile = (isRunning && runningProfileId) ? (currentConfig.profiles || []).find(p => p.id === runningProfileId) : null;
             const launchingProfile = (isLaunching && launchingProfileId) ? (currentConfig.profiles || []).find(p => p.id === launchingProfileId) : null;
@@ -1499,6 +1514,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const offlineCross = (!isMychal && s.online === false)
                 ? '<span class="server-offline-cross-badge" title="Server neodpovídá / je offline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span>'
                 : '';
+            const playCount = Number(s.playCount) || 0;
+            const playSec = Number(s.playtimeSeconds) || 0;
+            const metaParts = [];
+            if (playCount > 0) metaParts.push(`${playCount}×`);
+            if (playSec >= 60) metaParts.push(formatPlaytime(playSec));
+            const playMeta = metaParts.length > 0 ? `<span class="server-play-meta">• ${metaParts.join(' • ')}</span>` : '';
             return `
                 <div class="tracked-server-item">
                     <div style="position: relative; flex-shrink: 0;">
@@ -1510,7 +1531,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <span class="item-name">${escapeHtml(s.name)}</span>
                             ${!isMychal ? `<button class="btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Odebrat server"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
                         </div>
-                        <div class="item-ip">${escapeHtml(s.ip)}</div>
+                        <div class="item-ip">${escapeHtml(s.ip)} ${playMeta}</div>
                     </div>
                     <div class="tracked-server-actions">
                         <button class="btn-quick-join" data-server="${escapeHtml(s.ip)}" title="Připojit se">
@@ -1567,7 +1588,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ? '<span class="server-status-pill official">Oficiální síť</span>'
                     : (s.online ? '<span class="server-status-pill online"><span class="status-dot online"></span> Online</span>' : ''));
             const playCount = Number(s.playCount) || 0;
-            const playMeta = playCount > 0 ? `<span class="server-play-meta">• ${playCount}× hráno</span>` : '';
+            const playSec = Number(s.playtimeSeconds) || 0;
+            const metaParts = [];
+            if (playCount > 0) metaParts.push(`${playCount}× hráno`);
+            if (playSec >= 60) metaParts.push(`${formatPlaytime(playSec)} odehráno`);
+            else if (playCount === 0) metaParts.push('Zatím nehráno');
+            const playMeta = `<span class="server-play-meta">• ${metaParts.join(' • ')}</span>`;
 
             return `
                 <div class="server-full-card">
@@ -2414,7 +2440,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function resolveLaunchProfileId(preferredId) {
         const profiles = currentConfig.profiles || [];
-        if (profiles.length === 0) return 'minecraft-26.2';
+        if (profiles.length === 0) return 'minecraft-26.3';
 
         if (preferredId) {
             const foundPref = profiles.find(p => p.id === preferredId);
@@ -2449,7 +2475,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // 4. Defaultní serverový profil MYCHALSMP, pokud existuje
-        const foundMychal = profiles.find(p => p.id === 'mychalsmp-26.2' || p.id === 'mychalsmp');
+        const foundMychal = profiles.find(p => p.id === 'minecraft-26.3' || p.id === 'mychalsmp-26.3' || p.id === 'mychalsmp-26.2' || p.id === 'mychalsmp');
         if (foundMychal) return foundMychal.id;
 
         if (currentConfig.activeProfileId) {
@@ -2726,7 +2752,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const topPlayed = [...playedProfiles].sort((a, b) => (b.playtimeSeconds || 0) - (a.playtimeSeconds || 0))[0];
             singleMostPlayedId = topPlayed ? topPlayed.id : null;
         } else {
-            const mychalProf = sortedProfiles.find(p => p.id === 'mychalsmp-26.2' || p.id === 'mychalsmp' || (p.name && p.name.toUpperCase().includes('MYCHALSMP')));
+            const mychalProf = sortedProfiles.find(p => p.id === 'minecraft-26.3' || p.id === 'mychalsmp-26.3' || p.id === 'mychalsmp-26.2' || p.id === 'mychalsmp' || (p.name && p.name.toUpperCase().includes('MYCHALSMP')));
             singleMostPlayedId = mychalProf ? mychalProf.id : (activeId || (sortedProfiles[0] ? sortedProfiles[0].id : null));
         }
 
@@ -2974,6 +3000,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             window.api.saveConfig({ activeProfileId: profileId });
         }
+        selectedModsProfileId = profileId;
+        if (typeof syncModFilterToProfile === 'function') {
+            syncModFilterToProfile(profileId);
+        }
         checkWardenProbe();
 
         document.querySelectorAll('.profile-row-card').forEach(c => {
@@ -3185,7 +3215,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const targetPid = profileId || currentConfig.activeProfileId || 'minecraft-26.2';
+        const targetPid = profileId || currentConfig.activeProfileId || 'minecraft-26.3';
         const targetProf = (currentConfig.profiles || []).find(x => x.id === targetPid);
 
         // ⚡ Blesková vizuální odezva do 16 ms (1. frame):
@@ -3348,7 +3378,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 id: u.id,
                                 title: u.title,
                                 projectType: 'mod',
-                                version: targetProf.version || '26.2',
+                                version: targetProf.version || '26.3',
                                 loader: targetProf.loader || 'fabric',
                                 profileId: targetPid,
                                 oldFilename: u.oldFilename,
@@ -3621,7 +3651,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             btn.classList.remove('mc-btn-red', 'mc-btn-green');
             btn.classList.add('mc-btn-primary');
         });
-        const activeP = (currentConfig.profiles || []).find(x => x.id === (currentConfig.activeProfileId || 'minecraft-26.2'));
+        const activeP = (currentConfig.profiles || []).find(x => x.id === (currentConfig.activeProfileId || 'minecraft-26.3'));
         const activeInst = activeP && Array.isArray(installedVersions) && installedVersions.includes(activeP.version);
         if (sideConsoleStatus) {
             sideConsoleStatus.textContent = activeInst
@@ -3640,15 +3670,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentProfileResourcePacksList = [];
     let currentProfileShadersList = [];
 
+    // Synchronizace filtrů Modrinthu (verze a loader) podle zadaného nebo aktivního profilu
+    function syncModFilterToProfile(profileId) {
+        const p = (currentConfig.profiles || []).find(x => x.id === (profileId || currentConfig.activeProfileId)) || currentConfig.profiles?.[0];
+        if (p) {
+            const rawLoader = (p.loader && p.loader !== 'vanilla') ? p.loader.toLowerCase() : 'fabric';
+            let targetLoader = 'fabric';
+            if (rawLoader.includes('neoforge')) {
+                targetLoader = 'neoforge';
+            } else if (rawLoader.includes('forge')) {
+                targetLoader = 'forge';
+            } else {
+                targetLoader = 'fabric';
+            }
+            currentModFilter.loader = targetLoader;
+            const radio = document.querySelector(`input[name="filterLoader"][value="${targetLoader}"]`);
+            if (radio) radio.checked = true;
+
+            const targetVer = p.version || currentConfig.version || '26.3';
+            currentModFilter.version = targetVer;
+            let vRadio = document.querySelector(`input[name="filterVersion"][value="${targetVer}"]`);
+            if (!vRadio) {
+                const group = document.querySelector('input[name="filterVersion"]')?.closest('.filter-group');
+                if (group) {
+                    const label = document.createElement('label');
+                    label.className = 'filter-label';
+                    label.innerHTML = `<input type="radio" name="filterVersion" value="${escapeHtml(targetVer)}" checked><span>${escapeHtml(targetVer)}</span>`;
+                    group.appendChild(label);
+                    vRadio = label.querySelector('input');
+                    vRadio.addEventListener('change', (e) => {
+                        currentModFilter.version = e.target.value;
+                        loadModrinthMods();
+                    });
+                }
+            }
+            if (vRadio) {
+                vRadio.checked = true;
+            }
+        }
+    }
+
     // Profile selector dropdown for mods
     function renderModsProfileDropdown() {
         const select = document.getElementById('modsProfileSelect');
         if (!select) return;
 
         const profiles = currentConfig.profiles || [];
-        if (!selectedModsProfileId) {
+        if (!selectedModsProfileId || !profiles.some(p => p.id === selectedModsProfileId)) {
             selectedModsProfileId = currentConfig.activeProfileId || (profiles[0] ? profiles[0].id : null);
         }
+
+        syncModFilterToProfile(selectedModsProfileId);
 
         select.innerHTML = profiles.map(p => {
             const isSelected = p.id === selectedModsProfileId;
@@ -3659,19 +3731,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         select.onchange = (e) => {
             selectedModsProfileId = e.target.value;
-            const p = (currentConfig.profiles || []).find(x => x.id === selectedModsProfileId);
-            if (p) {
-                if (p.loader && ['fabric', 'forge', 'neoforge'].includes(p.loader)) {
-                    currentModFilter.loader = p.loader;
-                    const radio = document.querySelector(`input[name="filterLoader"][value="${p.loader}"]`);
-                    if (radio) radio.checked = true;
-                }
-                if (p.version) {
-                    currentModFilter.version = p.version;
-                    const vRadio = document.querySelector(`input[name="filterVersion"][value="${p.version}"]`);
-                    if (vRadio) vRadio.checked = true;
-                }
-            }
+            syncModFilterToProfile(selectedModsProfileId);
             loadProfileMods(selectedModsProfileId);
             if (btnSwitchCatalogMods && btnSwitchCatalogMods.classList.contains('active')) {
                 loadModrinthMods();
@@ -3736,9 +3796,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const res = await window.api.generateProfileSeed(profId);
                 if (res && res.success) {
-                    if (profileSeedExportInput) profileSeedExportInput.value = res.seed;
+                    const seedVal = res.seed || res.seedString || res.code || res.packCode || '';
+                    const countVal = Number(res.count ?? res.itemCount ?? 0) || 0;
+                    if (profileSeedExportInput) profileSeedExportInput.value = seedVal || 'Prázdný balíček';
                     if (profileSeedSummary) {
-                        profileSeedSummary.textContent = `${res.count} položek`;
+                        profileSeedSummary.textContent = `${countVal} ${countVal === 1 ? 'položka' : (countVal >= 2 && countVal <= 4 ? 'položky' : 'položek')}`;
                     }
                 } else {
                     if (profileSeedExportInput) profileSeedExportInput.value = 'Chyba';
@@ -3746,7 +3808,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             } catch (err) {
                 if (profileSeedExportInput) profileSeedExportInput.value = 'Chyba';
-                if (profileSeedSummary) profileSeedSummary.textContent = err.message;
+                if (profileSeedSummary) profileSeedSummary.textContent = err?.message || 'Chyba';
             }
         });
     }
@@ -3893,6 +3955,52 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // ── Segmented Sliding Pill Indicator Controller (Apple Spring Motion) ─────
+    function updateSlidingIndicator(containerSelectorOrEl, indicatorSelectorOrEl, activeBtn) {
+        const container = typeof containerSelectorOrEl === 'string'
+            ? document.querySelector(containerSelectorOrEl)
+            : containerSelectorOrEl;
+        const indicator = typeof indicatorSelectorOrEl === 'string'
+            ? document.querySelector(indicatorSelectorOrEl)
+            : indicatorSelectorOrEl;
+        if (!container || !indicator) return;
+
+        let active = activeBtn;
+        if (!active) {
+            active = container.querySelector('.active');
+        }
+        if (!active || active.offsetWidth === 0) {
+            indicator.style.opacity = '0';
+            return;
+        }
+
+        const cRect = container.getBoundingClientRect();
+        const aRect = active.getBoundingClientRect();
+        const left = Math.round(aRect.left - cRect.left);
+        const width = Math.round(aRect.width);
+
+        if (width > 0) {
+            indicator.style.transform = `translateX(${left}px)`;
+            indicator.style.width = `${width}px`;
+            indicator.style.opacity = '1';
+        } else {
+            indicator.style.opacity = '0';
+        }
+    }
+
+    function updateAllSegmentedIndicators() {
+        requestAnimationFrame(() => {
+            updateSlidingIndicator('.mods-topbar-switch', '#modsSwitchIndicator');
+            updateSlidingIndicator('.catalog-subtabs', '#catalogTabIndicator');
+            updateSlidingIndicator('.installed-type-tabs', '#installedTabIndicator');
+            updateSlidingIndicator('.keybind-view-toggle', '#keybindTabIndicator');
+        });
+    }
+
+    window.addEventListener('resize', () => {
+        updateAllSegmentedIndicators();
+    });
+
     // Subview switcher: Installed mods vs Modrinth catalog
     const btnSwitchInstalledMods = document.getElementById('btnSwitchInstalledMods');
     const btnSwitchCatalogMods = document.getElementById('btnSwitchCatalogMods');
@@ -3903,19 +4011,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnSwitchInstalledMods.addEventListener('click', () => {
             btnSwitchInstalledMods.classList.add('active');
             btnSwitchCatalogMods.classList.remove('active');
+            updateSlidingIndicator('.mods-topbar-switch', '#modsSwitchIndicator', btnSwitchInstalledMods);
             if (viewInstalledMods) viewInstalledMods.style.display = 'block';
             if (viewCatalogMods) viewCatalogMods.style.display = 'none';
             loadProfileMods();
+            setTimeout(updateAllSegmentedIndicators, 40);
         });
 
         btnSwitchCatalogMods.addEventListener('click', async () => {
             btnSwitchCatalogMods.classList.add('active');
             btnSwitchInstalledMods.classList.remove('active');
+            updateSlidingIndicator('.mods-topbar-switch', '#modsSwitchIndicator', btnSwitchCatalogMods);
             if (viewInstalledMods) viewInstalledMods.style.display = 'none';
             if (viewCatalogMods) viewCatalogMods.style.display = 'block';
 
             // Vždy načteme čerstvý stav profilu z disku, aby se ihned projevily smazané nebo přidané módy
             const profId = selectedModsProfileId || currentConfig.activeProfileId;
+            syncModFilterToProfile(profId);
             if (profId) {
                 try {
                     const pRes = await window.api.getProfileMods(profId);
@@ -3924,11 +4036,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 } catch (_) { }
             }
-            if (lastLoadedCatalogMods && lastLoadedCatalogMods.length > 0) {
-                renderModCards(lastLoadedCatalogMods);
-            } else {
-                loadModrinthMods();
-            }
+            loadModrinthMods(true);
+            setTimeout(updateAllSegmentedIndicators, 40);
         });
     }
 
@@ -4377,6 +4486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (b) b.classList.remove('active');
             });
             tabBtn.classList.add('active');
+            updateSlidingIndicator('.installed-type-tabs', '#installedTabIndicator', tabBtn);
             currentInstalledTab = tabBtn.dataset.packType || 'mods';
             renderFilteredInstalledItems();
         });
@@ -4394,6 +4504,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btn.addEventListener('click', () => {
             modTabButtons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            updateSlidingIndicator('.catalog-subtabs', '#catalogTabIndicator', btn);
             const modType = btn.dataset.modType || 'mod';
             currentModFilter.projectType = modType;
             loadModrinthMods();
@@ -4713,7 +4824,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const targetProfile = (currentConfig.profiles || []).find(p => p.id === (selectedModsProfileId || currentConfig.activeProfileId));
-        const targetMcVersion = targetProfile?.version || currentModFilter.version || '26.2';
+        const targetMcVersion = targetProfile?.version || currentModFilter.version || '26.3';
 
         // Pokud je vybrána verze hry, zobrazujeme v katalogu pouze kompatibilní mody pro danou verzi
         const displayMods = mods.filter(m => {
@@ -4861,7 +4972,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         try {
                             const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
                             const prof = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
-                            const profVer = prof?.version || currentModFilter.version || '26.2';
+                            const profVer = prof?.version || currentModFilter.version || '26.3';
                             let chosenLoader = prof?.loader && prof.loader !== 'vanilla' ? prof.loader : (currentModFilter.loader || 'fabric');
 
                             const res = await window.api.downloadModOrPack({
@@ -5006,7 +5117,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
                 const targetProfile = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
                 const profileLoader = targetProfile?.loader || 'vanilla';
-                const profileVersion = targetProfile?.version || currentModFilter.version || '26.2';
+                const profileVersion = targetProfile?.version || currentModFilter.version || '26.3';
 
                 if (action === 'installed') {
                     showToast(`Mód ${title} je již v profilu nainstalován.`, 'info');
@@ -7509,7 +7620,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             </svg>
                         </div>
                         <div class="empty-mods-title">Žádné screenshoty</div>
-                        <p class="empty-mods-desc">V tomto profilu zatím nejsou žádné screenshoty.</p>
+                        <p class="empty-mods-desc">V launcheru zatím nejsou žádné uložené screenshoty ze hry.</p>
                     </div>
                 `;
                 return;
@@ -7532,6 +7643,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="screenshot-info">
                         <div class="screenshot-name" title="${escapeHtml(sc.filename)}">${escapeHtml(sc.filename)}</div>
                         <div class="screenshot-meta">
+                            ${sc.profileName ? `<span class="sc-profile-badge" style="background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; font-size: 11px; color: #94a3b8; border: 1px solid rgba(255,255,255,0.08);">${escapeHtml(sc.profileName)}</span> <span>•</span>` : ''}
                             <span>${escapeHtml(sc.dateFormatted)}</span>
                             <span>•</span>
                             <span>${escapeHtml(sc.sizeFormatted)}</span>
@@ -8498,6 +8610,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnKeybindToggleKeyboard.addEventListener('click', () => {
             btnKeybindToggleKeyboard.classList.add('active');
             btnKeybindToggleList.classList.remove('active');
+            updateSlidingIndicator('.keybind-view-toggle', '#keybindTabIndicator', btnKeybindToggleKeyboard);
             keybindKeyboardView.style.display = 'flex';
             keybindListView.style.display = 'none';
         });
@@ -8506,6 +8619,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnKeybindToggleList.addEventListener('click', () => {
             btnKeybindToggleList.classList.add('active');
             btnKeybindToggleKeyboard.classList.remove('active');
+            updateSlidingIndicator('.keybind-view-toggle', '#keybindTabIndicator', btnKeybindToggleList);
             keybindKeyboardView.style.display = 'none';
             keybindListView.style.display = 'block';
             renderKeybindListView();
@@ -8541,6 +8655,105 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderKeybindListView();
         });
     }
+
+    // Modal open / close controller & reset logic
+    async function openKeybindEditorModal() {
+        if (!modalKeybindEditor) return;
+        try {
+            const activeProfileId = (typeof resolveLaunchProfileId === 'function')
+                ? resolveLaunchProfileId()
+                : (currentConfig?.activeProfileId || null);
+
+            if (window.api && window.api.getKeybinds) {
+                const bindsData = await window.api.getKeybinds(activeProfileId);
+                if (bindsData && Array.isArray(bindsData.binds)) {
+                    keybindState.binds = bindsData.binds;
+                    keybindState.keyDefinitions = bindsData.keyDefinitions || {};
+                }
+            }
+
+            keybindSelectedKey = null;
+            keybindActiveCategory = 'all';
+            keybindSearchQuery = '';
+            if (keybindSearchInput) keybindSearchInput.value = '';
+            if (btnClearKeybindSearch) btnClearKeybindSearch.style.display = 'none';
+
+            recalculateKeybindStats();
+            updateCategoryChipsUI();
+            renderKeyboardStage();
+            renderKeybindListView();
+            renderKeyInspector(null);
+
+            // Výchozí zobrazení virtuální klávesnice
+            if (btnKeybindToggleKeyboard) btnKeybindToggleKeyboard.classList.add('active');
+            if (btnKeybindToggleList) btnKeybindToggleList.classList.remove('active');
+            if (keybindKeyboardView) keybindKeyboardView.style.display = 'flex';
+            if (keybindListView) keybindListView.style.display = 'none';
+
+            modalKeybindEditor.style.display = 'flex';
+            setTimeout(() => {
+                updateSlidingIndicator('.keybind-view-toggle', '#keybindTabIndicator', btnKeybindToggleKeyboard);
+            }, 30);
+        } catch (err) {
+            console.error('[KEYBINDS] Chyba při otevírání editoru kláves:', err);
+            showToast('Nepodařilo se načíst konfiguraci kláves.', 'error');
+            if (modalKeybindEditor) modalKeybindEditor.style.display = 'flex';
+        }
+    }
+
+    function closeKeybindEditorModal() {
+        if (!modalKeybindEditor) return;
+        modalKeybindEditor.style.display = 'none';
+        stopRecordingKeybind();
+    }
+
+    if (btnCloseKeybindEditorModal) {
+        btnCloseKeybindEditorModal.addEventListener('click', closeKeybindEditorModal);
+    }
+
+    if (modalKeybindEditor) {
+        modalKeybindEditor.addEventListener('click', (e) => {
+            if (e.target === modalKeybindEditor) {
+                closeKeybindEditorModal();
+            }
+        });
+    }
+
+    if (btnResetKeybinds) {
+        btnResetKeybinds.addEventListener('click', async () => {
+            const confirmed = confirm('Opravdu chceš resetovat všechny herní klávesy na výchozí nastavení Minecraftu?');
+            if (!confirmed) return;
+            try {
+                if (window.api && window.api.resetKeybindsDefault) {
+                    const res = await window.api.resetKeybindsDefault();
+                    if (res && Array.isArray(res.binds)) {
+                        keybindState.binds = res.binds;
+                    }
+                    recalculateKeybindStats();
+                    renderKeyboardStage();
+                    renderKeybindListView();
+                    renderKeyInspector(keybindSelectedKey);
+                    showToast('Klávesy byly resetovány na výchozí hodnoty.', 'success');
+                }
+            } catch (err) {
+                console.error('[KEYBINDS] Chyba při resetu kláves:', err);
+                showToast('Resetování kláves selhalo.', 'error');
+            }
+        });
+    }
+
+    window.openKeybindEditorModal = openKeybindEditorModal;
+    window.closeKeybindEditorModal = closeKeybindEditorModal;
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modalKeybindEditor && modalKeybindEditor.style.display === 'flex') {
+            if (modalKeybindRecorder && modalKeybindRecorder.style.display === 'flex') {
+                stopRecordingKeybind();
+            } else {
+                closeKeybindEditorModal();
+            }
+        }
+    });
 
     // ==========================================
     // CRASH ANALYZER & AUTONOMOUS REPAIR
@@ -9099,7 +9312,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             newProfileRamSlider.value = 4;
             updateSliderVisuals(newProfileRamSlider, newProfileRamValueBadge);
         }
-        dropdownNewVersion?.setValue('26.2');
+        dropdownNewVersion?.setValue('26.3');
         dropdownNewLoader?.setValue('vanilla');
         newProfileSelectedIcon = 'sword';
         iconButtons.forEach(b => b.classList.toggle('active', b.dataset.icon === 'sword'));
@@ -9122,7 +9335,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            const ver = dropdownNewVersion ? dropdownNewVersion.getValue() : '26.2';
+            const ver = dropdownNewVersion ? dropdownNewVersion.getValue() : '26.3';
             const ldr = dropdownNewLoader ? dropdownNewLoader.getValue() : 'vanilla';
             const ram = newProfileRamSliderController ? newProfileRamSliderController.getTarget() : parseInt(newProfileRamSlider?.value || '4', 10);
             const newId = 'profile-' + Date.now();
@@ -9232,7 +9445,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (['26.2', '26.3', '26.1.2', '1.21.11'].includes(p.version)) {
                             importVersionSelect.value = p.version;
                         } else {
-                            importVersionSelect.value = '26.2';
+                            importVersionSelect.value = '26.3';
                         }
                     }
                     if (importLoaderSelect) {
@@ -9306,7 +9519,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (['26.2', '26.3', '26.1.2', '1.21.11'].includes(scan.detectedVersion)) {
                         importVersionSelect.value = scan.detectedVersion;
                     } else {
-                        importVersionSelect.value = '26.2';
+                        importVersionSelect.value = '26.3';
                     }
                 }
                 if (importLoaderSelect) {
@@ -9342,7 +9555,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     sourceDir: currentScannedData.originalDir,
                     effectiveDir: currentScannedData.effectiveGameDir,
                     name: (importProfileNameInput ? importProfileNameInput.value.trim() : '') || currentScannedData.name,
-                    version: importVersionSelect ? importVersionSelect.value : '26.2',
+                    version: importVersionSelect ? importVersionSelect.value : '26.3',
                     loader: importLoaderSelect ? importLoaderSelect.value : 'fabric'
                 };
 
@@ -9780,7 +9993,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Okamžité pročištění profilu z paměti v rendereru
                     currentConfig.profiles = (currentConfig.profiles || []).filter(p => p.id !== targetId);
                     if (currentConfig.activeProfileId === targetId) {
-                        currentConfig.activeProfileId = res.activeProfileId || currentConfig.profiles[0]?.id || 'minecraft-26.2';
+                        currentConfig.activeProfileId = res.activeProfileId || currentConfig.profiles[0]?.id || 'minecraft-26.3';
                         hasUserManuallySelectedProfile = false;
                     }
                     closeProfileSettingsModal();
@@ -9927,5 +10140,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Ujistíme se, že okno, 3D model i stav sítě jsou po startu v aktivním stavu
     setTimeout(() => {
         resumeLauncherBackgroundActivity();
+        if (typeof updateAllSegmentedIndicators === 'function') {
+            updateAllSegmentedIndicators();
+        }
     }, 150);
 });

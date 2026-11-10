@@ -158,7 +158,7 @@ function registerAppIpc({ getMainWindow, setupTray }) {
     ipcMain.handle('get-latest-game-log', async () => {
         try {
             const config = loadConfig();
-            const activeProfileId = config.activeProfileId || 'minecraft-26.2';
+            const activeProfileId = config.activeProfileId || 'minecraft-26.3';
             return mycoLogManager.getLatestLogContent(activeProfileId);
         } catch (_) {}
         return null;
@@ -167,7 +167,7 @@ function registerAppIpc({ getMainWindow, setupTray }) {
     ipcMain.handle('open-log-in-editor', async () => {
         try {
             const config = loadConfig();
-            const activeProfileId = config.activeProfileId || 'minecraft-26.2';
+            const activeProfileId = config.activeProfileId || 'minecraft-26.3';
             return await mycoLogManager.openLogInEditor(activeProfileId);
         } catch (err) {
             console.error('[IPC] Selhalo otevření logu v editoru:', err);
@@ -179,7 +179,7 @@ function registerAppIpc({ getMainWindow, setupTray }) {
         try {
             const win = getMainWindow();
             const config = loadConfig();
-            const activeProfileId = config.activeProfileId || 'minecraft-26.2';
+            const activeProfileId = config.activeProfileId || 'minecraft-26.3';
             const textToSave = customText || mycoLogManager.getLatestLogContent(activeProfileId);
 
             if (!textToSave || !textToSave.trim()) {
@@ -233,7 +233,7 @@ function registerAppIpc({ getMainWindow, setupTray }) {
     ipcMain.on('open-logs-folder', () => {
         try {
             const config = loadConfig();
-            const activeProfileId = config.activeProfileId || 'minecraft-26.2';
+            const activeProfileId = config.activeProfileId || 'minecraft-26.3';
             try {
                 mycoLogManager.convertAllPendingLogsToMyco();
             } catch (_) {}
@@ -360,34 +360,64 @@ function registerAppIpc({ getMainWindow, setupTray }) {
         };
     });
 
-    // Screenshots Gallery
+    // Screenshots Gallery - načte screenshoty ze VŠECH profilů v launcheru
     ipcMain.handle('get-profile-screenshots', async (event, profileId) => {
-        const config = loadConfig();
-        const profile = (config.profiles || []).find(p => p.id === profileId) || config.profiles[0];
-        const gameDir = profile?.gameDir || BASE_DIR;
-        const scDir = path.join(gameDir, 'screenshots');
-        if (!fs.existsSync(scDir)) {
-            return { success: true, screenshots: [], dirPath: scDir };
-        }
         try {
-            const files = fs.readdirSync(scDir);
-            const screenshots = [];
-            for (const file of files) {
-                if (file.toLowerCase().endsWith('.png')) {
-                    const fullPath = path.join(scDir, file);
-                    const stat = fs.statSync(fullPath);
-                    screenshots.push({
-                        filename: file,
-                        fullPath,
-                        thumbUrl: `file://${fullPath}`,
-                        sizeFormatted: (stat.size / (1024 * 1024)).toFixed(2) + ' MB',
-                        mtime: stat.mtimeMs,
-                        dateFormatted: new Date(stat.mtimeMs).toLocaleString('cs-CZ')
-                    });
+            const config = loadConfig();
+            const activeProfile = (config.profiles || []).find(p => p.id === profileId) || config.profiles?.[0];
+            const primaryDir = activeProfile?.gameDir || BASE_DIR;
+            const primaryScDir = path.join(primaryDir, 'screenshots');
+
+            // Posbíráme všechny složky screenshotů ze všech existujících profilů a instancí
+            const scanTargets = [];
+            scanTargets.push({ dir: path.join(BASE_DIR, 'screenshots'), profileName: 'Výchozí profil' });
+
+            if (Array.isArray(config.profiles)) {
+                for (const p of config.profiles) {
+                    const profLabel = p.name || p.id;
+                    if (p.gameDir) {
+                        scanTargets.push({ dir: path.join(p.gameDir, 'screenshots'), profileName: profLabel });
+                    }
+                    scanTargets.push({ dir: path.join(BASE_DIR, 'profiles', p.id, 'screenshots'), profileName: profLabel });
+                    scanTargets.push({ dir: path.join(BASE_DIR, 'instances', p.id, 'screenshots'), profileName: profLabel });
                 }
             }
+
+            const seenPaths = new Set();
+            const screenshots = [];
+
+            for (const target of scanTargets) {
+                if (!fs.existsSync(target.dir)) continue;
+                try {
+                    const files = fs.readdirSync(target.dir);
+                    for (const file of files) {
+                        const lower = file.toLowerCase();
+                        if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+                            const fullPath = path.resolve(target.dir, file);
+                            if (seenPaths.has(fullPath)) continue;
+                            seenPaths.add(fullPath);
+
+                            const stat = fs.statSync(fullPath);
+                            screenshots.push({
+                                filename: file,
+                                fullPath,
+                                profileName: target.profileName,
+                                thumbUrl: `file://${fullPath}`,
+                                sizeFormatted: (stat.size / (1024 * 1024)).toFixed(2) + ' MB',
+                                mtime: stat.mtimeMs,
+                                dateFormatted: new Date(stat.mtimeMs).toLocaleString('cs-CZ')
+                            });
+                        }
+                    }
+                } catch (_) { }
+            }
+
             screenshots.sort((a, b) => b.mtime - a.mtime);
-            return { success: true, screenshots, dirPath: scDir };
+            return {
+                success: true,
+                screenshots,
+                dirPath: fs.existsSync(primaryScDir) ? primaryScDir : (scanTargets.find(t => fs.existsSync(t.dir))?.dir || primaryScDir)
+            };
         } catch (e) {
             return { success: false, error: e.message, screenshots: [] };
         }

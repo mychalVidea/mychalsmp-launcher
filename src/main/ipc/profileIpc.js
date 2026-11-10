@@ -294,7 +294,7 @@ function registerProfileIpc({ getMainWindow }) {
             const payload = {
                 v: 1,
                 name: profile?.name || 'Můj balíček',
-                mc: profile?.version || '26.2',
+                mc: profile?.version || '26.3',
                 loader: profile?.loader || 'fabric',
                 date: new Date().toISOString(),
                 items
@@ -306,8 +306,13 @@ function registerProfileIpc({ getMainWindow }) {
 
             return {
                 success: true,
+                seed: seedString,
                 seedString,
+                code: seedString,
+                packCode: seedString,
+                count: items.length,
                 itemCount: items.length,
+                items,
                 payload
             };
         } catch (e) {

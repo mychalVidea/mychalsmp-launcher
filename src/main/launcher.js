@@ -186,26 +186,18 @@ function isJarFileValidInternal(filePath) {
 
 function isJarFileValid(filePath) {
     if (!filePath || typeof filePath !== 'string') return false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-            const valid = isJarFileValidInternal(filePath);
-            if (valid) return true;
-            if (attempt < 2) {
-                const end = Date.now() + 150;
-                while (Date.now() < end) { /* sync delay for OS file flush / write buffer release */ }
-                continue;
+    try {
+        return isJarFileValidInternal(filePath);
+    } catch (err) {
+        if (err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'EACCES') {
+            try {
+                return isJarFileValidInternal(filePath);
+            } catch (_) {
+                return false;
             }
-            return false;
-        } catch (err) {
-            if ((err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'EACCES') && attempt < 2) {
-                const end = Date.now() + 150;
-                while (Date.now() < end) { /* sync delay for OS file handle release */ }
-                continue;
-            }
-            return false;
         }
+        return false;
     }
-    return false;
 }
 
 // Intercept Handler.prototype.downloadAsync:
@@ -231,7 +223,7 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
     }
 
     const isBigFile = (type === 'version-jar' || (name && name.endsWith('.jar') && type !== 'assets'));
-    const defaultTimeoutMs = isBigFile ? 60000 : 15000;
+    const defaultTimeoutMs = isBigFile ? 60000 : 20000;
 
     let timeoutTimer = null;
     const resetTimeout = (ms = defaultTimeoutMs) => {
@@ -244,6 +236,7 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
     resetTimeout(defaultTimeoutMs);
 
     let fileStream = null;
+    let nodeStream = null;
 
     const cleanup = () => {
         if (timeoutTimer) {
@@ -252,6 +245,9 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
         }
         if (this.client && this.client._activeControllers) {
             this.client._activeControllers.delete(controller);
+        }
+        if (nodeStream && !nodeStream.destroyed) {
+            try { nodeStream.destroy(); } catch (_) { }
         }
         if (fileStream) {
             if (this.client && this.client._activeStreams) {
@@ -312,7 +308,7 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
             this.client._activeStreams.set(fullPath, fileStream);
         }
 
-        const nodeStream = Readable.fromWeb(res.body);
+        nodeStream = Readable.fromWeb(res.body);
         const progressStream = new Transform({
             transform: (chunk, encoding, callback) => {
                 if (this.client && this.client._isCancelled) {
@@ -334,10 +330,21 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
             }
         });
 
-        await pipeline(nodeStream, progressStream, fileStream);
+        // Bezpečné navázání abort signálu na proudy pro zabránění zamrznutí pipeline
+        const onAbort = () => {
+            try { if (nodeStream && !nodeStream.destroyed) nodeStream.destroy(new Error('ETIMEDOUT')); } catch (_) { }
+            try { if (fileStream && !fileStream.destroyed) fileStream.destroy(new Error('ETIMEDOUT')); } catch (_) { }
+        };
+        controller.signal.addEventListener('abort', onAbort, { once: true });
+
+        try {
+            await pipeline(nodeStream, progressStream, fileStream, { signal: controller.signal });
+        } finally {
+            controller.signal.removeEventListener('abort', onAbort);
+        }
 
         // Krátká prodleva pro spolehlivý flush diskových bufferů a uvolnění Windows Defender / AV zámků
-        await new Promise(r => setTimeout(r, 80));
+        await new Promise(r => setTimeout(r, 60));
 
         if (totalBytes > 0 && receivedBytes < totalBytes) {
             try { if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath); } catch (e) { }
@@ -355,7 +362,7 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
 
     } catch (err) {
         cleanup();
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 80));
         try {
             if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
         } catch (e) { }
@@ -368,10 +375,28 @@ Handler.prototype.downloadAsync = async function (url, directory, name, retry = 
         this.client.emit('debug', `[MCLC]: Chyba při stahování ${name} (${err.message}). Zbývající pokusy: ${retriesLeft}`);
 
         if (retriesLeft > 0) {
-            const backoff = retriesLeft === 3 ? 250 : (retriesLeft === 2 ? 600 : 1200);
+            const backoff = retriesLeft === 3 ? 300 : (retriesLeft === 2 ? 800 : 1500);
             await new Promise(r => setTimeout(r, backoff));
-            return await this.downloadAsync(url, directory, name, retriesLeft - 1, type);
+
+            let retryUrl = url;
+            // Pokud stahování z oficiálního Mojang serveru opakovaně selhává, zkusíme spolehlivé zrcadlo (BMCLAPI)
+            if (retriesLeft <= 2) {
+                if (url.includes('piston-data.mojang.com')) {
+                    retryUrl = url.replace('piston-data.mojang.com', 'bmclapi2.bangbang93.com');
+                } else if (url.includes('piston-meta.mojang.com')) {
+                    retryUrl = url.replace('piston-meta.mojang.com', 'bmclapi2.bangbang93.com');
+                } else if (url.includes('resources.download.minecraft.net')) {
+                    retryUrl = url.replace('resources.download.minecraft.net', 'bmclapi2.bangbang93.com/assets');
+                }
+            }
+
+            return await this.downloadAsync(retryUrl, directory, name, retriesLeft - 1, type);
         }
+
+        if (type === 'version-jar') {
+            throw new Error(`Nepodařilo se stáhnout herní jádro ${name} po opakovaných pokusech: ${err.message}`);
+        }
+
         return false;
     }
 };
@@ -939,7 +964,7 @@ Handler.prototype.downloadToDirectory = async function (directory, libraries, ev
     }
 
     // ── JS Fallback Pool ────────────────────────────────────────────────────
-    const concurrency = 20;
+    const concurrency = 12;
     let idx = 0;
 
     const processLibrary = async (library) => {
@@ -1005,37 +1030,31 @@ Handler.prototype.downloadToDirectory = async function (directory, libraries, ev
         }
 
         if (!exists) {
-            let downloadUrl = null;
+            const candidateUrls = [];
             if (library.downloads && library.downloads.artifact && library.downloads.artifact.url) {
-                downloadUrl = library.downloads.artifact.url;
+                candidateUrls.push(library.downloads.artifact.url);
             } else if (library.url) {
-                downloadUrl = `${library.url}${relPath}`;
+                candidateUrls.push(`${library.url}${relPath}`);
             } else {
-                downloadUrl = `https://libraries.minecraft.net/${relPath}`;
+                candidateUrls.push(`https://libraries.minecraft.net/${relPath}`);
             }
 
-            try {
-                fs.mkdirSync(jarPath, { recursive: true });
-                await this.downloadAsync(downloadUrl, jarPath, name, 3, eventName);
-                if (fs.existsSync(destFile)) {
-                    if (library.downloads?.artifact?.sha1) {
-                        exists = verifyFileSha1(destFile, library.downloads.artifact.sha1);
-                    } else if (name.endsWith('.jar')) {
-                        exists = isJarFileValid(destFile);
-                    } else {
-                        exists = fs.statSync(destFile).size > 0;
-                    }
-                    if (!exists) {
-                        try { fs.unlinkSync(destFile); } catch (e) { }
-                    }
-                }
-            } catch (err) {
-                this.client.emit('debug', `[MCLC]: Knihovnu ${name} nelze stáhnout z ${downloadUrl}, zkouším Mojang Maven...`);
+            // Doplnění spolehlivých zrcadel (Mojang, Fabric, BMCLAPI)
+            const mojangUrl = `https://libraries.minecraft.net/${relPath}`;
+            if (!candidateUrls.includes(mojangUrl)) candidateUrls.push(mojangUrl);
+
+            const bmclUrl = `https://bmclapi2.bangbang93.com/maven/${relPath}`;
+            if (!candidateUrls.includes(bmclUrl)) candidateUrls.push(bmclUrl);
+
+            if (relPath.startsWith('net/fabricmc')) {
+                const fabricMavenUrl = `https://maven.fabricmc.net/${relPath}`;
+                if (!candidateUrls.includes(fabricMavenUrl)) candidateUrls.push(fabricMavenUrl);
             }
 
-            if (!exists && !downloadUrl.includes('libraries.minecraft.net')) {
+            for (const dlUrl of candidateUrls) {
                 try {
-                    await this.downloadAsync(`https://libraries.minecraft.net/${relPath}`, jarPath, name, 3, eventName);
+                    fs.mkdirSync(jarPath, { recursive: true });
+                    await this.downloadAsync(dlUrl, jarPath, name, 2, eventName);
                     if (fs.existsSync(destFile)) {
                         if (library.downloads?.artifact?.sha1) {
                             exists = verifyFileSha1(destFile, library.downloads.artifact.sha1);
@@ -1044,11 +1063,15 @@ Handler.prototype.downloadToDirectory = async function (directory, libraries, ev
                         } else {
                             exists = fs.statSync(destFile).size > 0;
                         }
-                        if (!exists) {
+                        if (exists) {
+                            break;
+                        } else {
                             try { fs.unlinkSync(destFile); } catch (e) { }
                         }
                     }
-                } catch (e) { }
+                } catch (err) {
+                    this.client.emit('debug', `[MCLC]: Knihovnu ${name} nelze stáhnout z ${dlUrl}: ${err.message}`);
+                }
             }
         }
 
@@ -1070,7 +1093,13 @@ Handler.prototype.downloadToDirectory = async function (directory, libraries, ev
         while (idx < libraries.length) {
             if (this.client && this.client._isCancelled) break;
             const library = libraries[idx++];
-            await processLibrary(library);
+            if (library) {
+                try {
+                    await processLibrary(library);
+                } catch (libErr) {
+                    this.client.emit('debug', `[MCLC]: Chyba při stahování knihovny: ${libErr.message}`);
+                }
+            }
         }
     });
 
@@ -1600,18 +1629,24 @@ Handler.prototype.getAssets = async function () {
     }
 
     // 2. JS Fallback worker pool
-    // Paralelní zpracování po dávkách pro maximální rychlost přes HTTP/2 multiplexing
-    const concurrency = 45;
+    // Paralelní zpracování po dávkách s optimalizovanou konkurencí (16) pro prevenci vyčerpání socketů a rate-limitů CDN
+    const concurrency = 16;
     let idx = 0;
 
     const downloadMissingAsset = async (assetKey) => {
-        if (this.client && this.client._isCancelled) return;
+        if (!assetKey || (this.client && this.client._isCancelled)) return;
 
-        const hash = index.objects[assetKey].hash;
+        const obj = index.objects && index.objects[assetKey];
+        if (!obj || !obj.hash) return;
+        const hash = obj.hash;
         const subhash = hash.substring(0, 2);
         const subAssetDir = path.join(assetDirectory, 'objects', subhash);
 
-        await this.downloadAsync(`${this.options.overrides.url.resource}/${subhash}/${hash}`, subAssetDir, hash, true, 'assets');
+        try {
+            await this.downloadAsync(`${this.options.overrides.url.resource}/${subhash}/${hash}`, subAssetDir, hash, true, 'assets');
+        } catch (err) {
+            this.client.emit('debug', `[ASSETY]: Nelze stáhnout asset ${assetKey} (${hash}): ${err.message}`);
+        }
 
         counter++;
         this.client.emit('progress', {
@@ -1625,7 +1660,9 @@ Handler.prototype.getAssets = async function () {
         while (idx < missingAssetKeys.length) {
             if (this.client && this.client._isCancelled) break;
             const currentAsset = missingAssetKeys[idx++];
-            await downloadMissingAsset(currentAsset);
+            if (currentAsset) {
+                await downloadMissingAsset(currentAsset);
+            }
         }
     });
 
@@ -4310,6 +4347,22 @@ async function launchGame(config, authData, customServer, onProgress, onLog, onE
             clearInterval(launcher._progressTicker);
             launcher._progressTicker = null;
         }
+
+        // ⚡ Uchování změn kláves: Načteme options.txt z právě ukončené instance, aby in-game změny přetrvaly
+        try {
+            const optPath = path.join(gameInstanceDir, 'options.txt');
+            if (fs.existsSync(optPath)) {
+                const { parseKeybindsFromOptions } = require('./keybindManager');
+                const content = fs.readFileSync(optPath, 'utf8');
+                const parsed = parseKeybindsFromOptions(content);
+                if (parsed && Object.keys(parsed).length > 0) {
+                    const c = loadConfig();
+                    const merged = { ...(c.globalKeybinds || {}), ...parsed };
+                    saveConfig({ globalKeybinds: merged });
+                }
+            }
+        } catch (_) { }
+
         activeMinecraftProcess = null;
         onExit(code);
     });

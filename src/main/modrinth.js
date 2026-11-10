@@ -161,7 +161,7 @@ const CURATED_PACKS = [
     }
 ];
 
-async function searchModrinth(query = '', version = '26.2', loader = 'fabric', category = '', projectType = 'mod', offset = 0, limit = 24) {
+async function searchModrinth(query = '', version = '26.3', loader = 'fabric', category = '', projectType = 'mod', offset = 0, limit = 24) {
     const type = projectType || 'mod';
     try {
         const facets = [[`project_type:${type}`]];
@@ -270,34 +270,55 @@ async function downloadToFileWithProgress(url, destPath, onProgress) {
             return;
         } catch (_) {}
     }
-    const dlRes = await fetch(url, {
-        headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
-    });
-    if (!dlRes.ok) throw new Error(`Chyba stahování: HTTP ${dlRes.status}`);
 
-    const contentLength = parseInt(dlRes.headers.get('content-length') || '0', 10);
-    const chunks = [];
-    let received = 0;
+    const controller = new AbortController();
+    let timeoutTimer = null;
+    const resetTimeout = (ms = 45000) => {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        timeoutTimer = setTimeout(() => {
+            try { controller.abort(new Error('ETIMEDOUT')); } catch (_) {}
+        }, ms);
+    };
 
-    if (dlRes.body && typeof dlRes.body.getReader === 'function') {
-        const reader = dlRes.body.getReader();
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(Buffer.from(value));
-            received += value.length;
+    resetTimeout(45000);
+
+    try {
+        const dlRes = await fetch(url, {
+            signal: controller.signal,
+            headers: { 'User-Agent': 'mychalVidea/mychalsmp-launcher' }
+        });
+        if (!dlRes.ok) throw new Error(`Chyba stahování: HTTP ${dlRes.status}`);
+
+        const contentLength = parseInt(dlRes.headers.get('content-length') || '0', 10);
+        const chunks = [];
+        let received = 0;
+
+        if (dlRes.body && typeof dlRes.body.getReader === 'function') {
+            const reader = dlRes.body.getReader();
+            while (true) {
+                resetTimeout(45000);
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(Buffer.from(value));
+                received += value.length;
+                if (typeof onProgress === 'function') {
+                    const percent = contentLength > 0 ? Math.min(100, Math.round((received / contentLength) * 100)) : 0;
+                    onProgress(received, contentLength, percent);
+                }
+            }
+            fs.mkdirSync(path.dirname(destPath), { recursive: true });
+            fs.writeFileSync(destPath, Buffer.concat(chunks));
+        } else {
+            resetTimeout(45000);
+            const buffer = await dlRes.arrayBuffer();
+            fs.mkdirSync(path.dirname(destPath), { recursive: true });
+            fs.writeFileSync(destPath, Buffer.from(buffer));
             if (typeof onProgress === 'function') {
-                const percent = contentLength > 0 ? Math.min(100, Math.round((received / contentLength) * 100)) : 0;
-                onProgress(received, contentLength, percent);
+                onProgress(buffer.byteLength, buffer.byteLength, 100);
             }
         }
-        fs.writeFileSync(destPath, Buffer.concat(chunks));
-    } else {
-        const buffer = await dlRes.arrayBuffer();
-        fs.writeFileSync(destPath, Buffer.from(buffer));
-        if (typeof onProgress === 'function') {
-            onProgress(buffer.byteLength, buffer.byteLength, 100);
-        }
+    } finally {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
     }
 }
 
@@ -432,7 +453,7 @@ function isModInstalledInDir(destDir, modIdentifier) {
  * Downloads a mod, resourcepack, or shader from Modrinth directly into the profile's directory.
  */
 async function downloadModOrPack(options, targetDir) {
-    const { id, title, projectType = 'mod', version = '26.2', loader = 'fabric', oldFilename, directUrl } = options;
+    const { id, title, projectType = 'mod', version = '26.3', loader = 'fabric', oldFilename, directUrl } = options;
     const normLoader = (loader && loader !== 'vanilla') ? loader.toLowerCase() : null;
 
     // 0. Pokud máme přímou URL ke stažení ze Seedu, zkusíme nejprve bleskové přímé stažení
@@ -732,14 +753,14 @@ const modUpdatesCache = new Map();
  * Využívá hromadný endpoint /v2/version_files/update pro bleskový dotaz během stovek milisekund.
  * Obsahuje inteligentní diskovou a časovou cache (30 min), aby neblokoval spuštění hry síťovými dotazy.
  */
-async function checkProfileModUpdates({ profileId, gameDir, version = '26.2', loader = 'fabric', force = false }) {
+async function checkProfileModUpdates({ profileId, gameDir, version = '26.3', loader = 'fabric', force = false }) {
     const modsDir = path.join(gameDir, 'mods');
     if (!fs.existsSync(modsDir)) {
         return { success: true, updates: [] };
     }
 
     const normLoader = (loader && loader !== 'vanilla') ? loader.toLowerCase() : 'fabric';
-    const normVersion = version || '26.2';
+    const normVersion = version || '26.3';
 
     let files = [];
     try {
