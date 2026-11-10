@@ -247,11 +247,6 @@ function getAllProfileDirs() {
     for (const p of (config.profiles || [])) {
         const d = p.gameDir || BASE_DIR;
         dirs.add(d);
-        // Také kontrola složky profiles/<id>
-        const subDir = path.join(BASE_DIR, 'profiles', p.id);
-        if (fs.existsSync(subDir)) {
-            dirs.add(subDir);
-        }
     }
 
     return Array.from(dirs);
@@ -564,7 +559,13 @@ function syncKeybindsToProfile(targetDirOrProfileId, explicitGlobalBinds = null)
             if (path.isAbsolute(targetDirOrProfileId)) {
                 targetDir = targetDirOrProfileId;
             } else {
-                targetDir = path.join(BASE_DIR, 'profiles', targetDirOrProfileId);
+                const foundProf = (curConfig.profiles || []).find(p => p.id === targetDirOrProfileId);
+                if (foundProf && foundProf.gameDir) {
+                    targetDir = foundProf.gameDir;
+                } else {
+                    const instPath = path.join(BASE_DIR, 'instances', targetDirOrProfileId);
+                    targetDir = fs.existsSync(instPath) ? instPath : BASE_DIR;
+                }
             }
         }
         if (!fs.existsSync(targetDir)) {

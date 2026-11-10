@@ -308,9 +308,17 @@ function resolveLogsDir(instanceDir, profileId) {
         const candidate = path.join(instanceDir, 'logs');
         if (fs.existsSync(candidate)) return candidate;
     }
-    const pid = profileId || 'minecraft-26.2';
-    const profileLogs = path.join(BASE_DIR, 'profiles', pid, 'logs');
-    if (fs.existsSync(profileLogs)) return profileLogs;
+    const pid = profileId || 'minecraft-26.3';
+    try {
+        const cfg = loadConfig();
+        const prof = (cfg.profiles || []).find(p => p.id === pid);
+        if (prof && prof.gameDir) {
+            const cand = path.join(prof.gameDir, 'logs');
+            if (fs.existsSync(cand)) return cand;
+        }
+    } catch (_) {}
+    const instanceLogs = path.join(BASE_DIR, 'instances', pid, 'logs');
+    if (fs.existsSync(instanceLogs)) return instanceLogs;
 
     const baseLogs = path.join(BASE_DIR, 'logs');
     if (!fs.existsSync(baseLogs)) {
@@ -524,12 +532,14 @@ function archiveSessionLogs(instanceDir, profileId, fallbackText) {
 function getLatestLogContent(profileId) {
     try {
         const config = loadConfig();
-        const activeProfileId = profileId || config.activeProfileId || 'minecraft-26.2';
-        const candidateDirs = [
-            path.join(BASE_DIR, 'profiles', activeProfileId, 'logs'),
-            path.join(BASE_DIR, 'instances', activeProfileId, 'logs'),
-            path.join(BASE_DIR, 'logs')
-        ];
+        const activeProfileId = profileId || config.activeProfileId || 'minecraft-26.3';
+        const candidateDirs = [];
+        const activeProf = (config.profiles || []).find(p => p.id === activeProfileId);
+        if (activeProf && activeProf.gameDir) {
+            candidateDirs.push(path.join(activeProf.gameDir, 'logs'));
+        }
+        candidateDirs.push(path.join(BASE_DIR, 'instances', activeProfileId, 'logs'));
+        candidateDirs.push(path.join(BASE_DIR, 'logs'));
 
         for (const dir of candidateDirs) {
             const mogPath = path.join(dir, 'latest.mog');

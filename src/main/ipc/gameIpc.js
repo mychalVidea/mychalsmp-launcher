@@ -103,7 +103,7 @@ function registerGameIpc({ getMainWindow, setupTray, updateTrayMenu }) {
             fs.promises.access(verJson, fs.constants.R_OK).catch(() => {});
 
             if (profile && profile.loader && profile.loader !== 'vanilla' && config.autoUpdateMods !== false) {
-                const gameDir = profile.gameDir || path.join(BASE_DIR, 'profiles', profile.id);
+                const gameDir = profile.gameDir || BASE_DIR;
                 checkProfileModUpdates({
                     profileId: profile.id,
                     gameDir,

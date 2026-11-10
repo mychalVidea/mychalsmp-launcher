@@ -292,9 +292,6 @@ function registerContentIpc() {
         const modsDir = path.join(gameDir, 'mods');
 
         ensureSelfNametagModInstalled(gameDir);
-        if (profileId) {
-            ensureSelfNametagModInstalled(path.join(BASE_DIR, 'profiles', profileId));
-        }
 
         if (!fs.existsSync(modsDir)) {
             return { success: true, mods: [], modsDir, profileName: profile?.name || profileId };

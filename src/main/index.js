@@ -614,7 +614,7 @@ function startMainApplication() {
                 if (cfg.autoUpdateMods !== false) {
                     const activeProfile = (cfg.profiles || []).find(p => p.id === cfg.activeProfileId);
                     if (activeProfile && activeProfile.loader && activeProfile.loader !== 'vanilla') {
-                        const gDir = activeProfile.gameDir || path.join(BASE_DIR, 'profiles', activeProfile.id);
+                        const gDir = activeProfile.gameDir || BASE_DIR;
                         checkProfileModUpdates({
                             profileId: activeProfile.id,
                             gameDir: gDir,

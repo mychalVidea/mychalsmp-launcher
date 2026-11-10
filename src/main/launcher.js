@@ -3186,34 +3186,6 @@ function syncSelfNametagConfigToDirs(dirs) {
 function ensureSelfNametagModInstalled(targetDir, onLog = console.log, forceOverwrite = false) {
     const targetKey = targetDir || BASE_DIR;
 
-    const checkDirs = new Set();
-    if (targetDir) checkDirs.add(targetDir);
-    checkDirs.add(BASE_DIR);
-
-    // Také automatická kontrola všech profilů ve složce profiles
-    const profilesDir = path.join(BASE_DIR, 'profiles');
-    if (fs.existsSync(profilesDir)) {
-        try {
-            const subEntries = fs.readdirSync(profilesDir);
-            for (const sub of subEntries) {
-                const pPath = path.join(profilesDir, sub);
-                if (fs.statSync(pPath).isDirectory()) {
-                    checkDirs.add(pPath);
-                }
-            }
-        } catch (_) { }
-    }
-
-    // Vždy synchronizujeme konfiguraci doplňku (selfnametag.json) pro aktuální nastavení launcheru
-    syncSelfNametagConfigToDirs(checkDirs);
-
-    if (!forceOverwrite && selfNametagSyncedDirs.has(targetKey)) {
-        const lastSync = selfNametagSyncedDirs.get(targetKey) || 0;
-        if (Date.now() - lastSync < 5 * 60 * 1000) {
-            return true;
-        }
-    }
-
     const bundledModPath = getBundledSelfNametagPath();
     if (!bundledModPath) {
         if (typeof onLog === 'function') {
@@ -3232,7 +3204,11 @@ function ensureSelfNametagModInstalled(targetDir, onLog = console.log, forceOver
         return false;
     }
 
-    // Také automatická kontrola všech instancí ve složce instances (včetně imported-*)
+    const checkDirs = new Set();
+    if (targetDir) checkDirs.add(targetDir);
+    checkDirs.add(BASE_DIR);
+
+    // Také automatická kontrola všech instancí ve složce instances (včetně imported-* a upgradovaných)
     const instancesDir = path.join(BASE_DIR, 'instances');
     if (fs.existsSync(instancesDir)) {
         try {
@@ -3246,16 +3222,95 @@ function ensureSelfNametagModInstalled(targetDir, onLog = console.log, forceOver
         } catch (_) { }
     }
 
-    // Kontrola všech profilů z launcher-config.json (včetně p.gameDir)
+    // Kontrola všech profilů z launcher-config.json (jejich reálný gameDir)
     try {
         const cfgPath = path.join(BASE_DIR, 'launcher-config.json');
         if (fs.existsSync(cfgPath)) {
             const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
             for (const p of (cfg.profiles || [])) {
-                if (p.gameDir) checkDirs.add(p.gameDir);
+                if (p.gameDir && fs.existsSync(p.gameDir)) {
+                    checkDirs.add(p.gameDir);
+                }
             }
         }
     } catch (_) { }
+
+    // Automatický úklid starých ghost složek ve složce profiles/,
+    // které vznikly chybou v minulosti a obsahují pouze redundantní doplňky selfnametag
+    const profilesDir = path.join(BASE_DIR, 'profiles');
+    if (fs.existsSync(profilesDir)) {
+        try {
+            const subEntries = fs.readdirSync(profilesDir);
+            for (const sub of subEntries) {
+                const pPath = path.join(profilesDir, sub);
+                if (!fs.existsSync(pPath) || !fs.statSync(pPath).isDirectory()) continue;
+
+                let hasRealFiles = false;
+                const checkGhostDir = (d) => {
+                    if (!fs.existsSync(d) || hasRealFiles) return;
+                    for (const f of fs.readdirSync(d)) {
+                        const full = path.join(d, f);
+                        const stat = fs.statSync(full);
+                        if (stat.isDirectory()) {
+                            if (f === 'mods' || f === 'config') {
+                                checkGhostDir(full);
+                            } else {
+                                hasRealFiles = true;
+                                return;
+                            }
+                        } else {
+                            if (f !== 'selfnametag-1.0.0.jar' && f !== 'selfnametag.json' && f !== 'options.txt') {
+                                hasRealFiles = true;
+                                return;
+                            }
+                        }
+                    }
+                };
+                checkGhostDir(pPath);
+
+                if (!hasRealFiles) {
+                    try {
+                        fs.rmSync(pPath, { recursive: true, force: true });
+                        if (typeof onLog === 'function') {
+                            onLog(`[ÚKLID] 🧹 Odstraněna redundantní ghost složka profilu: ${sub}`);
+                        }
+                    } catch (_) { }
+                } else {
+                    checkDirs.add(pPath);
+                }
+            }
+        } catch (_) { }
+    }
+
+    // Vždy synchronizujeme konfiguraci doplňku (selfnametag.json) pro aktuální nastavení launcheru
+    syncSelfNametagConfigToDirs(checkDirs);
+
+    // Kontrola, zda jsou všechny složky již 100% aktuální a platné
+    let allUpToDate = true;
+    for (const d of checkDirs) {
+        const targetJar = path.join(d, 'mods', 'selfnametag-1.0.0.jar');
+        if (!fs.existsSync(targetJar)) {
+            allUpToDate = false;
+            break;
+        }
+        try {
+            const tBuf = fs.readFileSync(targetJar);
+            if (tBuf.length !== modBuffer.length || crypto.createHash('sha256').update(tBuf).digest('hex') !== bundledSha256) {
+                allUpToDate = false;
+                break;
+            }
+        } catch (_) {
+            allUpToDate = false;
+            break;
+        }
+    }
+
+    if (!forceOverwrite && allUpToDate && selfNametagSyncedDirs.has(targetKey)) {
+        const lastSync = selfNametagSyncedDirs.get(targetKey) || 0;
+        if (Date.now() - lastSync < 5 * 60 * 1000) {
+            return true;
+        }
+    }
 
     let installedCount = 0;
     for (const d of checkDirs) {
