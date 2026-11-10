@@ -1517,9 +1517,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const playCount = Number(s.playCount) || 0;
             const playSec = Number(s.playtimeSeconds) || 0;
             const metaParts = [];
-            if (playCount > 0) metaParts.push(`${playCount}×`);
-            if (playSec >= 60) metaParts.push(formatPlaytime(playSec));
-            const playMeta = metaParts.length > 0 ? `<span class="server-play-meta">• ${metaParts.join(' • ')}</span>` : '';
+            if (playCount > 0) {
+                metaParts.push(`${playCount}× hráno`);
+                metaParts.push(`${formatPlaytime(playSec)} odehráno`);
+            } else {
+                metaParts.push('Zatím nehráno');
+            }
+            const playMeta = `<span class="server-play-meta">• ${metaParts.join(' • ')}</span>`;
             return `
                 <div class="tracked-server-item">
                     <div style="position: relative; flex-shrink: 0;">
@@ -1590,9 +1594,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const playCount = Number(s.playCount) || 0;
             const playSec = Number(s.playtimeSeconds) || 0;
             const metaParts = [];
-            if (playCount > 0) metaParts.push(`${playCount}× hráno`);
-            if (playSec >= 60) metaParts.push(`${formatPlaytime(playSec)} odehráno`);
-            else if (playCount === 0) metaParts.push('Zatím nehráno');
+            if (playCount > 0) {
+                metaParts.push(`${playCount}× hráno`);
+                metaParts.push(`${formatPlaytime(playSec)} odehráno`);
+            } else {
+                metaParts.push('Zatím nehráno');
+            }
             const playMeta = `<span class="server-play-meta">• ${metaParts.join(' • ')}</span>`;
 
             return `

@@ -383,6 +383,28 @@ function registerAppIpc({ getMainWindow, setupTray }) {
                 }
             }
 
+            // Prohledáme všechny profily a instance na disku (i ty neaktivní či importované)
+            for (const sub of ['profiles', 'instances']) {
+                const parentDir = path.join(BASE_DIR, sub);
+                if (fs.existsSync(parentDir)) {
+                    try {
+                        const entries = fs.readdirSync(parentDir, { withFileTypes: true });
+                        for (const entry of entries) {
+                            if (entry.isDirectory()) {
+                                const scDir = path.join(parentDir, entry.name, 'screenshots');
+                                scanTargets.push({ dir: scDir, profileName: entry.name });
+                            }
+                        }
+                    } catch (_) { }
+                }
+            }
+
+            // Přidáme i vanilla složku ~/.minecraft/screenshots pokud existuje
+            const vanillaScDir = path.join(os.homedir(), '.minecraft', 'screenshots');
+            if (fs.existsSync(vanillaScDir)) {
+                scanTargets.push({ dir: vanillaScDir, profileName: 'Vanilla (.minecraft)' });
+            }
+
             const seenPaths = new Set();
             const screenshots = [];
 
