@@ -69,9 +69,17 @@ if [ ! -f "$INSTALL_DIR/mychalsmp-launcher" ]; then
     exit 1
 fi
 
-# Kontrola a automatická doinstalace systémových knihoven (WebKit2GTK 4.1) pro CachyOS/Arch, Fedoru i Ubuntu/Debian
+# Kontrola a automatická doinstalace systémových knihoven (WebKit2GTK 4.1 a AppIndicator pro Tray) pro CachyOS/Arch, Fedoru i Ubuntu/Debian
+NEED_DEPS=0
 if ! ldconfig -p 2>/dev/null | grep -q "libwebkit2gtk-4.1.so"; then
-    echo "📦 Doinstalovávám systémové grafické knihovny (WebKit2GTK 4.1) pro tvou distribuci..."
+    NEED_DEPS=1
+fi
+if ! ldconfig -p 2>/dev/null | grep -qE "libayatana-appindicator3\.so|libappindicator3\.so"; then
+    NEED_DEPS=1
+fi
+
+if [ "$NEED_DEPS" = "1" ]; then
+    echo "📦 Doinstalovávám chybějící systémové knihovny (WebKit2GTK 4.1 / AppIndicator) pro tvou distribuci..."
     if command -v pacman >/dev/null 2>&1; then
         sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 libayatana-appindicator 2>/dev/null || sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 || true
     elif command -v dnf >/dev/null 2>&1; then
@@ -90,8 +98,7 @@ chmod +x "$INSTALL_DIR/mychalsmp-launcher"
 rm -f "$BIN_DIR/mychalsmp-launcher"
 cat <<EOF > "$BIN_DIR/mychalsmp-launcher"
 #!/usr/bin/env bash
-export WEBKIT_DISABLE_DMABUF_RENDERER=1
-export WEBKIT_DISABLE_COMPOSITING_MODE=1
+# Na moderním WebKitGTK 2.44+ běží plná GPU akcelerace
 exec "$INSTALL_DIR/mychalsmp-launcher" "\$@"
 EOF
 chmod +x "$BIN_DIR/mychalsmp-launcher"

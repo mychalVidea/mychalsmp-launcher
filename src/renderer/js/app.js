@@ -463,6 +463,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             setTimeout(() => {
                 if (typeof updateAllSegmentedIndicators === 'function') updateAllSegmentedIndicators();
             }, 40);
+        } else if (tabId === 'profiles') {
+            renderProfilesList();
         } else if (tabId === 'servers') {
             renderServersFullTab();
         } else if (tabId === 'character') {
@@ -526,7 +528,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnQuickMods.addEventListener('click', () => switchTab('mods'));
     }
     if (btnManageProfiles) {
-        btnManageProfiles.addEventListener('click', () => switchTab('mods'));
+        btnManageProfiles.addEventListener('click', () => switchTab('profiles'));
+    }
+    const btnGoToProfilesTabFromMods = document.getElementById('btnGoToProfilesTabFromMods');
+    if (btnGoToProfilesTabFromMods) {
+        btnGoToProfilesTabFromMods.addEventListener('click', () => switchTab('profiles'));
     }
     if (btnAddModsShortcut) {
         btnAddModsShortcut.addEventListener('click', () => switchTab('mods'));
@@ -2711,7 +2717,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Profile List Rendering & Interactive Selection ──────────────────────
     function renderProfilesList() {
         const list = document.getElementById('profileCardsList');
-        if (!list) return;
+        const tabList = document.getElementById('profilesTabCardsList');
+        if (!list && !tabList) return;
 
         const profiles = currentConfig.profiles || [];
         const activeId = resolveLaunchProfileId();
@@ -2809,7 +2816,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return { type: 'png', src: 'assets/icons/old.png' };
         };
 
-        list.innerHTML = sortedProfiles.map(p => {
+        const cardsHtml = sortedProfiles.map(p => {
             const isActive = p.id === activeId;
             const pKeyart = resolveCardKeyartUrl(p.keyart || p.version);
             const keyartBgStyle = pKeyart ? `background-image: url('${escapeHtml(pKeyart)}');` : '';
@@ -2900,137 +2907,145 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
         }).join('');
 
-        // Bind card click for selection
-        list.querySelectorAll('.profile-row-card').forEach(card => {
-            card.addEventListener('click', (e) => {
-                if (e.target.closest('button, .profile-tool-btn')) return;
-                const pid = card.dataset.profileId;
-                if (isRunning && runningProfileId && pid !== runningProfileId) {
-                    showToast('Hra již běží. Před výběrem jiného profilu nejprve ukonči běžící hru.', 'info');
-                    return;
-                }
-                selectActiveProfile(pid);
-            });
-        });
+        function attachProfileEvents(container) {
+            if (!container) return;
+            container.innerHTML = cardsHtml;
 
-        // Bind Play buttons
-        list.querySelectorAll('.btn-launch-profile').forEach(btn => {
-            btn.addEventListener('pointerenter', () => {
-                if (!btn.disabled && typeof prewarmLaunchEnvironment === 'function') {
-                    prewarmLaunchEnvironment(btn.dataset.profileId);
-                }
-            }, { passive: true });
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                if (btn.disabled) return;
-                const pid = btn.dataset.profileId;
-                const isThisRunning = isRunning && (runningProfileId ? pid === runningProfileId : pid === currentConfig.activeProfileId);
-                if (isThisRunning) {
-                    if (confirm('Chceš ukončit běžící Minecraft proces?')) {
-                        markUserRequestedStop();
-                        try {
-                            await window.api.killGame();
-                        } catch (err) { }
-                        resetPlayState();
+            // Bind card click for selection
+            container.querySelectorAll('.profile-row-card').forEach(card => {
+                card.addEventListener('click', (e) => {
+                    if (e.target.closest('button, .profile-tool-btn')) return;
+                    const pid = card.dataset.profileId;
+                    if (isRunning && runningProfileId && pid !== runningProfileId) {
+                        showToast('Hra již běží. Před výběrem jiného profilu nejprve ukonči běžící hru.', 'info');
+                        return;
                     }
-                    return;
-                }
-                if (isRunning) {
-                    showToast('Hra již běží. Před spuštěním nebo stažením jiné verze nejprve ukonči běžící hru.', 'error');
-                    return;
-                }
-                if (isLaunching) {
-                    showToast('Probíhá stahování nebo spouštění jiné verze. Počkej prosím na dokončení.', 'warning');
-                    return;
-                }
-                try {
                     selectActiveProfile(pid);
-                    await startLaunch(pid, null);
-                } catch (launchErr) {
-                    console.error('[LAUNCH ERROR]', launchErr);
-                    showToast('Nepodařilo se spustit hru.', 'error');
-                }
+                });
             });
-        });
 
-
-        // Quick folder button
-        list.querySelectorAll('.btn-profile-quick-folder').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const pid = btn.dataset.profileId;
-                await window.api.openProfileFolder(pid, '');
+            // Bind Play buttons
+            container.querySelectorAll('.btn-launch-profile').forEach(btn => {
+                btn.addEventListener('pointerenter', () => {
+                    if (!btn.disabled && typeof prewarmLaunchEnvironment === 'function') {
+                        prewarmLaunchEnvironment(btn.dataset.profileId);
+                    }
+                }, { passive: true });
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (btn.disabled) return;
+                    const pid = btn.dataset.profileId;
+                    const isThisRunning = isRunning && (runningProfileId ? pid === runningProfileId : pid === currentConfig.activeProfileId);
+                    if (isThisRunning) {
+                        if (confirm('Chceš ukončit běžící Minecraft proces?')) {
+                            markUserRequestedStop();
+                            try {
+                                await window.api.killGame();
+                            } catch (err) { }
+                            resetPlayState();
+                        }
+                        return;
+                    }
+                    if (isRunning) {
+                        showToast('Hra již běží. Před spuštěním nebo stažením jiné verze nejprve ukonči běžící hru.', 'error');
+                        return;
+                    }
+                    if (isLaunching) {
+                        showToast('Probíhá stahování nebo spouštění jiné verze. Počkej prosím na dokončení.', 'warning');
+                        return;
+                    }
+                    try {
+                        selectActiveProfile(pid);
+                        await startLaunch(pid, null);
+                    } catch (launchErr) {
+                        console.error('[LAUNCH ERROR]', launchErr);
+                        showToast('Nepodařilo se spustit hru.', 'error');
+                    }
+                });
             });
-        });
 
-        // Duplicate button
-        list.querySelectorAll('.btn-profile-duplicate').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                if (typeof isDuplicatingProfile !== 'undefined' && isDuplicatingProfile) return;
-                const pid = btn.dataset.profileId;
-                await executeProfileDuplicate(pid);
+
+            // Quick folder button
+            container.querySelectorAll('.btn-profile-quick-folder').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const pid = btn.dataset.profileId;
+                    await window.api.openProfileFolder(pid, '');
+                });
             });
-        });
 
-        // Upgrade hint click
-        list.querySelectorAll('.spec-upgrade-hint').forEach(el => {
-            el.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const pid = el.dataset.upgradePid;
-                if (typeof openUpgradeModal === 'function') {
-                    openUpgradeModal(pid);
-                }
+            // Duplicate button
+            container.querySelectorAll('.btn-profile-duplicate').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (typeof isDuplicatingProfile !== 'undefined' && isDuplicatingProfile) return;
+                    const pid = btn.dataset.profileId;
+                    await executeProfileDuplicate(pid);
+                });
             });
-        });
 
-        // Bind Settings buttons (Gear icon) to open Profile Settings Modal
-        list.querySelectorAll('.btn-profile-settings').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const pid = btn.dataset.profileId;
-                openProfileSettingsModal(pid);
+            // Upgrade hint click
+            container.querySelectorAll('.spec-upgrade-hint').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const pid = el.dataset.upgradePid;
+                    if (typeof openUpgradeModal === 'function') {
+                        openUpgradeModal(pid);
+                    }
+                });
             });
-        });
 
-        // Bind Delete buttons (Trash icon) to remove and uninstall profile
-        list.querySelectorAll('.btn-profile-delete').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                if (btn.disabled || isRunning || isLaunching) {
-                    showToast(isRunning ? 'Nelze mazat profily během běhu hry.' : 'Nelze mazat profily během stahování / spouštění.', 'warning');
-                    return;
-                }
-                const pid = btn.dataset.profileId;
-                const p = (currentConfig.profiles || []).find(x => x.id === pid);
-                const pName = p ? p.name : pid;
-                if ((currentConfig.profiles || []).length <= 1) {
-                    showToast('V launcheru musí zůstat alespoň jeden profil.', 'warning');
-                    return;
-                }
-                const isConfirmed = confirm(
-                    `Opravdu chceš odebrat a odinstalovat profil "${pName}"?\n\n` +
-                    `Tato akce profil odstraní a odinstaluje soubory verze, které nepoužívá žádný jiný profil.`
-                );
-                if (!isConfirmed) return;
+            // Bind Settings buttons (Gear icon) to open Profile Settings Modal
+            container.querySelectorAll('.btn-profile-settings').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const pid = btn.dataset.profileId;
+                    openProfileSettingsModal(pid);
+                });
+            });
 
-                btn.disabled = true;
-                try {
-                    const res = await window.api.deleteProfile(pid);
-                    if (res && res.success) {
-                        showToast(`Profil "${pName}" byl odebrán a odinstalován.`, 'success');
-                        await loadConfiguration();
-                        renderProfilesList();
-                    } else {
-                        showToast(res?.error || 'Profil se nepodařilo odebrat.', 'error');
+            // Bind Delete buttons (Trash icon) to remove and uninstall profile
+            container.querySelectorAll('.btn-profile-delete').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (btn.disabled || isRunning || isLaunching) {
+                        showToast(isRunning ? 'Nelze mazat profily během běhu hry.' : 'Nelze mazat profily během stahování / spouštění.', 'warning');
+                        return;
+                    }
+                    const pid = btn.dataset.profileId;
+                    const p = (currentConfig.profiles || []).find(x => x.id === pid);
+                    const pName = p ? p.name : pid;
+                    if ((currentConfig.profiles || []).length <= 1) {
+                        showToast('V launcheru musí zůstat alespoň jeden profil.', 'warning');
+                        return;
+                    }
+                    const isConfirmed = confirm(
+                        `Opravdu chceš odebrat a odinstalovat profil "${pName}"?\n\n` +
+                        `Tato akce profil odstraní a odinstaluje soubory verze, které nepoužívá žádný jiný profil.`
+                    );
+                    if (!isConfirmed) return;
+
+                    btn.disabled = true;
+                    try {
+                        const res = await window.api.deleteProfile(pid);
+                        if (res && res.success) {
+                            showToast(`Profil "${pName}" byl odebrán a odinstalován.`, 'success');
+                            await loadConfiguration();
+                            renderProfilesList();
+                        } else {
+                            showToast(res?.error || 'Profil se nepodařilo odebrat.', 'error');
+                            btn.disabled = false;
+                        }
+                    } catch (err) {
+                        showToast('Chyba: ' + err.message, 'error');
                         btn.disabled = false;
                     }
-                } catch (err) {
-                    showToast('Chyba: ' + err.message, 'error');
-                    btn.disabled = false;
-                }
+                });
             });
-        });
+        }
+
+        if (list) attachProfileEvents(list);
+        if (tabList) attachProfileEvents(tabList);
     }
 
     function selectActiveProfile(profileId, isManual = true) {
@@ -4283,8 +4298,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="installed-mod-row ${m.enabled ? 'mod-enabled' : 'mod-disabled'}" data-filename="${escapeHtml(m.filename)}">
                 <div class="mod-row-left">
                     <div class="mod-avatar-wrapper">
-                        ${m.iconDataUrl
-                    ? `<img src="${m.iconDataUrl}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                        ${(m.iconDataUrl || m.iconUrl)
+                    ? `<img src="${m.iconDataUrl || m.iconUrl}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
                                <div class="mod-avatar-fallback" style="display:none;">${escapeHtml(initial)}</div>`
                     : `<div class="mod-avatar-fallback">${escapeHtml(initial)}</div>`
                 }
@@ -4452,8 +4467,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="installed-mod-row ${p.enabled ? 'mod-enabled' : 'mod-disabled'}" data-filename="${escapeHtml(p.filename)}">
                 <div class="mod-row-left">
                     <div class="mod-avatar-wrapper">
-                        ${p.iconDataUrl
-                    ? `<img src="${p.iconDataUrl}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                        ${(p.iconDataUrl || p.iconUrl)
+                    ? `<img src="${p.iconDataUrl || p.iconUrl}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
                                <div class="mod-avatar-fallback" style="display:none;">${escapeHtml(initial)}</div>`
                     : `<div class="mod-avatar-fallback">${escapeHtml(initial)}</div>`
                 }
@@ -4831,7 +4846,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 catalogLimit
             );
 
-            const received = Array.isArray(mods) ? mods : [];
+            const received = Array.isArray(mods)
+                ? mods
+                : (mods && Array.isArray(mods.hits) ? mods.hits : []);
             if (received.length < catalogLimit) {
                 hasMoreCatalogMods = false;
             }
@@ -4898,7 +4915,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function renderModCards(mods) {
         if (!modsCardsList) return;
-        if (!mods || mods.length === 0) {
+        const rawList = Array.isArray(mods) ? mods : (mods && Array.isArray(mods.hits) ? mods.hits : []);
+        if (!rawList || rawList.length === 0) {
             modsCardsList.innerHTML = `<div class="mods-loading">Nenalezeny žádné položky odpovídající hledání.</div>`;
             const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
             if (btnUpdateAll) btnUpdateAll.style.display = 'none';
@@ -4908,18 +4926,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         const targetProfile = (currentConfig.profiles || []).find(p => p.id === (selectedModsProfileId || currentConfig.activeProfileId));
         const targetMcVersion = targetProfile?.version || currentModFilter.version || '26.3';
 
-        // Pokud je vybrána verze hry, zobrazujeme v katalogu pouze kompatibilní mody pro danou verzi
-        const displayMods = mods.filter(m => {
+        // Pokud je vybrána verze hry, zobrazujeme v katalogu kompatibilní položky
+        let displayMods = rawList.filter(m => {
             if (!targetMcVersion) return true;
-            if (!m.latest_game_versions || m.latest_game_versions.length === 0) return true;
-            return m.latest_game_versions.includes(targetMcVersion);
+            const vers = m.versions || m.latest_game_versions;
+            if (!vers || !Array.isArray(vers) || vers.length === 0) return true;
+            if (vers.includes(targetMcVersion)) return true;
+            if (targetMcVersion.startsWith('26.')) {
+                return vers.some(v => typeof v === 'string' && (v.startsWith('26.') || v === '1.21.11'));
+            }
+            return true;
         });
 
         if (displayMods.length === 0) {
-            modsCardsList.innerHTML = `<div class="mods-loading">Žádné položky odpovídající verzi MC ${escapeHtml(targetMcVersion)}.</div>`;
-            const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
-            if (btnUpdateAll) btnUpdateAll.style.display = 'none';
-            return;
+            displayMods = rawList;
         }
 
         const updateableMods = [];
@@ -9264,11 +9284,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Probíhá bezpečné promazávání starých logů a cache...';
             try {
                 const res = await window.api.cleanLauncherCache();
+                const msg = (res && res.message) || (res && res.formattedFreed ? `Vyčištěno (uvolněno ${res.formattedFreed})` : 'Cache byla úspěšně vyčištěna.');
                 if (cacheCleanerSummary) {
-                    cacheCleanerSummary.textContent = res.message;
+                    cacheCleanerSummary.textContent = msg;
                 }
-                showToast(res.message, 'success');
-                appendLog(`[ČIŠTĚNÍ CACHE] ${res.message}`);
+                showToast(msg, 'success');
+                appendLog(`[ČIŠTĚNÍ CACHE] ${msg}`);
             } catch (err) {
                 if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Chyba při čištění: ' + err.message;
                 showToast('Chyba při čištění: ' + err.message, 'error');
@@ -9408,6 +9429,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (btnOpenCreateProfileModal) btnOpenCreateProfileModal.addEventListener('click', openCreateProfileModal);
+    const btnCreateProfileFromProfilesTab = document.getElementById('btnCreateProfileFromProfilesTab');
+    if (btnCreateProfileFromProfilesTab) btnCreateProfileFromProfilesTab.addEventListener('click', openCreateProfileModal);
+
+    const btnGoToProfilesTab = document.getElementById('btnGoToProfilesTab');
+    if (btnGoToProfilesTab) {
+        btnGoToProfilesTab.addEventListener('click', () => switchTab('profiles'));
+    }
+
+    const btnImportProfileFromProfilesTab = document.getElementById('btnImportProfileFromProfilesTab');
+    if (btnImportProfileFromProfilesTab) {
+        btnImportProfileFromProfilesTab.addEventListener('click', () => {
+            const impBtn = document.getElementById('btnActionImportProfile') || document.getElementById('btnOpenImportModal');
+            if (impBtn) impBtn.click();
+        });
+    }
+
+    const btnOpenSeedModalFromProfilesTab = document.getElementById('btnOpenSeedModalFromProfilesTab');
+    if (btnOpenSeedModalFromProfilesTab) {
+        btnOpenSeedModalFromProfilesTab.addEventListener('click', () => {
+            const seedBtn = document.getElementById('btnOpenSeedModalFromHeader') || document.getElementById('btnOpenSeedModal');
+            if (seedBtn) seedBtn.click();
+        });
+    }
     if (btnCloseCreateProfileModal) btnCloseCreateProfileModal.addEventListener('click', closeCreateProfileModal);
     if (btnCancelCreateProfile) btnCancelCreateProfile.addEventListener('click', closeCreateProfileModal);
 

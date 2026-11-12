@@ -279,11 +279,14 @@ pub fn clean_launcher_cache() -> Value {
         }
     }
 
+    let formatted = format_bytes(freed_bytes);
+    let msg = format!("Vyčištěno {} souborů (uvolněno {})", deleted_files, formatted);
     json!({
         "success": true,
         "deletedFiles": deleted_files,
         "freedBytes": freed_bytes,
-        "formattedFreed": format_bytes(freed_bytes)
+        "formattedFreed": formatted,
+        "message": msg
     })
 }
 
@@ -1234,7 +1237,7 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
             let wrapper_path = local_bin_dir.join("mychalsmp-launcher");
             let _ = fs::remove_file(&wrapper_path);
             let wrapper_content = format!(
-                "#!/usr/bin/env bash\nexport WEBKIT_DISABLE_DMABUF_RENDERER=1\nexport WEBKIT_DISABLE_COMPOSITING_MODE=1\nexec \"{}\" \"$@\"\n",
+                "#!/usr/bin/env bash\nexport WEBKIT_DISABLE_DMABUF_RENDERER=1\nexec \"{}\" \"$@\"\n",
                 local_install_dir.join("mychalsmp-launcher").to_string_lossy()
             );
             if fs::write(&wrapper_path, wrapper_content).is_ok() {
@@ -1319,5 +1322,20 @@ fn is_newer_version(remote: &str, local: &str) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clean_launcher_cache_returns_message() {
+        let res = clean_launcher_cache();
+        assert!(res.get("success").and_then(|v| v.as_bool()).unwrap_or(false));
+        let msg = res.get("message").and_then(|v| v.as_str());
+        assert!(msg.is_some(), "clean_launcher_cache must return message field");
+        assert!(!msg.unwrap().is_empty());
+        assert!(res.get("formattedFreed").is_some());
+    }
 }
 

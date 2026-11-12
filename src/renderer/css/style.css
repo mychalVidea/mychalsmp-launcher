@@ -1358,6 +1358,16 @@ body.is-maximized {
     border-color: rgba(255, 255, 255, 0.2);
 }
 
+.profiles-tab-scroll-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0 4px 16px 4px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
 .profile-cards-list {
     display: flex;
     flex-direction: column;
@@ -1378,6 +1388,12 @@ body.is-maximized {
     scroll-padding-top: 8px;
     -webkit-mask-image: linear-gradient(to bottom, transparent 0px, black 6px, black calc(100% - 10px), transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0px, black 6px, black calc(100% - 10px), transparent 100%);
+}
+
+.profile-cards-list--full {
+    max-height: none;
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
 }
 
 .profile-cards-list::-webkit-scrollbar {
@@ -7649,21 +7665,47 @@ input[type="range"].slider.is-dragging::-webkit-slider-thumb {
     letter-spacing: 0.5px;
 }
 
-.mods-profile-dropdown {
-    background: var(--surface2);
-    border: 1px solid var(--surface-border);
-    color: #fff;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 6px 12px;
-    border-radius: 6px;
+.mods-profile-dropdown,
+.input-select {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    background-color: #18181c !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 10px center !important;
+    background-size: 14px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #f1f5f9 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    padding: 7px 32px 7px 12px !important;
+    border-radius: var(--radius-control, 10px) !important;
     min-width: 220px;
     cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
 }
 
-.mods-profile-dropdown:focus {
-    outline: none;
-    border-color: var(--brand-blue);
+.mods-profile-dropdown:hover,
+.input-select:hover {
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    background-color: #202026 !important;
+}
+
+.mods-profile-dropdown:focus,
+.input-select:focus {
+    outline: none !important;
+    border-color: var(--brand-blue, #0a67e5) !important;
+    box-shadow: 0 0 0 2px rgba(10, 103, 229, 0.22) !important;
+}
+
+.mods-profile-dropdown option,
+.input-select option {
+    background-color: #18181c !important;
+    color: #f1f5f9 !important;
+    padding: 8px 12px !important;
+    font-size: 13px !important;
 }
 
 .mods-topbar-switch {

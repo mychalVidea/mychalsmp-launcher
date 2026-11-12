@@ -67,8 +67,8 @@
     getInstalledVersions: () => invoke('get_installed_versions'),
 
     // Modrinth Browsing
-    searchModrinth: (query, version, loader, category, projectType, offset, limit) =>
-      invoke('search_modrinth', {
+    searchModrinth: async (query, version, loader, category, projectType, offset, limit) => {
+      const res = await invoke('search_modrinth', {
         query: query ?? '',
         version: version ?? null,
         loader: loader ?? null,
@@ -76,7 +76,9 @@
         projectType: projectType ?? null,
         offset: offset ?? 0,
         limit: limit ?? 20
-      }),
+      });
+      return (res && Array.isArray(res.hits)) ? res.hits : res;
+    },
     downloadModOrPack: (options) => invoke('download_mod_or_pack', { options }),
     checkProfileModUpdates: (profileId) => invoke('check_profile_mod_updates', { profileId: profileId ?? null }),
     onModDownloadProgress: (callback) => on('mod-download-progress', callback),

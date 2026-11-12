@@ -496,7 +496,7 @@ pub async fn download_mod_or_pack_with_deps(
     }))
 }
 
-fn parse_jar_metadata(path: &Path, filename: &str) -> (String, String, String, Option<String>) {
+fn parse_jar_metadata(path: &Path, filename: &str) -> (String, String, String, Option<String>, Option<String>) {
     let clean_base = filename
         .trim_end_matches(".disabled")
         .trim_end_matches(".jar")
@@ -505,6 +505,8 @@ fn parse_jar_metadata(path: &Path, filename: &str) -> (String, String, String, O
     let mut version = String::from("1.0");
     let mut mod_id = clean_base.to_lowercase();
     let mut description = None;
+    let mut icon_data_url = None;
+    let mut declared_icon_path = None;
 
     if let Ok(file) = File::open(path) {
         if let Ok(mut archive) = ZipArchive::new(file) {
@@ -526,12 +528,116 @@ fn parse_jar_metadata(path: &Path, filename: &str) -> (String, String, String, O
                         if let Some(desc) = val.get("description").and_then(|v| v.as_str()) {
                             description = Some(desc.to_string());
                         }
+                        if let Some(icon_val) = val.get("icon") {
+                            if let Some(icon_str) = icon_val.as_str() {
+                                declared_icon_path = Some(icon_str.trim_start_matches('/').to_string());
+                            } else if let Some(icon_obj) = icon_val.as_object() {
+                                if let Some((_, v)) = icon_obj.iter().next() {
+                                    if let Some(s) = v.as_str() {
+                                        declared_icon_path = Some(s.trim_start_matches('/').to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Ok(mut f) = archive.by_name("quilt.mod.json") {
+                let mut content = String::new();
+                if f.read_to_string(&mut content).is_ok() {
+                    if let Ok(val) = serde_json::from_str::<Value>(&content) {
+                        if let Some(id) = val.pointer("/quilt_loader/id").and_then(|v| v.as_str()) {
+                            mod_id = id.to_lowercase();
+                        }
+                        if let Some(n) = val.pointer("/quilt_loader/metadata/name").and_then(|v| v.as_str()) {
+                            name = n.to_string();
+                        }
+                        if let Some(ver) = val.pointer("/quilt_loader/version").and_then(|v| v.as_str()) {
+                            if !ver.contains("${") {
+                                version = ver.to_string();
+                            }
+                        }
+                        if let Some(desc) = val.pointer("/quilt_loader/metadata/description").and_then(|v| v.as_str()) {
+                            description = Some(desc.to_string());
+                        }
+                        if let Some(icon_val) = val.pointer("/quilt_loader/metadata/icon") {
+                            if let Some(icon_str) = icon_val.as_str() {
+                                declared_icon_path = Some(icon_str.trim_start_matches('/').to_string());
+                            }
+                        }
+                    }
+                }
+            }
+
+            let mut candidates = Vec::new();
+            if let Some(ref p) = declared_icon_path {
+                candidates.push(p.clone());
+            }
+            candidates.push("icon.png".to_string());
+            candidates.push(format!("assets/{}/icon.png", mod_id));
+            candidates.push("assets/icon.png".to_string());
+            candidates.push("pack.png".to_string());
+
+            for cand in candidates {
+                if let Ok(mut icon_file) = archive.by_name(&cand) {
+                    if icon_file.is_file() {
+                        let mut bytes = Vec::new();
+                        if icon_file.by_ref().take(2_000_000).read_to_end(&mut bytes).is_ok() && !bytes.is_empty() {
+                            let mime = if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+                                "image/png"
+                            } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+                                "image/jpeg"
+                            } else if bytes.starts_with(b"GIF8") {
+                                "image/gif"
+                            } else if bytes.starts_with(b"<svg") || bytes.starts_with(b"<?xml") {
+                                "image/svg+xml"
+                            } else {
+                                "image/png"
+                            };
+                            use base64::Engine;
+                            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                            icon_data_url = Some(format!("data:{};base64,{}", mime, b64));
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if icon_data_url.is_none() {
+                for i in 0..archive.len() {
+                    let (cand_name, is_file) = match archive.by_index(i) {
+                        Ok(f) => (f.name().to_string(), f.is_file()),
+                        Err(_) => continue,
+                    };
+                    let n = cand_name.to_lowercase();
+                    if is_file && (n.ends_with("/icon.png") || n == "icon.png" || n.ends_with("/logo.png") || n == "logo.png") {
+                        if let Ok(mut icon_file) = archive.by_index(i) {
+                            let mut bytes = Vec::new();
+                            if icon_file.by_ref().take(2_000_000).read_to_end(&mut bytes).is_ok() && !bytes.is_empty() {
+                                let mime = if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+                                    "image/png"
+                                } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+                                    "image/jpeg"
+                                } else if bytes.starts_with(b"GIF8") {
+                                    "image/gif"
+                                } else if bytes.starts_with(b"<svg") || bytes.starts_with(b"<?xml") {
+                                    "image/svg+xml"
+                                } else {
+                                    "image/png"
+                                };
+                                use base64::Engine;
+                                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                icon_data_url = Some(format!("data:{};base64,{}", mime, b64));
+                                break;
+                            }
+                        }
                     }
                 }
             }
         }
     }
-    (mod_id, name, version, description)
+    (mod_id, name, version, description, icon_data_url)
 }
 
 pub fn get_profile_mods_list(profile_id: Option<&str>) -> Value {
@@ -575,7 +681,7 @@ pub fn get_profile_mods_list(profile_id: Option<&str>) -> Value {
             let enabled = lower.ends_with(".jar");
             let path = entry.path();
             let size_bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            let (mod_id, parsed_name, version, description) = parse_jar_metadata(&path, &fname);
+            let (mod_id, parsed_name, version, description, extracted_icon) = parse_jar_metadata(&path, &fname);
 
             if enabled {
                 id_map.entry(mod_id.clone()).or_default().push(fname.clone());
@@ -588,6 +694,12 @@ pub fn get_profile_mods_list(profile_id: Option<&str>) -> Value {
                 .and_then(|v| v.as_str())
                 .unwrap_or(&parsed_name);
 
+            let icon_val = extracted_icon
+                .as_deref()
+                .map(Value::from)
+                .or_else(|| reg_entry.and_then(|r| r.get("iconUrl")).cloned())
+                .unwrap_or(Value::Null);
+
             mods.push(json!({
                 "filename": fname,
                 "id": mod_id,
@@ -599,8 +711,8 @@ pub fn get_profile_mods_list(profile_id: Option<&str>) -> Value {
                 "enabled": enabled,
                 "sizeBytes": size_bytes,
                 "projectId": reg_entry.and_then(|r| r.get("projectId")).cloned().unwrap_or(Value::Null),
-                "iconUrl": reg_entry.and_then(|r| r.get("iconUrl")).cloned().unwrap_or(Value::Null),
-                "iconDataUrl": reg_entry.and_then(|r| r.get("iconUrl")).cloned().unwrap_or(Value::Null),
+                "iconUrl": icon_val,
+                "iconDataUrl": icon_val,
                 "isCore": mod_id == "selfnametag"
             }));
         }
@@ -814,11 +926,28 @@ pub fn get_profile_packs_list(profile_id: Option<&str>, pack_type: &str) -> Valu
                 .trim_end_matches(".zip")
                 .to_string();
             let size_bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            let mut pack_icon = None;
+            let pack_path = entry.path();
+            if pack_path.is_file() && (fname.ends_with(".zip") || fname.ends_with(".zip.disabled")) {
+                if let Ok(file) = File::open(&pack_path) {
+                    if let Ok(mut archive) = ZipArchive::new(file) {
+                        if let Ok(mut f) = archive.by_name("pack.png") {
+                            let mut b = Vec::new();
+                            if f.by_ref().take(2_000_000).read_to_end(&mut b).is_ok() && !b.is_empty() {
+                                use base64::Engine;
+                                let b64 = base64::engine::general_purpose::STANDARD.encode(&b);
+                                pack_icon = Some(format!("data:image/png;base64,{}", b64));
+                            }
+                        }
+                    }
+                }
+            }
             packs.push(json!({
                 "filename": fname,
                 "name": clean_name,
                 "enabled": enabled,
-                "sizeBytes": size_bytes
+                "sizeBytes": size_bytes,
+                "iconDataUrl": pack_icon.as_deref().map(Value::from).unwrap_or(Value::Null)
             }));
         }
     }
@@ -1255,6 +1384,30 @@ pub fn check_profile_optimization_status(profile_id: &str) -> Value {
 
 pub async fn check_profile_mod_updates(profile_id: Option<&str>) -> Value {
     check_profile_mod_updates_bulk(profile_id).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_parse_jar_metadata_fallback() {
+        let dummy_path = PathBuf::from("/non/existent/path/dummy.jar");
+        let (mod_id, name, version, desc, icon) = parse_jar_metadata(&dummy_path, "testmod-1.2.3.jar");
+        assert_eq!(mod_id, "testmod-1.2.3");
+        assert_eq!(name, "testmod-1.2.3");
+        assert_eq!(version, "1.0");
+        assert!(desc.is_none());
+        assert!(icon.is_none());
+    }
+
+    #[test]
+    fn test_get_profile_mods_list_returns_valid_structure() {
+        let list = get_profile_mods_list(None);
+        assert!(list.get("success").and_then(|v| v.as_bool()).unwrap_or(false));
+        assert!(list.get("mods").and_then(|v| v.as_array()).is_some());
+    }
 }
 
 

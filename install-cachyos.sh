@@ -18,10 +18,10 @@ mkdir -p "$BIN_DIR"
 mkdir -p "$DESKTOP_DIR"
 mkdir -p "$ICON_DIR"
 
-# 0. Kontrola WebKit2GTK 4.1 na CachyOS / Arch Linuxu
-if command -v pacman >/dev/null 2>&1 && ! pacman -Qi webkit2gtk-4.1 >/dev/null 2>&1; then
-    echo "📦 Instaluji závislosti pro CachyOS / Arch (webkit2gtk-4.1, gtk3)..."
-    sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 libayatana-appindicator 2>/dev/null || sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3
+# 0. Kontrola WebKit2GTK 4.1 a AppIndicator na CachyOS / Arch Linuxu
+if command -v pacman >/dev/null 2>&1 && (! pacman -Qi webkit2gtk-4.1 >/dev/null 2>&1 || ! pacman -Qi libayatana-appindicator >/dev/null 2>&1); then
+    echo "📦 Instaluji závislosti pro CachyOS / Arch (webkit2gtk-4.1, gtk3, libayatana-appindicator)..."
+    sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 libayatana-appindicator 2>/dev/null || sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 || true
 fi
 
 # 1. Zkopírovat nativní Tauri binárku nebo rozbalit tar.gz
@@ -49,8 +49,7 @@ fi
 rm -f "$BIN_DIR/mychalsmp-launcher"
 cat <<EOF > "$BIN_DIR/mychalsmp-launcher"
 #!/usr/bin/env bash
-export WEBKIT_DISABLE_DMABUF_RENDERER=1
-export WEBKIT_DISABLE_COMPOSITING_MODE=1
+# Na moderním WebKitGTK 2.44+ a CachyOS s NVIDIA běží plná GPU hardwarová akcelerace
 exec "$INSTALL_DIR/mychalsmp-launcher" "\$@"
 EOF
 chmod +x "$BIN_DIR/mychalsmp-launcher" "$INSTALL_DIR/mychalsmp-launcher"

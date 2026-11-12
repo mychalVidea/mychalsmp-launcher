@@ -202,6 +202,18 @@ async fn launch_game(
             return;
         }
 
+        let app_nat = app_clone.clone();
+        let _ = app_nat.emit(
+            "launch-progress",
+            json!({ "percent": 45, "text": "Příprava nativních knihoven (LWJGL)..." }),
+        );
+        if let Err(e) = crate::launcher::extract_natives(&base_dir, &manifest.id, &manifest.libraries, target_os) {
+            eprintln!("[LAUNCHER] Varování při extrakci nativních knihoven pro {}: {}", manifest.id, e);
+        }
+        if mc_ver_owned != manifest.id {
+            let _ = crate::launcher::extract_natives(&base_dir, &mc_ver_owned, &manifest.libraries, target_os);
+        }
+
         let app_ast = app_clone.clone();
         let _ = app_clone.emit(
             "launch-progress",
@@ -1070,6 +1082,29 @@ fn delete_profile_pack(
 // 14. Tauri v2 Application Runner
 // ─────────────────────────────────────────────────────────────────────────────
 
+#[cfg(target_os = "linux")]
+fn is_tray_supported_on_linux() -> bool {
+    let libs = [
+        b"libayatana-appindicator3.so.1\0".as_ptr() as *const libc::c_char,
+        b"libayatana-appindicator3.so\0".as_ptr() as *const libc::c_char,
+        b"libappindicator3.so.1\0".as_ptr() as *const libc::c_char,
+        b"libappindicator3.so\0".as_ptr() as *const libc::c_char,
+    ];
+    for &lib in &libs {
+        let handle = unsafe { libc::dlopen(lib, libc::RTLD_LAZY | libc::RTLD_LOCAL) };
+        if !handle.is_null() {
+            unsafe { libc::dlclose(handle) };
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(not(target_os = "linux"))]
+fn is_tray_supported_on_linux() -> bool {
+    true
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -1166,69 +1201,73 @@ pub fn run() {
             let _ = crate::config::load_config();
 
             // Setup Native System Tray (SMPClient)
-            let show_item = tauri::menu::MenuItem::with_id(
-                app,
-                "show",
-                "Otevřít SMPClient",
-                true,
-                None::<&str>,
-            );
-            let quit_item = tauri::menu::MenuItem::with_id(
-                app,
-                "quit",
-                "Ukončit",
-                true,
-                None::<&str>,
-            );
+            if is_tray_supported_on_linux() {
+                let show_item = tauri::menu::MenuItem::with_id(
+                    app,
+                    "show",
+                    "Otevřít SMPClient",
+                    true,
+                    None::<&str>,
+                );
+                let quit_item = tauri::menu::MenuItem::with_id(
+                    app,
+                    "quit",
+                    "Ukončit",
+                    true,
+                    None::<&str>,
+                );
 
-            if let (Ok(show_i), Ok(quit_i)) = (show_item, quit_item) {
-                if let Ok(menu) = tauri::menu::Menu::with_items(app, &[&show_i, &quit_i]) {
-                    let mut tray_builder = tauri::tray::TrayIconBuilder::with_id("smpclient-tray")
-                        .tooltip("SMPClient — MYCHAL SMP Launcher")
-                        .menu(&menu)
-                        .show_menu_on_left_click(false)
-                        .on_menu_event(|app_handle, event| match event.id.as_ref() {
-                            "show" => {
-                                if let Some(win) = app_handle.get_webview_window("main") {
-                                    let _ = win.show();
-                                    let _ = win.unminimize();
-                                    let _ = win.set_focus();
-                                    let _ = app_handle.emit("window-restored-from-tray", ());
-                                }
-                            }
-                            "quit" => {
-                                app_handle.exit(0);
-                            }
-                            _ => {}
-                        })
-                        .on_tray_icon_event(|tray, event| {
-                            if let tauri::tray::TrayIconEvent::Click {
-                                button: tauri::tray::MouseButton::Left,
-                                button_state: tauri::tray::MouseButtonState::Up,
-                                ..
-                            } = event
-                            {
-                                let app_handle = tray.app_handle();
-                                if let Some(win) = app_handle.get_webview_window("main") {
-                                    let is_vis = win.is_visible().unwrap_or(false);
-                                    if is_vis {
-                                        let _ = win.set_focus();
-                                    } else {
+                if let (Ok(show_i), Ok(quit_i)) = (show_item, quit_item) {
+                    if let Ok(menu) = tauri::menu::Menu::with_items(app, &[&show_i, &quit_i]) {
+                        let mut tray_builder = tauri::tray::TrayIconBuilder::with_id("smpclient-tray")
+                            .tooltip("SMPClient — MYCHAL SMP Launcher")
+                            .menu(&menu)
+                            .show_menu_on_left_click(false)
+                            .on_menu_event(|app_handle, event| match event.id.as_ref() {
+                                "show" => {
+                                    if let Some(win) = app_handle.get_webview_window("main") {
                                         let _ = win.show();
                                         let _ = win.unminimize();
                                         let _ = win.set_focus();
                                         let _ = app_handle.emit("window-restored-from-tray", ());
                                     }
                                 }
-                            }
-                        });
+                                "quit" => {
+                                    app_handle.exit(0);
+                                }
+                                _ => {}
+                            })
+                            .on_tray_icon_event(|tray, event| {
+                                if let tauri::tray::TrayIconEvent::Click {
+                                    button: tauri::tray::MouseButton::Left,
+                                    button_state: tauri::tray::MouseButtonState::Up,
+                                    ..
+                                } = event
+                                {
+                                    let app_handle = tray.app_handle();
+                                    if let Some(win) = app_handle.get_webview_window("main") {
+                                        let is_vis = win.is_visible().unwrap_or(false);
+                                        if is_vis {
+                                            let _ = win.set_focus();
+                                        } else {
+                                            let _ = win.show();
+                                            let _ = win.unminimize();
+                                            let _ = win.set_focus();
+                                            let _ = app_handle.emit("window-restored-from-tray", ());
+                                        }
+                                    }
+                                }
+                            });
 
-                    if let Some(icon) = app.default_window_icon().cloned() {
-                        tray_builder = tray_builder.icon(icon);
+                        if let Some(icon) = app.default_window_icon().cloned() {
+                            tray_builder = tray_builder.icon(icon);
+                        }
+
+                        let _ = tray_builder.build(app);
                     }
-
-                    let _ = tray_builder.build(app);
                 }
+            } else {
+                eprintln!("[Tray] Neither libayatana-appindicator3 nor libappindicator3 found. Tray icon disabled.");
             }
 
             Ok(())

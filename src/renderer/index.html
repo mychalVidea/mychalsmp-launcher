@@ -87,6 +87,13 @@
                         <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     </svg>
                 </button>
+                <button class="nav-icon-btn" data-tab="profiles" title="Profily">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
+                </button>
                 <button class="nav-icon-btn" data-tab="mods" title="Módy">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path
@@ -282,6 +289,10 @@
                                     <span id="profilesSectionTitle">Dostupné herní profily</span>
                                 </div>
                                 <div class="section-header-actions">
+                                    <button type="button" class="mc-btn mc-btn-secondary btn-xs" id="btnGoToProfilesTab"
+                                        title="Přejít do správy profilů">
+                                        <span>Spravovat profily &rarr;</span>
+                                    </button>
                                     <button type="button" class="btn-import-seed-main" id="btnOpenSeedModalFromHeader"
                                         title="Sdílet nebo importovat profil přes kód balíčku SMP-PACK">
                                         <span>
@@ -551,6 +562,60 @@
             </section>
 
             <!-- ══════════════════════════════════════════════════════════════════
+                 TAB: PROFILY (SPRÁVA HERNÍCH PROFILŮ A INSTALACÍ)
+            ══════════════════════════════════════════════════════════════════ -->
+            <section class="tab-pane" id="tab-profiles">
+                <div class="pane-header pane-header--with-actions">
+                    <div class="pane-header-title">
+                        <h2>Profily</h2>
+                        <p>Správa instalací, verzí Minecraftu, modpacků a paměti RAM.</p>
+                    </div>
+                    <div class="pane-header-actions">
+                        <button type="button" class="mc-btn mc-btn-secondary" id="btnOpenSeedModalFromProfilesTab"
+                            title="Sdílet nebo importovat profil přes kód balíčku SMP-PACK">
+                            <span>
+                                <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                    <polyline points="16 16 12 12 8 16"></polyline>
+                                    <line x1="12" y1="12" x2="12" y2="21"></line>
+                                    <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+                                    <polyline points="16 8 12 12 8 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                SMP-PACK
+                            </span>
+                        </button>
+                        <button type="button" class="mc-btn mc-btn-secondary" id="btnImportProfileFromProfilesTab"
+                            title="Importovat profil ze souboru nebo složky">
+                            <span>
+                                <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                Importovat
+                            </span>
+                        </button>
+                        <button type="button" class="mc-btn mc-btn-primary" id="btnCreateProfileFromProfilesTab"
+                            title="Vytvořit nový Minecraft profil">
+                            <span>
+                                <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                Nový profil
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="profiles-tab-scroll-container">
+                    <div class="profile-cards-list profile-cards-list--full" id="profilesTabCardsList">
+                        <!-- Profile cards rendered dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- ══════════════════════════════════════════════════════════════════
                  TAB 2: SPRÁVA MÓDŮ & PROFILŮ (Nainstalované i Modrinth)
             ══════════════════════════════════════════════════════════════════ -->
             <section class="tab-pane" id="tab-mods">
@@ -559,6 +624,17 @@
                     <div class="mods-topbar-profile">
                         <label for="modsProfileSelect" class="mods-picker-label">Spravovat profil:</label>
                         <select id="modsProfileSelect" class="input-select mods-profile-dropdown"></select>
+                        <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnGoToProfilesTabFromMods"
+                            title="Otevřít správu všech profilů">
+                            <span>
+                                <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                                    <polyline points="2 17 12 22 22 17"></polyline>
+                                    <polyline points="2 12 12 17 22 12"></polyline>
+                                </svg>
+                                Správa profilů
+                            </span>
+                        </button>
                         <button type="button" class="mc-btn mc-btn-secondary btn-sm"
                             id="btnOpenSelectedProfileModsFolder" title="Otevřít složku mods vybraného profilu">
                             <span>
