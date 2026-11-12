@@ -18,17 +18,26 @@ mkdir -p "$BIN_DIR"
 mkdir -p "$DESKTOP_DIR"
 mkdir -p "$ICON_DIR"
 
-# 1. Zkopírovat binárky z dist/linux-unpacked nebo rozbalit tar.gz
-if [ -d "$DIR/dist/linux-unpacked" ]; then
-    echo "📦 Kopíruji herní soubory..."
-    cp -r "$DIR/dist/linux-unpacked/"* "$INSTALL_DIR/"
-elif [ -f "$DIR/dist/mychalsmp-launcher-1.0.0.tar.gz" ]; then
+# 0. Kontrola WebKit2GTK 4.1 na CachyOS / Arch Linuxu
+if command -v pacman >/dev/null 2>&1 && ! pacman -Qi webkit2gtk-4.1 >/dev/null 2>&1; then
+    echo "📦 Instaluji závislosti pro CachyOS / Arch (webkit2gtk-4.1, gtk3)..."
+    sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 libayatana-appindicator 2>/dev/null || sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3
+fi
+
+# 1. Zkopírovat nativní Tauri binárku nebo rozbalit tar.gz
+if [ -f "$DIR/src-tauri/target/release/mychalsmp-launcher" ]; then
+    echo "📦 Kopíruji zkompilovanou Tauri v2 binárku..."
+    cp "$DIR/src-tauri/target/release/mychalsmp-launcher" "$INSTALL_DIR/mychalsmp-launcher"
+    cp "$DIR/src-tauri/target/release/mychalsmp-launcher" "$INSTALL_DIR/SMPClient"
+    [ -d "$DIR/assets" ] && cp -r "$DIR/assets" "$INSTALL_DIR/" 2>/dev/null || true
+elif [ -f "$DIR/mychalsmp-launcher.tar.gz" ]; then
     echo "📦 Rozbaluji archiv..."
-    tar -xzf "$DIR/dist/mychalsmp-launcher-1.0.0.tar.gz" -C "$INSTALL_DIR/"
+    tar -xzf "$DIR/mychalsmp-launcher.tar.gz" -C "$INSTALL_DIR/" --strip-components=1 2>/dev/null || tar -xzf "$DIR/mychalsmp-launcher.tar.gz" -C "$INSTALL_DIR/"
 else
-    echo "⚙️ Vytvářím linux balíček přes npm run pack..."
-    cd "$DIR" && npm run pack
-    cp -r "$DIR/dist/linux-unpacked/"* "$INSTALL_DIR/"
+    echo "⚙️ Kompiluji nativní Tauri v2 launcher..."
+    cd "$DIR" && npm run tauri:build
+    cp "$DIR/src-tauri/target/release/mychalsmp-launcher" "$INSTALL_DIR/mychalsmp-launcher"
+    cp "$DIR/src-tauri/target/release/mychalsmp-launcher" "$INSTALL_DIR/SMPClient"
 fi
 
 # 2. Spouštěcí symlink

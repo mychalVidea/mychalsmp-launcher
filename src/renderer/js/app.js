@@ -2353,9 +2353,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             try {
                 const assets = pendingUpdateData.assets || [];
-                const deltaAsset = assets.find(a => a.name === 'update-v3.asar' || a.name === 'update-v2.asar' || a.name === 'update.asar' || a.name === 'app.asar');
-                const tarAsset = assets.find(a => a.name.endsWith('.tar.gz'));
-                const downloadUrl = pendingUpdateData.downloadUrl || (deltaAsset ? deltaAsset.downloadUrl : (tarAsset ? tarAsset.downloadUrl : (assets[0] ? assets[0].downloadUrl : pendingUpdateData.releaseUrl)));
+                const tarAsset = assets.find(a => a.name === 'mychalsmp-launcher.tar.gz' || a.name.endsWith('.tar.gz'));
+                const downloadUrl = pendingUpdateData.downloadUrl || (tarAsset ? tarAsset.downloadUrl : (assets[0] ? assets[0].downloadUrl : pendingUpdateData.releaseUrl));
 
                 const res = await window.api.applyUpdate(downloadUrl);
                 if (res && res.applied) {

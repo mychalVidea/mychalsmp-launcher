@@ -1,6 +1,6 @@
 {
   "name": "mychalsmp-launcher",
-  "version": "1.7.0",
+  "version": "1.7.2",
   "description": "Oficiální multiplatformní launcher pro síť MYCHAL SMP s optimalizovaným klientem pro Windows 11 a Linux",
   "scripts": {
     "start": "tauri dev",
@@ -8,7 +8,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "icons:generate": "tauri icon build/icon.png",
-    "build:linux": "tauri build --bundles deb,appimage",
+    "build:linux": "tauri build --bundles deb,rpm,appimage",
     "build:win": "tauri build --bundles nsis",
     "build:all": "tauri build",
     "release": "bash release.sh"

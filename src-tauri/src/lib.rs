@@ -830,6 +830,27 @@ async fn apply_update(app: AppHandle, asset_url: String) -> Value {
 
 #[tauri::command]
 fn restart_launcher(app: AppHandle) {
+    #[cfg(target_os = "windows")]
+    {
+        let installer = crate::config::get_default_game_dir()
+            .join("temp")
+            .join("mychalsmp-launcher-setup.exe");
+        if installer.is_file() {
+            let _ = std::process::Command::new(&installer).spawn();
+            std::process::exit(0);
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            let updated_bin = home.join(".local/share/mychalsmp-launcher/mychalsmp-launcher");
+            if updated_bin.is_file() {
+                if std::process::Command::new(&updated_bin).spawn().is_ok() {
+                    std::process::exit(0);
+                }
+            }
+        }
+    }
     app.restart();
 }
 

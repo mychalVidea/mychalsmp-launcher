@@ -1,19 +1,24 @@
 # Maintainer: mychalVidea <admin@mychalsmp.xyz>
 pkgname=mychalsmp-launcher
-pkgver=1.0.0
+pkgver=1.4.6
 pkgrel=1
-pkgdesc="Oficiální cross-platform Minecraft launcher pro síť MYCHAL SMP s optimalizací Sodium"
-arch=('x64')
+pkgdesc="Oficiální cross-platform Minecraft launcher (Tauri v2 / Rust) pro síť MYCHAL SMP"
+arch=('x86_64')
 url="https://mychalsmp.xyz"
-license=('custom')
-depends=('electron' 'nss' 'libxss' 'alsa-lib' 'gtk3' 'libnotify')
-optdepends=('jre21-openjdk: Java 21 runtime pro Minecraft 26.2 / 1.21.x')
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator')
+optdepends=('jre-openjdk: Java runtime pro Minecraft 26.3')
 source=("mychalsmp-launcher.desktop")
 sha256sums=('SKIP')
 
 package() {
     install -d "${pkgdir}/opt/${pkgname}"
-    cp -r "${srcdir}/../dist/linux-unpacked/"* "${pkgdir}/opt/${pkgname}/" 2>/dev/null || true
+    if [ -f "${srcdir}/../src-tauri/target/release/mychalsmp-launcher" ]; then
+        install -m755 "${srcdir}/../src-tauri/target/release/mychalsmp-launcher" "${pkgdir}/opt/${pkgname}/mychalsmp-launcher"
+    fi
+    if [ -d "${srcdir}/../assets" ]; then
+        cp -r "${srcdir}/../assets" "${pkgdir}/opt/${pkgname}/" 2>/dev/null || true
+    fi
 
     install -d "${pkgdir}/usr/bin"
     ln -s "/opt/${pkgname}/mychalsmp-launcher" "${pkgdir}/usr/bin/${pkgname}"

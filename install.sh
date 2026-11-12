@@ -69,19 +69,28 @@ if [ ! -f "$INSTALL_DIR/mychalsmp-launcher" ]; then
     exit 1
 fi
 
-# Deaktivace chrome-sandbox pokud nemá SUID root (zabraňuje okamžitému SIGTRAP pádu na moderních distrech)
-if [ -f "$INSTALL_DIR/chrome-sandbox" ]; then
-    mv -f "$INSTALL_DIR/chrome-sandbox" "$INSTALL_DIR/chrome-sandbox.disabled" 2>/dev/null || rm -f "$INSTALL_DIR/chrome-sandbox" 2>/dev/null || true
+# Kontrola a automatická doinstalace systémových knihoven (WebKit2GTK 4.1) pro CachyOS/Arch, Fedoru i Ubuntu/Debian
+if ! ldconfig -p 2>/dev/null | grep -q "libwebkit2gtk-4.1.so"; then
+    echo "📦 Doinstalovávám systémové grafické knihovny (WebKit2GTK 4.1) pro tvou distribuci..."
+    if command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 libayatana-appindicator 2>/dev/null || sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 || true
+    elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y webkit2gtk4.1 gtk3 libappindicator-gtk3 || true
+    elif command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 || true
+    elif command -v zypper >/dev/null 2>&1; then
+        sudo zypper install -y libwebkit2gtk-4_1-0 gtk3 || true
+    fi
 fi
 
-# Nastavení oprávnění a vytvoření spouštěcího wrapperu v ~/.local/bin s --no-sandbox
+# Nastavení oprávnění a vytvoření spouštěcího wrapperu v ~/.local/bin
 chmod +x "$INSTALL_DIR/mychalsmp-launcher"
 [ -f "$INSTALL_DIR/SMPClient" ] && chmod +x "$INSTALL_DIR/SMPClient" || true
 
 rm -f "$BIN_DIR/mychalsmp-launcher"
 cat <<EOF > "$BIN_DIR/mychalsmp-launcher"
 #!/usr/bin/env bash
-exec "$INSTALL_DIR/mychalsmp-launcher" --no-sandbox "\$@"
+exec "$INSTALL_DIR/mychalsmp-launcher" "\$@"
 EOF
 chmod +x "$BIN_DIR/mychalsmp-launcher"
 
@@ -101,7 +110,7 @@ cat <<EOF > "$DESKTOP_DIR/mychalsmp-launcher.desktop"
 [Desktop Entry]
 Name=SMPClient
 Comment=Oficiální Minecraft klient sítě MYCHAL SMP
-Exec="$INSTALL_DIR/mychalsmp-launcher" --no-sandbox %U
+Exec="$INSTALL_DIR/mychalsmp-launcher" %U
 Icon=mychalsmp-launcher
 Terminal=false
 Type=Application
@@ -123,7 +132,7 @@ if ([ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]) && [ "$NO_START" != "1" ] &&
     echo "🚀 Spouštím herního klienta a zavírám terminál..."
 
     # Plně odpojené spuštění v nové session nezávislé na terminálu
-    nohup setsid "$INSTALL_DIR/mychalsmp-launcher" --no-sandbox </dev/null >/dev/null 2>&1 &
+    nohup setsid "$INSTALL_DIR/mychalsmp-launcher" </dev/null >/dev/null 2>&1 &
     disown -a 2>/dev/null || true
 
     sleep 1.2

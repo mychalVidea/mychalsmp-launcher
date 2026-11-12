@@ -94,27 +94,34 @@ jobs:
       - name: Build Tauri Application
         run: npm run tauri:build
 
-      - name: Package Linux Artifacts (.deb, .AppImage, .tar.gz)
+      - name: Package Linux Artifacts (.deb, .rpm, .AppImage, .tar.gz)
         if: matrix.os == 'linux'
         shell: bash
         run: |
           mkdir -p artifacts/linux
 
-          # 1. Collect .deb bundle
+          # 1. Collect .deb bundle (Ubuntu / Debian / Mint / Pop!_OS)
           DEB_FILE=$(find src-tauri/target/release/bundle/deb -name "*.deb" -type f 2>/dev/null | head -n 1)
           if [ -n "$DEB_FILE" ]; then
             cp "$DEB_FILE" artifacts/linux/
             cp "$DEB_FILE" artifacts/linux/mychalsmp-launcher.deb
           fi
 
-          # 2. Collect .AppImage bundle
+          # 2. Collect .rpm bundle (Fedora / Nobara / RHEL / openSUSE)
+          RPM_FILE=$(find src-tauri/target/release/bundle/rpm -name "*.rpm" -type f 2>/dev/null | head -n 1)
+          if [ -n "$RPM_FILE" ]; then
+            cp "$RPM_FILE" artifacts/linux/
+            cp "$RPM_FILE" artifacts/linux/mychalsmp-launcher.rpm
+          fi
+
+          # 3. Collect .AppImage bundle (Univerzální pro CachyOS / Arch / Fedora / Ubuntu)
           APPIMAGE_FILE=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" -type f 2>/dev/null | head -n 1)
           if [ -n "$APPIMAGE_FILE" ]; then
             cp "$APPIMAGE_FILE" artifacts/linux/
             cp "$APPIMAGE_FILE" artifacts/linux/mychalsmp-launcher.AppImage
           fi
 
-          # 3. Create .tar.gz archive for install.sh and Arch/AUR
+          # 4. Create .tar.gz archive for install.sh (CachyOS / Arch / Fedora / Ubuntu)
           BIN_PATH=""
           if [ -f "src-tauri/target/release/SMPClient" ]; then
             BIN_PATH="src-tauri/target/release/SMPClient"
@@ -125,15 +132,15 @@ jobs:
           if [ -n "$BIN_PATH" ]; then
             mkdir -p /tmp/tar-build/mychalsmp-launcher
             cp "$BIN_PATH" /tmp/tar-build/mychalsmp-launcher/mychalsmp-launcher
-            cp "$BIN_PATH" /tmp/tar-build/mychalsmp-launcher/SMPClient
-            chmod +x /tmp/tar-build/mychalsmp-launcher/*
+            chmod +x /tmp/tar-build/mychalsmp-launcher/mychalsmp-launcher
+            ln -sf mychalsmp-launcher /tmp/tar-build/mychalsmp-launcher/SMPClient
             [ -d "assets" ] && cp -r assets /tmp/tar-build/mychalsmp-launcher/ 2>/dev/null || true
             mkdir -p /tmp/tar-build/mychalsmp-launcher/resources
             cp src/renderer/assets/logo.png /tmp/tar-build/mychalsmp-launcher/resources/ 2>/dev/null || true
             cp src/renderer/assets/server-icon.png /tmp/tar-build/mychalsmp-launcher/resources/ 2>/dev/null || true
 
             VERSION=$(node -p "require('./package.json').version")
-            tar -czvf "artifacts/linux/mychalsmp-launcher-${VERSION}.tar.gz" -C /tmp/tar-build mychalsmp-launcher
+            GZIP=-9 tar -czvf "artifacts/linux/mychalsmp-launcher-${VERSION}.tar.gz" -C /tmp/tar-build mychalsmp-launcher
             cp "artifacts/linux/mychalsmp-launcher-${VERSION}.tar.gz" "artifacts/linux/mychalsmp-launcher.tar.gz"
             rm -rf /tmp/tar-build
           fi
@@ -225,6 +232,7 @@ jobs:
           files: |
             release-assets/*.exe
             release-assets/*.deb
+            release-assets/*.rpm
             release-assets/*.AppImage
             release-assets/*.tar.gz
         env:

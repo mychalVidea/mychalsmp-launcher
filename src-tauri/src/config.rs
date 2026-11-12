@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const APP_VERSION: &str = "1.4.6";
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn get_default_game_dir() -> PathBuf {
     #[cfg(target_os = "windows")]

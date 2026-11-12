@@ -976,28 +976,55 @@ pub async fn check_for_updates() -> Value {
 
     let has_update = is_newer_version(latest_tag, APP_VERSION);
 
-    let assets: Vec<Value> = release
+    let raw_assets: Vec<Value> = release
         .get("assets")
         .and_then(|a| a.as_array())
         .cloned()
         .unwrap_or_default();
 
+    let assets: Vec<Value> = raw_assets
+        .into_iter()
+        .map(|mut a| {
+            if let Some(obj) = a.as_object_mut() {
+                if let Some(burl) = obj.get("browser_download_url").cloned() {
+                    obj.insert("downloadUrl".to_string(), burl);
+                }
+            }
+            a
+        })
+        .collect();
+
     let mut download_url = None;
     let mut download_size = None;
 
-    for a in &assets {
-        let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        #[cfg(target_os = "linux")]
-        {
-            if name.ends_with(".AppImage") || name.ends_with(".deb") || name.ends_with(".tar.gz") {
+    #[cfg(target_os = "linux")]
+    {
+        // Prioritize .tar.gz for seamless in-place Linux self-update
+        for a in &assets {
+            let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if name == "mychalsmp-launcher.tar.gz" || name.ends_with(".tar.gz") {
                 download_url = a.get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
                 download_size = a.get("size").and_then(|v| v.as_u64());
                 break;
             }
         }
-        #[cfg(target_os = "windows")]
-        {
-            if name.ends_with(".exe") && !name.contains("blockmap") {
+        if download_url.is_none() {
+            for a in &assets {
+                let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                if name.ends_with(".AppImage") || name.ends_with(".deb") || name.ends_with(".rpm") {
+                    download_url = a.get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
+                    download_size = a.get("size").and_then(|v| v.as_u64());
+                    break;
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        for a in &assets {
+            let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if (name == "mychalsmp-launcher-setup.exe" || name.ends_with(".exe")) && !name.contains("blockmap") {
                 download_url = a.get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
                 download_size = a.get("size").and_then(|v| v.as_u64());
                 break;
@@ -1033,7 +1060,7 @@ pub async fn check_for_updates() -> Value {
 
 pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
     if asset_url.trim().is_empty() {
-        return json!({ "success": false, "error": "Chybí URL adresa aktualizace." });
+        return json!({ "success": false, "applied": false, "error": "Chybí URL adresa aktualizace." });
     }
 
     let client = reqwest::Client::builder()
@@ -1043,25 +1070,41 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
 
     let mut resp = match client.get(asset_url).send().await {
         Ok(r) => r,
-        Err(e) => return json!({ "success": false, "error": format!("Nelze stáhnout aktualizaci: {}", e) }),
+        Err(e) => return json!({ "success": false, "applied": false, "error": format!("Nelze stáhnout aktualizaci: {}", e) }),
     };
 
-    let total_bytes = resp.content_length().unwrap_or(1);
-    let temp_path = get_default_game_dir().join("temp/update_installer.bin");
-    let _ = fs::create_dir_all(temp_path.parent().unwrap());
+    if !resp.status().is_success() {
+        return json!({
+            "success": false,
+            "applied": false,
+            "error": format!("Server vrátil chybu při stahování aktualizace (HTTP {}).", resp.status())
+        });
+    }
+
+    let total_bytes = resp.content_length().unwrap_or(1).max(1);
+    let temp_dir = get_default_game_dir().join("temp");
+    let _ = fs::create_dir_all(&temp_dir);
+
+    let is_tar_gz = asset_url.ends_with(".tar.gz") || cfg!(target_os = "linux");
+    let archive_filename = if is_tar_gz {
+        "mychalsmp-launcher-update.tar.gz"
+    } else {
+        "mychalsmp-launcher-setup.exe"
+    };
+    let temp_path = temp_dir.join(archive_filename);
 
     let mut file = match File::create(&temp_path) {
         Ok(f) => f,
-        Err(e) => return json!({ "success": false, "error": format!("Nelze vytvořit dočasný soubor: {}", e) }),
+        Err(e) => return json!({ "success": false, "applied": false, "error": format!("Nelze vytvořit dočasný soubor: {}", e) }),
     };
 
     let mut downloaded = 0u64;
     while let Ok(Some(chunk)) = resp.chunk().await {
         if file.write_all(&chunk).is_err() {
-            return json!({ "success": false, "error": "Chyba při zápisu souboru aktualizace." });
+            return json!({ "success": false, "applied": false, "error": "Chyba při zápisu souboru aktualizace." });
         }
         downloaded += chunk.len() as u64;
-        let percent = (downloaded * 100 / total_bytes).min(100);
+        let percent = (downloaded * 90 / total_bytes).min(90);
 
         if let Some(a) = app {
             let _ = a.emit(
@@ -1076,12 +1119,164 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
             );
         }
     }
+    let _ = file.flush();
+    drop(file);
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(a) = app {
+            let _ = a.emit(
+                "update-progress",
+                json!({
+                    "status": "extracting",
+                    "percent": 94,
+                    "current": downloaded,
+                    "total": total_bytes,
+                    "step": "Rozbaluji tar.gz archiv a instaluji novou verzi..."
+                }),
+            );
+        }
+
+        let extract_dir = temp_dir.join("update_extracted");
+        let _ = fs::remove_dir_all(&extract_dir);
+        let _ = fs::create_dir_all(&extract_dir);
+
+        let tar_gz_file = match File::open(&temp_path) {
+            Ok(f) => f,
+            Err(e) => {
+                return json!({
+                    "success": false,
+                    "applied": false,
+                    "error": format!("Nelze otevřít stažený archiv: {}", e)
+                })
+            }
+        };
+
+        let decoder = flate2::read::GzDecoder::new(tar_gz_file);
+        let mut archive = tar::Archive::new(decoder);
+        if let Err(e) = archive.unpack(&extract_dir) {
+            return json!({
+                "success": false,
+                "applied": false,
+                "error": format!("Chyba při rozbalování tar.gz archivu: {}", e)
+            });
+        }
+
+        // Locate extracted root (either extract_dir/mychalsmp-launcher or extract_dir directly)
+        let unpacked_root = if extract_dir.join("mychalsmp-launcher").is_dir() {
+            extract_dir.join("mychalsmp-launcher")
+        } else {
+            extract_dir.clone()
+        };
+
+        let new_bin = if unpacked_root.join("mychalsmp-launcher").is_file() {
+            Some(unpacked_root.join("mychalsmp-launcher"))
+        } else if unpacked_root.join("SMPClient").is_file() {
+            Some(unpacked_root.join("SMPClient"))
+        } else {
+            None
+        };
+
+        let Some(source_bin) = new_bin else {
+            return json!({
+                "success": false,
+                "applied": false,
+                "error": "V rozbaleném archivu nebyla nalezena binárka launcheru."
+            });
+        };
+
+        let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        let local_install_dir = home_dir.join(".local/share/mychalsmp-launcher");
+        let _ = fs::create_dir_all(&local_install_dir);
+
+        // Helper for atomic replacement on Linux (avoids ETXTBSY on running executable)
+        let replace_binary_atomically = |target: &Path| -> Result<(), String> {
+            if let Some(parent) = target.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let staging = target.with_extension("update_new");
+            fs::copy(&source_bin, &staging).map_err(|e| e.to_string())?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&staging, fs::Permissions::from_mode(0o755));
+            }
+            fs::rename(&staging, target).map_err(|e| e.to_string())?;
+            Ok(())
+        };
+
+        // 1. Update ~/.local/share/mychalsmp-launcher/{mychalsmp-launcher, SMPClient}
+        let _ = replace_binary_atomically(&local_install_dir.join("mychalsmp-launcher"));
+        let _ = replace_binary_atomically(&local_install_dir.join("SMPClient"));
+
+        // Copy assets & resources if present in archive
+        for folder_name in ["assets", "resources"] {
+            let src_folder = unpacked_root.join(folder_name);
+            if src_folder.is_dir() {
+                let dst_folder = local_install_dir.join(folder_name);
+                let _ = copy_dir_recursive(&src_folder, &dst_folder);
+            }
+        }
+
+        // 2. Also atomically replace current_exe() if writable (e.g. launched from custom folder or /opt)
+        if let Ok(exe_path) = std::env::current_exe() {
+            if !exe_path.to_string_lossy().contains("/tmp/.mount_") {
+                let _ = replace_binary_atomically(&exe_path);
+            }
+        }
+
+        // Ensure ~/.local/bin/mychalsmp-launcher symlink exists
+        let local_bin_dir = home_dir.join(".local/bin");
+        let _ = fs::create_dir_all(&local_bin_dir);
+        #[cfg(unix)]
+        {
+            let link_path = local_bin_dir.join("mychalsmp-launcher");
+            if !link_path.exists() {
+                let _ = std::os::unix::fs::symlink(
+                    local_install_dir.join("mychalsmp-launcher"),
+                    &link_path,
+                );
+            }
+        }
+
+        let _ = fs::remove_file(&temp_path);
+        let _ = fs::remove_dir_all(&extract_dir);
+    }
+
+    if let Some(a) = app {
+        let _ = a.emit(
+            "update-progress",
+            json!({
+                "status": "installing",
+                "percent": 100,
+                "current": downloaded,
+                "total": total_bytes,
+                "step": "Aktualizace byla úspěšně připravena!"
+            }),
+        );
+    }
 
     json!({
         "success": true,
+        "applied": true,
         "readyToRestart": true,
         "installerPath": temp_path.to_string_lossy()
     })
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let dst_path = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&entry.path(), &dst_path)?;
+        } else {
+            fs::copy(entry.path(), dst_path)?;
+        }
+    }
+    Ok(())
 }
 
 fn is_newer_version(remote: &str, local: &str) -> bool {
