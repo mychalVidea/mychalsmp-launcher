@@ -9,14 +9,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=1.5.3">
+        rel="stylesheet" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/style.css?v=1.5.5">
 </head>
 
 <body>
     <!-- Top Frameless Titlebar / Header -->
-    <header class="titlebar">
-        <div class="titlebar-drag">
+    <header class="titlebar" data-tauri-drag-region>
+        <div class="titlebar-drag" data-tauri-drag-region>
             <div class="brand">
                 <img src="assets/logo.png" alt="SMPClient Logo" class="server-pixel-icon"
                     style="image-rendering: auto; object-fit: contain;">
@@ -282,6 +282,17 @@
                                     <span id="profilesSectionTitle">Dostupné herní profily</span>
                                 </div>
                                 <div class="section-header-actions">
+                                    <button type="button" class="btn-import-seed-main" id="btnOpenSeedModalFromHeader"
+                                        title="Sdílet nebo importovat profil přes kód balíčku SMP-PACK">
+                                        <span>
+                                            <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="17 8 12 3 7 8"></polyline>
+                                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                                            </svg>
+                                            SMP-PACK
+                                        </span>
+                                    </button>
                                     <button type="button" class="btn-create-profile-main"
                                         id="btnOpenCreateProfileModal">
                                         <span>
@@ -2179,6 +2190,16 @@
                 </div>
 
                 <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="margin-bottom: 0;">Vlastní argumenty JVM</label>
+                        <span style="font-size: 11px; color: #94a3b8;">Volitelné (např. -XX:+UseG1GC)</span>
+                    </div>
+                    <input type="text" class="text-input font-mono" id="newProfileJvmArgsInput"
+                        placeholder="-XX:+UseG1GC -Dcustom.prop=true" spellcheck="false" autocomplete="off"
+                        style="font-family: var(--font-mono); font-size: 11.5px;">
+                </div>
+
+                <div class="form-group">
                     <label>Ikona profilu</label>
                     <div class="icon-picker-grid" id="newProfileIconPicker">
                         <button type="button" class="icon-picker-item active" data-icon="sword" title="Nejhranější (Iron Golem)">
@@ -2569,6 +2590,42 @@
                 </div>
 
                 <div class="form-group">
+                    <label>Ikona profilu</label>
+                    <div class="icon-picker-grid" id="profileSettingsIconPicker">
+                        <button type="button" class="icon-picker-item active" data-icon="sword" title="Nejhranější (Iron Golem)">
+                            <img src="assets/icons/mostplayed.png" class="profile-3d-picker-icon" alt="Golem" draggable="false">
+                        </button>
+                        <button type="button" class="icon-picker-item" data-icon="latest" title="Nejnovější (Tráva)">
+                            <img src="assets/icons/newest.png" class="profile-3d-picker-icon" alt="Tráva" draggable="false">
+                        </button>
+                        <button type="button" class="icon-picker-item" data-icon="old" title="Starší verze (Hlína)">
+                            <img src="assets/icons/old.png" class="profile-3d-picker-icon" alt="Hlína" draggable="false">
+                        </button>
+                        <button type="button" class="icon-picker-item" data-icon="upgrade" title="Upgrade">
+                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="16 12 12 8 8 12"></polyline>
+                                <line x1="12" y1="16" x2="12" y2="8"></line>
+                            </svg>
+                        </button>
+                        <button type="button" class="icon-picker-item" data-icon="shield" title="Štít">
+                            <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            </svg>
+                        </button>
+                        <button type="button" class="icon-picker-item" data-icon="rocket" title="Raketa">
+                            <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path>
+                                <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path>
+                                <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path>
+                                <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path>
+                                <circle cx="15" cy="9" r="1"></circle>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label>Paměť RAM</label>
                     <div class="ram-slider-row">
                         <input type="range" min="2" max="16" step="any" value="4" class="slider" id="profileRamSlider">
@@ -2577,34 +2634,44 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Složky profilu</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="margin-bottom: 0;">Vlastní argumenty JVM</label>
+                        <span style="font-size: 11px; color: #94a3b8;">Specifické parametry pro Java VM</span>
+                    </div>
+                    <input type="text" class="text-input font-mono" id="profileSettingsJvmArgsInput"
+                        placeholder="Např. -XX:+UseG1GC -Dcustom.prop=true" spellcheck="false" autocomplete="off"
+                        style="font-family: var(--font-mono); font-size: 11.5px;">
+                </div>
+
+                <div class="form-group">
+                    <label>Rychlé otevření složek profilu</label>
                     <div class="profile-folders-quick-grid"
                         style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
-                        <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder=""
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder=""
                             style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                                 </path>
                             </svg>
-                            Celá složka
+                            <span>Celá složka</span>
                         </button>
-                        <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="mods"
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="mods"
                             style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                                 </path>
                             </svg>
-                            mods/
+                            <span>mods/</span>
                         </button>
-                        <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="config"
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="config"
                             style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                                 </path>
                             </svg>
-                            config/
+                            <span>config/</span>
                         </button>
-                        <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
                             data-subfolder="resourcepacks" style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                 <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
@@ -2615,31 +2682,59 @@
                                     d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z">
                                 </path>
                             </svg>
-                            textury/
+                            <span>textury/</span>
                         </button>
-                        <button class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="shaderpacks"
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="shaderpacks"
                             style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-pulse" viewBox="0 0 24 24">
                                 <path
                                     d="M12 3l1.912 5.885L20 10.8l-5.088 3.697L16.824 20.4 12 16.703 7.176 20.4l1.912-5.903L4 10.8l6.088-1.915L12 3z">
                                 </path>
                             </svg>
-                            shadery/
+                            <span>shadery/</span>
+                        </button>
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="screenshots"
+                            style="padding: 8px; font-size: 11px;">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                            <span>snímky/</span>
                         </button>
                     </div>
                 </div>
 
-                <div class="profile-delete-section" id="profileDeleteSection"
-                    style="margin-top: 10px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: flex-end;">
-                    <button class="btn-danger-reset" id="btnDeleteCurrentProfile"
-                        style="padding: 6px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
-                        <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                            </path>
-                        </svg>
-                        Smazat profil
-                    </button>
+                <div class="profile-studio-actions-row" id="profileStudioActionsRow"
+                    style="margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="mc-btn mc-btn-secondary" id="btnDuplicateCurrentProfile"
+                            style="padding: 6px 12px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 6px;">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            <span>Duplikovat</span>
+                        </button>
+                        <button type="button" class="mc-btn mc-btn-secondary" id="btnShareProfileSeedFromSettings"
+                            style="padding: 6px 12px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 6px;">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                                <polyline points="16 6 12 2 8 6"></polyline>
+                                <line x1="12" y1="2" x2="12" y2="15"></line>
+                            </svg>
+                            <span>SMP-PACK</span>
+                        </button>
+                    </div>
+                    <div id="profileDeleteContainer">
+                        <button type="button" class="btn-danger-reset" id="btnDeleteCurrentProfile"
+                            style="padding: 6px 12px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 6px;">
+                            <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                            <span>Smazat</span>
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -3208,7 +3303,8 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <script src="js/lib/skinview3d.bundle.js"></script>
-    <script src="js/app.js?v=1.5.3"></script>
+    <script src="js/tauri-bridge.js?v=1.5.4"></script>
+    <script src="js/app.js?v=1.5.5"></script>
 </body>
 
 </html>

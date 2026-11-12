@@ -1508,6 +1508,41 @@ body.is-maximized {
     filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 10px rgba(10, 103, 229, 0.3));
 }
 
+.profile-3d-float-icon-svg {
+    width: 32px;
+    height: 32px;
+    stroke: currentColor;
+    color: var(--text-muted, #94a3b8);
+    fill: none;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.65)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), filter 0.22s ease, color 0.22s ease;
+    user-select: none;
+    pointer-events: none;
+    transform: translateZ(0);
+}
+
+.profile-3d-float-icon-svg.ui-icon-svg--blue {
+    color: #0a67e5;
+}
+
+.profile-row-card:hover .profile-3d-float-icon-svg {
+    transform: translateY(-3px) scale(1.08);
+    color: #ffffff;
+    filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.75)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+.profile-row-card:hover .profile-3d-float-icon-svg.ui-icon-svg--blue {
+    color: #2f83f2;
+}
+
+.profile-row-card.active-profile .profile-3d-float-icon-svg {
+    color: #0a67e5;
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 10px rgba(10, 103, 229, 0.35));
+}
+
 .profile-3d-picker-icon {
     width: 28px;
     height: 28px;
@@ -9432,4 +9467,116 @@ body.app-in-tray-paused .status-dot {
 body.app-in-tray-paused #heroSkinCanvas3D,
 body.app-in-tray-paused #skinCanvas3D {
     visibility: hidden !important;
+}
+
+/* ── Profile Studio & Spec Bar Architecture (Matte Obsidian) ───────────── */
+.profile-spec-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--brand-gray, #94a3b8);
+    margin-top: 3px;
+    line-height: 1.4;
+    user-select: none;
+}
+
+.profile-spec-bar .spec-item {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.2px;
+}
+
+.profile-spec-bar .spec-loader {
+    color: #f1f5f9;
+    font-weight: 600;
+}
+
+.profile-spec-bar .spec-divider {
+    display: inline-block;
+    width: 1px;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.profile-spec-bar .spec-upgrade-hint {
+    color: #60a5fa;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.profile-spec-bar .spec-upgrade-hint:hover {
+    color: #93c5fd;
+    text-decoration: underline;
+}
+
+/* ── Section Header Secondary Action (SMP-PACK) ───────────────────────── */
+.btn-import-seed-main {
+    background: var(--surface2, #18181c);
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-control, 10px);
+    color: #cbd5e1;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: var(--transition, all 0.2s cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+.btn-import-seed-main:hover {
+    background: var(--surface-hover, #202026);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    box-shadow: var(--shadow-sm, 0 4px 14px rgba(0, 0, 0, 0.35));
+}
+
+.btn-import-seed-main:active {
+    transform: scale(0.975);
+}
+
+.btn-import-seed-main span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Card Tool Buttons ─────────────────────────────────────────────────── */
+.profile-actions .btn-profile-duplicate,
+.profile-actions .btn-profile-quick-folder {
+    min-height: 38px;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-control, 10px);
+    background: var(--surface2, #18181c);
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
+    color: #94a3b8;
+    cursor: pointer;
+    transition: var(--transition, all 0.2s cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+.profile-actions .btn-profile-duplicate:hover:not(:disabled),
+.profile-actions .btn-profile-quick-folder:hover:not(:disabled) {
+    background: var(--surface-hover, #202026);
+    border-color: rgba(255, 255, 255, 0.20);
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.profile-actions .btn-profile-duplicate:active:not(:disabled),
+.profile-actions .btn-profile-quick-folder:active:not(:disabled) {
+    transform: scale(0.975);
+}
+
+/* ── Monospace Input Styling ───────────────────────────────────────────── */
+.text-input.font-mono {
+    font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+    font-size: 11.5px !important;
+    letter-spacing: 0.2px;
 }

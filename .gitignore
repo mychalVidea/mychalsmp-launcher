@@ -6,6 +6,10 @@ dist/
 out/
 target/
 native/target/
+src-tauri/target/
+
+# Agent scratch files
+.agents/
 
 # Runtime data & logs
 *.log

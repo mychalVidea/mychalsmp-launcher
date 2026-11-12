@@ -82,7 +82,31 @@ fi
 
 echo "✔ Verze v package.json byla úspěšně změněna na $NEW_VERSION"
 
-# 3. Git commit, tag a push
+# 3. Aktualizace src-tauri/tauri.conf.json pokud existuje
+TAURI_CONF="$DIR/src-tauri/tauri.conf.json"
+if [ -f "$TAURI_CONF" ]; then
+    node -e "
+    const fs = require('fs');
+    const tauriConf = JSON.parse(fs.readFileSync('$TAURI_CONF', 'utf8'));
+    tauriConf.version = '$NEW_VERSION';
+    fs.writeFileSync('$TAURI_CONF', JSON.stringify(tauriConf, null, 2) + '\n');
+    "
+    echo "✔ Verze v src-tauri/tauri.conf.json byla úspěšně změněna na $NEW_VERSION"
+fi
+
+# 4. Aktualizace src-tauri/Cargo.toml pokud existuje
+CARGO_TOML="$DIR/src-tauri/Cargo.toml"
+if [ -f "$CARGO_TOML" ]; then
+    node -e "
+    const fs = require('fs');
+    let cargo = fs.readFileSync('$CARGO_TOML', 'utf8');
+    cargo = cargo.replace(/^version\s*=\s*\"[^\"]+\"/m, 'version = \"' + '$NEW_VERSION' + '\"');
+    fs.writeFileSync('$CARGO_TOML', cargo);
+    "
+    echo "✔ Verze v src-tauri/Cargo.toml byla úspěšně změněna na $NEW_VERSION"
+fi
+
+# 5. Git commit, tag a push
 echo ""
 echo "🚀 Vytvářím Git commit, tag a odesílám na GitHub..."
 git add -A

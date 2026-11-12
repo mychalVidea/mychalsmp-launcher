@@ -1,24 +1,37 @@
-name: Build and Auto-Release Launcher
+name: Build and Auto-Release Launcher (Tauri v2)
 
 on:
   push:
     branches:
       - main
     tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       custom_version:
-        description: 'Vlastní verze k vydání (např. 1.0.1 nebo 1.2.0, prázdné = verze z package.json)'
+        description: 'Vlastní verze k vydání (např. 1.0.1 nebo 1.4.6, prázdné = verze z package.json)'
         required: false
         default: ''
+
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
-  build-windows:
-    name: Build Windows (.exe, .zip)
-    runs-on: windows-latest
+  build:
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            os: linux
+          - platform: windows-latest
+            os: windows
+    runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,95 +42,123 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Apply Custom Version If Provided
-        if: "${{ github.event.inputs.custom_version != '' }}"
-        run: |
-          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('./package.json')); pkg.version = '${{ github.event.inputs.custom_version }}'.replace(/^v/, ''); fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');"
-
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build Native Rust Module (Windows)
-        shell: bash
-        run: |
-          cd native
-          cargo build --release
-          cp target/release/mychalsmp_native.dll ../src/main/mychalsmp_native.node
-
-      - name: Ensure Build Resources
-        shell: bash
-        run: |
-          mkdir -p build
-          [ -f build/icon.ico ] || cp src/renderer/assets/icon.ico build/icon.ico
-          [ -f build/icon.png ] || cp src/renderer/assets/logo.png build/icon.png
-
-      - name: Build Windows Packages
-        run: npx electron-builder --win nsis portable --publish never
-
-      - name: Upload Windows Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Setup Rust cache
+        uses: swatinem/rust-cache@v2
         with:
-          name: windows-binaries
-          path: |
-            dist/*.exe
-          if-no-files-found: error
+          workspaces: 'src-tauri -> target'
 
-  build-linux:
-    name: Build Linux (.tar.gz)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Install Linux System Dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
-
-      - name: Install dependencies
+      - name: Install Node Dependencies
         run: npm install
 
       - name: Apply Custom Version If Provided
-        if: "${{ github.event.inputs.custom_version != '' }}"
-        run: |
-          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('./package.json')); pkg.version = '${{ github.event.inputs.custom_version }}'.replace(/^v/, ''); fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');"
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Native Rust Module (Linux)
+        if: "${{ github.event.inputs.custom_version != '' || startsWith(github.ref, 'refs/tags/v') }}"
         shell: bash
         run: |
-          cd native
-          cargo build --release
-          cp target/release/libmychalsmp_native.so ../src/main/mychalsmp_native.node
+          if [ -n "${{ github.event.inputs.custom_version }}" ]; then
+            VERSION="${{ github.event.inputs.custom_version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          VERSION=$(echo "$VERSION" | sed 's/^v//')
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('./package.json'));
+            pkg.version = '$VERSION';
+            fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
+            const tauriConf = JSON.parse(fs.readFileSync('./src-tauri/tauri.conf.json'));
+            tauriConf.version = '$VERSION';
+            fs.writeFileSync('./src-tauri/tauri.conf.json', JSON.stringify(tauriConf, null, 2) + '\n');
+            let cargo = fs.readFileSync('./src-tauri/Cargo.toml', 'utf8');
+            cargo = cargo.replace(/^version\s*=\s*\"[^\"]+\"/m, 'version = \"' + '$VERSION' + '\"');
+            fs.writeFileSync('./src-tauri/Cargo.toml', cargo);
+          "
 
-      - name: Ensure Build Resources
+      - name: Build Tauri Application
+        run: npm run tauri:build
+
+      - name: Package Linux Artifacts (.deb, .AppImage, .tar.gz)
+        if: matrix.os == 'linux'
         shell: bash
         run: |
-          mkdir -p build
-          [ -f build/icon.ico ] || cp src/renderer/assets/icon.ico build/icon.ico
-          [ -f build/icon.png ] || cp src/renderer/assets/logo.png build/icon.png
+          mkdir -p artifacts/linux
 
-      - name: Build Linux Package
-        run: npx electron-builder --linux tar.gz --dir --publish never
+          # 1. Collect .deb bundle
+          DEB_FILE=$(find src-tauri/target/release/bundle/deb -name "*.deb" -type f 2>/dev/null | head -n 1)
+          if [ -n "$DEB_FILE" ]; then
+            cp "$DEB_FILE" artifacts/linux/
+            cp "$DEB_FILE" artifacts/linux/mychalsmp-launcher.deb
+          fi
 
-      - name: Upload Linux Artifacts
+          # 2. Collect .AppImage bundle
+          APPIMAGE_FILE=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" -type f 2>/dev/null | head -n 1)
+          if [ -n "$APPIMAGE_FILE" ]; then
+            cp "$APPIMAGE_FILE" artifacts/linux/
+            cp "$APPIMAGE_FILE" artifacts/linux/mychalsmp-launcher.AppImage
+          fi
+
+          # 3. Create .tar.gz archive for install.sh and Arch/AUR
+          BIN_PATH=""
+          if [ -f "src-tauri/target/release/SMPClient" ]; then
+            BIN_PATH="src-tauri/target/release/SMPClient"
+          elif [ -f "src-tauri/target/release/mychalsmp-launcher" ]; then
+            BIN_PATH="src-tauri/target/release/mychalsmp-launcher"
+          fi
+
+          if [ -n "$BIN_PATH" ]; then
+            mkdir -p /tmp/tar-build/mychalsmp-launcher
+            cp "$BIN_PATH" /tmp/tar-build/mychalsmp-launcher/mychalsmp-launcher
+            cp "$BIN_PATH" /tmp/tar-build/mychalsmp-launcher/SMPClient
+            chmod +x /tmp/tar-build/mychalsmp-launcher/*
+            [ -d "assets" ] && cp -r assets /tmp/tar-build/mychalsmp-launcher/ 2>/dev/null || true
+            mkdir -p /tmp/tar-build/mychalsmp-launcher/resources
+            cp src/renderer/assets/logo.png /tmp/tar-build/mychalsmp-launcher/resources/ 2>/dev/null || true
+            cp src/renderer/assets/server-icon.png /tmp/tar-build/mychalsmp-launcher/resources/ 2>/dev/null || true
+
+            VERSION=$(node -p "require('./package.json').version")
+            tar -czvf "artifacts/linux/mychalsmp-launcher-${VERSION}.tar.gz" -C /tmp/tar-build mychalsmp-launcher
+            cp "artifacts/linux/mychalsmp-launcher-${VERSION}.tar.gz" "artifacts/linux/mychalsmp-launcher.tar.gz"
+            rm -rf /tmp/tar-build
+          fi
+
+      - name: Package Windows Artifacts (.exe / NSIS)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: |
+          mkdir -p artifacts/windows
+          SETUP_EXE=$(find src-tauri/target/release/bundle/nsis -name "*setup*.exe" -o -name "*.exe" 2>/dev/null | head -n 1)
+          if [ -n "$SETUP_EXE" ]; then
+            cp "$SETUP_EXE" artifacts/windows/
+            cp "$SETUP_EXE" artifacts/windows/mychalsmp-launcher-setup.exe
+          fi
+
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-binaries
-          path: |
-            dist/*.tar.gz
-            dist/linux-unpacked/resources/app.asar
+          name: artifacts-${{ matrix.os }}
+          path: artifacts/${{ matrix.os }}/*
           if-no-files-found: error
 
   publish-release:
     name: Publish GitHub Release
-    needs: [build-windows, build-linux]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -130,6 +171,8 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.custom_version }}" ]; then
             VERSION="${{ github.event.inputs.custom_version }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
           else
             VERSION=$(node -p "require('./package.json').version")
           fi
@@ -141,59 +184,31 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-assets
+          pattern: artifacts-*
           merge-multiple: true
 
-      - name: Prepare Clean Release Files
+      - name: Inspect Release Assets
         run: |
-          cd release-assets
-          # Odstranit nepotřebné podpůrné soubory
-          rm -f *.blockmap latest*.yml
-          
-          # Vytvořit neměnné univerzální soubory pro přímé stahování z webu
-          SETUP_EXE=$(ls *Setup*.exe 2>/dev/null | head -n 1)
-          if [ -n "$SETUP_EXE" ]; then
-            cp "$SETUP_EXE" "mychalsmp-launcher-setup.exe"
-          fi
-          
-          LINUX_TAR=$(ls *.tar.gz 2>/dev/null | head -n 1)
-          if [ -n "$LINUX_TAR" ]; then
-            cp "$LINUX_TAR" "mychalsmp-launcher.tar.gz"
-          fi
-
-          # Připravit bleskový delta balíček pro všechny generace launcheru (v3, v2 i starší)
-          ASAR_FILE=$(find . -name "app.asar" -type f 2>/dev/null | head -n 1)
-          if [ -n "$ASAR_FILE" ]; then
-            cp "$ASAR_FILE" "update-v3.asar"
-            cp "$ASAR_FILE" "update-v2.asar"
-            cp "$ASAR_FILE" "update.asar"
-            cp "$ASAR_FILE" "app.asar"
-          fi
-          
           echo "=== Seznam souborů k vydání ==="
-          ls -la
+          ls -lh release-assets/
 
       - name: Generate Changelog from Commit Message
         id: changelog
         shell: bash
         run: |
-          # 1. Zjistit zprávu posledního commitu (git commit -m "zprava")
           COMMIT_MSG="${{ github.event.head_commit.message }}"
           if [ -z "$COMMIT_MSG" ]; then
             COMMIT_MSG=$(git log -1 --pretty=format:"%B" 2>/dev/null || true)
           fi
-          
-          # Pokud je commit pouze generický bump "Release v...", zkusit vzít předchozí commit zprávu
           if [[ "$COMMIT_MSG" =~ ^Release\ v[0-9] ]] || [[ "$COMMIT_MSG" =~ ^v[0-9] ]]; then
             PREV_MSG=$(git log -2 --pretty=format:"%s" 2>/dev/null | tail -n +2 | head -n 1 || true)
             if [ -n "$PREV_MSG" ] && [[ ! "$PREV_MSG" =~ ^Release\ v ]]; then
               COMMIT_MSG="$PREV_MSG"
             fi
           fi
-
           if [ -z "$COMMIT_MSG" ]; then
             COMMIT_MSG="Aktualizace launcheru v${{ steps.pkg_version.outputs.version }}"
           fi
-
           echo "Changelog pro release: $COMMIT_MSG"
           printf "%s\n" "$COMMIT_MSG" > release_notes.txt
 
@@ -209,27 +224,28 @@ jobs:
           generate_release_notes: false
           files: |
             release-assets/*.exe
+            release-assets/*.deb
+            release-assets/*.AppImage
             release-assets/*.tar.gz
-            release-assets/*.asar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cleanup Old Releases (Keep only latest)
         run: |
           CURRENT_TAG="v${{ steps.pkg_version.outputs.version }}"
-          echo "🌟 Nejnovější vydaná verze: $CURRENT_TAG"
-          echo "🧹 Kontroluji a mažu všechny starší releases..."
+          echo "Nejnovější vydaná verze: $CURRENT_TAG"
+          echo "Kontroluji a mažu starší releases..."
 
-          ALL_TAGS=$(gh release list --limit 100 --json tagName | jq -r '.[].tagName' || true)
+          ALL_TAGS=$(gh release list --limit 100 --json tagName | jq -r '.[].tagName' 2>/dev/null || true)
 
           for tag in $ALL_TAGS; do
             if [ "$tag" != "$CURRENT_TAG" ] && [ -n "$tag" ]; then
-              echo "🗑️ Odstraňuji starý release $tag..."
-              gh release delete "$tag" --yes --cleanup-tag || gh release delete "$tag" --yes || true
+              echo "Odstraňuji starý release $tag..."
+              gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || gh release delete "$tag" --yes 2>/dev/null || true
             fi
           done
 
-          echo "✅ Ponechán pouze 1 nejnovější release: $CURRENT_TAG"
+          echo "Ponechán pouze 1 nejnovější release: $CURRENT_TAG"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

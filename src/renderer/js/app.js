@@ -2774,36 +2774,69 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const resolveProfile3DIcon = (profile) => {
-            if (!profile) return 'assets/icons/old.png';
+            if (!profile) return { type: 'png', src: 'assets/icons/old.png' };
 
+            if (profile.icon) {
+                switch (profile.icon) {
+                    case 'sword':
+                        return { type: 'png', src: 'assets/icons/mostplayed.png' };
+                    case 'latest':
+                        return { type: 'png', src: 'assets/icons/newest.png' };
+                    case 'old':
+                        return { type: 'png', src: 'assets/icons/old.png' };
+                    case 'upgrade':
+                        return { type: 'svg', svg: '<svg class="profile-3d-float-icon-svg ui-icon-svg--blue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="16 12 12 8 8 12"></polyline><line x1="12" y1="16" x2="12" y2="8"></line></svg>' };
+                    case 'shield':
+                        return { type: 'svg', svg: '<svg class="profile-3d-float-icon-svg" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>' };
+                    case 'rocket':
+                        return { type: 'svg', svg: '<svg class="profile-3d-float-icon-svg" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path><circle cx="15" cy="9" r="1"></circle></svg>' };
+                    default:
+                        break;
+                }
+            }
+
+            // Fallback if profile.icon is unset:
             // 1. Unikátní nejhranější profil (Iron Golem hlava)
             if (profile.id === singleMostPlayedId) {
-                return 'assets/icons/mostplayed.png';
+                return { type: 'png', src: 'assets/icons/mostplayed.png' };
             }
 
             // 2. Unikátní nejnovější verze (Tráva)
             if (profile.id === singleNewestId) {
-                return 'assets/icons/newest.png';
+                return { type: 'png', src: 'assets/icons/newest.png' };
             }
 
             // 3. Všechny ostatní verze (Hlína)
-            return 'assets/icons/old.png';
+            return { type: 'png', src: 'assets/icons/old.png' };
         };
 
         list.innerHTML = sortedProfiles.map(p => {
             const isActive = p.id === activeId;
-            const pKeyart = resolveCardKeyartUrl(p.version);
+            const pKeyart = resolveCardKeyartUrl(p.keyart || p.version);
             const keyartBgStyle = pKeyart ? `background-image: url('${escapeHtml(pKeyart)}');` : '';
-            const iconUrl = resolveProfile3DIcon(p);
+            const iconDesc = resolveProfile3DIcon(p);
+            const iconHtml = (iconDesc && iconDesc.type === 'svg')
+                ? `<div class="profile-icon-box">${iconDesc.svg}</div>`
+                : `<div class="profile-icon-box"><img src="${escapeHtml((iconDesc && iconDesc.src) || 'assets/icons/old.png')}" class="profile-3d-float-icon" alt="${escapeHtml(p.name || '')}" draggable="false" /></div>`;
 
-            const playtimeStr = (p.playtimeSeconds && p.playtimeSeconds >= 60)
-                ? `Odehráno: ${formatPlaytime(p.playtimeSeconds)}`
-                : 'Zatím nehráno';
-            const lastPlayedStr = p.lastPlayed ? `Naposledy: ${formatLastPlayed(p.lastPlayed)}` : null;
-            const loaderTag = (p.loader && p.loader !== 'vanilla') ? `${p.loader.charAt(0).toUpperCase() + p.loader.slice(1)}` : null;
+            const loaderTag = (p.loader && p.loader !== 'vanilla') ? `${p.loader.charAt(0).toUpperCase() + p.loader.slice(1)}` : 'Vanilla';
+            const playtimeStr = (p.playtimeSeconds && p.playtimeSeconds >= 60) ? formatPlaytime(p.playtimeSeconds) : 'Zatím nehráno';
+            const lastPlayedStr = p.lastPlayed ? formatLastPlayed(p.lastPlayed) : null;
+            const canUpgrade = p.version && !String(p.version).includes('26.3') && !String(p.version).includes('26.4');
 
-            const metaParts = [loaderTag, `Verze ${p.version}`, playtimeStr, lastPlayedStr].filter(Boolean);
-            const meta = metaParts.join(' • ');
+            const specBarHtml = `
+                <div class="profile-spec-bar">
+                    <span class="spec-item spec-loader">${escapeHtml(loaderTag)}</span>
+                    <span class="spec-divider"></span>
+                    <span class="spec-item spec-version">v${escapeHtml(p.version || '26.3')}</span>
+                    <span class="spec-divider"></span>
+                    <span class="spec-item spec-ram">${p.ramMax || 4} GB RAM</span>
+                    <span class="spec-divider"></span>
+                    <span class="spec-item spec-playtime">${escapeHtml(playtimeStr)}</span>
+                    ${lastPlayedStr ? `<span class="spec-divider"></span><span class="spec-item spec-last">${escapeHtml(lastPlayedStr)}</span>` : ''}
+                    ${canUpgrade ? `<span class="spec-divider"></span><span class="spec-item spec-upgrade-hint" data-upgrade-pid="${escapeHtml(p.id)}">Upgrade → 26.3</span>` : ''}
+                </div>
+            `;
 
             const isThisRunning = isRunning && runningProfileId && (p.id === runningProfileId);
             const isThisLaunching = isLaunching && launchingProfileId && (p.id === launchingProfileId);
@@ -2841,17 +2874,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             return `
                 <div class="profile-row-card ${isActive ? 'active-profile' : ''}" data-profile-id="${escapeHtml(p.id)}">
                     ${pKeyart ? `<div class="profile-card-keyart-bg" style="${keyartBgStyle}"></div><div class="profile-card-keyart-overlay"></div>` : ''}
-                    <div class="profile-icon-box">
-                        <img src="${escapeHtml(iconUrl)}" class="profile-3d-float-icon" alt="${escapeHtml(p.name || '')}" draggable="false" />
-                    </div>
+                    ${iconHtml}
                     <div class="profile-details">
                         <div class="profile-title-line">
                             <span class="p-name">${escapeHtml(p.name)}</span>
                         </div>
-                        <div class="p-meta">${escapeHtml(meta)}</div>
+                        <div class="profile-meta-line">${specBarHtml}</div>
                     </div>
                     <div class="profile-card-right">
                         <div class="profile-actions">
+                            <button class="profile-tool-btn btn-profile-quick-folder" data-profile-id="${escapeHtml(p.id)}" title="Otevřít složku profilu">
+                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            </button>
+                            <button class="profile-tool-btn btn-profile-duplicate" data-profile-id="${escapeHtml(p.id)}" title="Duplikovat profil">
+                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
                             <button class="profile-tool-btn btn-profile-settings" data-profile-id="${escapeHtml(p.id)}" title="Nastavení profilu">
                                 <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                             </button>
@@ -2917,6 +2954,36 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         });
 
+
+        // Quick folder button
+        list.querySelectorAll('.btn-profile-quick-folder').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const pid = btn.dataset.profileId;
+                await window.api.openProfileFolder(pid, '');
+            });
+        });
+
+        // Duplicate button
+        list.querySelectorAll('.btn-profile-duplicate').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (typeof isDuplicatingProfile !== 'undefined' && isDuplicatingProfile) return;
+                const pid = btn.dataset.profileId;
+                await executeProfileDuplicate(pid);
+            });
+        });
+
+        // Upgrade hint click
+        list.querySelectorAll('.spec-upgrade-hint').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const pid = el.dataset.upgradePid;
+                if (typeof openUpgradeModal === 'function') {
+                    openUpgradeModal(pid);
+                }
+            });
+        });
 
         // Bind Settings buttons (Gear icon) to open Profile Settings Modal
         list.querySelectorAll('.btn-profile-settings').forEach(btn => {
@@ -3782,41 +3849,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnCloseProfileSeedModal) btnCloseProfileSeedModal.addEventListener('click', closeProfileSeedModal);
     if (btnCloseProfileSeedFooter) btnCloseProfileSeedFooter.addEventListener('click', closeProfileSeedModal);
 
-    if (btnOpenProfileSeedModal) {
-        btnOpenProfileSeedModal.addEventListener('click', async () => {
-            const profId = selectedModsProfileId || currentConfig.activeProfileId;
-            if (!profId) {
-                showToast('Není vybrán žádný profil.', 'error');
-                return;
-            }
-            if (modalProfileSeed) modalProfileSeed.style.display = 'flex';
-            if (profileSeedExportInput) profileSeedExportInput.value = 'Generuji...';
-            if (profileSeedSummary) profileSeedSummary.textContent = '';
-            if (profileSeedImportStatus) profileSeedImportStatus.textContent = '';
-            if (profileSeedImportInput) profileSeedImportInput.value = '';
-            if (profileSeedProgressBox) profileSeedProgressBox.style.display = 'none';
-            if (profileSeedProgressBarFill) {
-                profileSeedProgressBarFill.style.width = '0%';
-                profileSeedProgressBarFill.style.background = 'linear-gradient(90deg, #0a67e5, #21DE00)';
-            }
+    async function openProfileSeedModal(targetProfId) {
+        const profId = targetProfId || selectedModsProfileId || currentConfig.activeProfileId;
+        if (!profId) {
+            showToast('Není vybrán žádný profil.', 'error');
+            return;
+        }
+        if (modalProfileSeed) modalProfileSeed.style.display = 'flex';
+        if (profileSeedExportInput) profileSeedExportInput.value = 'Generuji...';
+        if (profileSeedSummary) profileSeedSummary.textContent = '';
+        if (profileSeedImportStatus) profileSeedImportStatus.textContent = '';
+        if (profileSeedImportInput) profileSeedImportInput.value = '';
+        if (profileSeedProgressBox) profileSeedProgressBox.style.display = 'none';
+        if (profileSeedProgressBarFill) {
+            profileSeedProgressBarFill.style.width = '0%';
+            profileSeedProgressBarFill.style.background = 'linear-gradient(90deg, #0a67e5, #21DE00)';
+        }
 
-            try {
-                const res = await window.api.generateProfileSeed(profId);
-                if (res && res.success) {
-                    const seedVal = res.seed || res.seedString || res.code || res.packCode || '';
-                    const countVal = Number(res.count ?? res.itemCount ?? 0) || 0;
-                    if (profileSeedExportInput) profileSeedExportInput.value = seedVal || 'Prázdný balíček';
-                    if (profileSeedSummary) {
-                        profileSeedSummary.textContent = `${countVal} ${countVal === 1 ? 'položka' : (countVal >= 2 && countVal <= 4 ? 'položky' : 'položek')}`;
-                    }
-                } else {
-                    if (profileSeedExportInput) profileSeedExportInput.value = 'Chyba';
-                    if (profileSeedSummary) profileSeedSummary.textContent = res?.error || 'Chyba';
+        try {
+            const res = await window.api.generateProfileSeed(profId);
+            if (res && res.success) {
+                const seedVal = res.seed || res.seedString || res.code || res.packCode || '';
+                const countVal = Number(res.count ?? res.itemCount ?? 0) || 0;
+                if (profileSeedExportInput) profileSeedExportInput.value = seedVal || 'Prázdný balíček';
+                if (profileSeedSummary) {
+                    profileSeedSummary.textContent = `${countVal} ${countVal === 1 ? 'položka' : (countVal >= 2 && countVal <= 4 ? 'položky' : 'položek')}`;
                 }
-            } catch (err) {
+            } else {
                 if (profileSeedExportInput) profileSeedExportInput.value = 'Chyba';
-                if (profileSeedSummary) profileSeedSummary.textContent = err?.message || 'Chyba';
+                if (profileSeedSummary) profileSeedSummary.textContent = res?.error || 'Chyba';
             }
+        } catch (err) {
+            if (profileSeedExportInput) profileSeedExportInput.value = 'Chyba';
+            if (profileSeedSummary) profileSeedSummary.textContent = err?.message || 'Chyba';
+        }
+    }
+
+    if (btnOpenProfileSeedModal) {
+        btnOpenProfileSeedModal.addEventListener('click', () => openProfileSeedModal());
+    }
+
+    const btnOpenSeedModalFromHeader = document.getElementById('btnOpenSeedModalFromHeader');
+    if (btnOpenSeedModalFromHeader) {
+        btnOpenSeedModalFromHeader.addEventListener('click', () => {
+            openProfileSeedModal(currentConfig.activeProfileId);
         });
     }
 
@@ -9321,6 +9397,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         dropdownNewVersion?.setValue('26.3');
         dropdownNewLoader?.setValue('vanilla');
+        const newJvmInput = document.getElementById('newProfileJvmArgsInput');
+        if (newJvmInput) newJvmInput.value = '';
         newProfileSelectedIcon = 'sword';
         iconButtons.forEach(b => b.classList.toggle('active', b.dataset.icon === 'sword'));
         modalCreateProfile.style.display = 'flex';
@@ -9345,6 +9423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const ver = dropdownNewVersion ? dropdownNewVersion.getValue() : '26.3';
             const ldr = dropdownNewLoader ? dropdownNewLoader.getValue() : 'vanilla';
             const ram = newProfileRamSliderController ? newProfileRamSliderController.getTarget() : parseInt(newProfileRamSlider?.value || '4', 10);
+            const rawJvm = document.getElementById('newProfileJvmArgsInput')?.value?.trim() || '';
             const newId = 'profile-' + Date.now();
 
             const newProf = {
@@ -9356,6 +9435,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 desc: `${rawName} (${ver}${ldr !== 'vanilla' ? ' • ' + ldr : ''})`,
                 icon: newProfileSelectedIcon,
                 ramMax: ram,
+                jvmArgs: rawJvm,
+                customJvmArgs: rawJvm,
                 lastPlayed: null,
                 playtimeSeconds: 0
             };
@@ -9811,6 +9892,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateSliderVisuals(profileRamSlider, profileRamValueBadge);
         }
 
+        const settingsJvmInput = document.getElementById('profileSettingsJvmArgsInput');
+        if (settingsJvmInput) {
+            settingsJvmInput.value = profile.jvmArgs || profile.customJvmArgs || '';
+        }
+
+        activeSettingsProfileIcon = profile.icon || 'sword';
+        document.querySelectorAll('#profileSettingsIconPicker .icon-picker-item').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.icon === activeSettingsProfileIcon);
+        });
+
+        const deleteContainer = document.getElementById('profileDeleteContainer');
+        if (deleteContainer) {
+            deleteContainer.style.display = ((currentConfig.profiles || []).length <= 1) ? 'none' : 'block';
+        }
         if (deleteSec) {
             deleteSec.style.display = ((currentConfig.profiles || []).length <= 1) ? 'none' : 'flex';
         }
@@ -9956,16 +10051,98 @@ document.addEventListener('DOMContentLoaded', async () => {
             // U importovaných profilů se zavaděč nemění ani nepřepisuje
             const newLoader = isImported ? ((profile && profile.loader) || 'fabric') : (loaderSelect ? loaderSelect.value : 'fabric');
 
+            const newJvm = document.getElementById('profileSettingsJvmArgsInput')?.value?.trim() || '';
+
             await window.api.updateProfileSettings(activeSettingsProfileId, {
                 name: newName || 'Profil',
                 ramMax: newRam,
-                loader: newLoader
+                loader: newLoader,
+                jvmArgs: newJvm,
+                customJvmArgs: newJvm,
+                icon: activeSettingsProfileIcon
             });
 
             showToast('Nastavení profilu uloženo.', 'success');
             closeProfileSettingsModal();
             await loadConfiguration();
             renderProfilesList();
+        });
+    }
+
+    let activeSettingsProfileIcon = 'sword';
+    document.querySelectorAll('#profileSettingsIconPicker .icon-picker-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            activeSettingsProfileIcon = btn.dataset.icon || 'sword';
+            document.querySelectorAll('#profileSettingsIconPicker .icon-picker-item').forEach(b => {
+                b.classList.toggle('active', b === btn);
+            });
+        });
+    });
+
+    let isDuplicatingProfile = false;
+
+    async function executeProfileDuplicate(pid) {
+        if (!pid || isDuplicatingProfile) return;
+        if (isRunning && runningProfileId === pid) {
+            showToast('Nelze duplikovat profil, který právě běží.', 'warning');
+            return;
+        }
+
+        isDuplicatingProfile = true;
+        const btnModalDup = document.getElementById('btnDuplicateCurrentProfile');
+        if (btnModalDup) {
+            btnModalDup.disabled = true;
+            btnModalDup.classList.add('mc-btn-disabled');
+        }
+        document.querySelectorAll('.btn-profile-duplicate').forEach(b => {
+            b.disabled = true;
+            b.classList.add('mc-btn-disabled');
+        });
+
+        try {
+            const res = await window.api.duplicateProfile(pid);
+            if (res && res.success) {
+                showToast(`Profil "${res.profile?.name || 'Kopie'}" byl úspěšně vytvořen.`, 'success');
+                await loadConfiguration();
+                if (res.activeProfileId) {
+                    currentConfig.activeProfileId = res.activeProfileId;
+                }
+                renderProfilesList();
+            } else {
+                showToast(res?.error || 'Duplikace profilu selhala.', 'error');
+            }
+        } catch (err) {
+            showToast('Chyba při duplikování profilu: ' + err.message, 'error');
+        } finally {
+            isDuplicatingProfile = false;
+            if (btnModalDup) {
+                btnModalDup.disabled = false;
+                btnModalDup.classList.remove('mc-btn-disabled');
+            }
+            document.querySelectorAll('.btn-profile-duplicate').forEach(b => {
+                b.disabled = false;
+                b.classList.remove('mc-btn-disabled');
+            });
+        }
+    }
+
+    const btnDuplicateCurrentProfile = document.getElementById('btnDuplicateCurrentProfile');
+    if (btnDuplicateCurrentProfile) {
+        btnDuplicateCurrentProfile.addEventListener('click', async () => {
+            if (!activeSettingsProfileId || isDuplicatingProfile) return;
+            const targetId = activeSettingsProfileId;
+            closeProfileSettingsModal();
+            await executeProfileDuplicate(targetId);
+        });
+    }
+
+    const btnShareProfileSeedFromSettings = document.getElementById('btnShareProfileSeedFromSettings');
+    if (btnShareProfileSeedFromSettings) {
+        btnShareProfileSeedFromSettings.addEventListener('click', () => {
+            if (!activeSettingsProfileId) return;
+            const targetId = activeSettingsProfileId;
+            closeProfileSettingsModal();
+            openProfileSeedModal(targetId);
         });
     }
 

@@ -1,31 +1,22 @@
 {
   "name": "mychalsmp-launcher",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "Oficiální multiplatformní launcher pro síť MYCHAL SMP s optimalizovaným klientem pro Windows 11 a Linux",
-  "main": "src/main/index.js",
   "scripts": {
-    "start": "electron . --no-sandbox",
-    "build:linux": "electron-builder --linux tar.gz",
-    "build:win": "electron-builder --win nsis portable",
-    "build:all": "electron-builder -wl",
-    "pack": "electron-builder --dir",
-    "build:native": "cd native && cargo build --release && (cp target/release/libmychalsmp_native.so mychalsmp_native.node 2>/dev/null || cp target/release/mychalsmp_native.dll mychalsmp_native.node 2>/dev/null || true) && cp mychalsmp_native.node ../src/main/mychalsmp_native.node 2>/dev/null || true",
+    "start": "tauri dev",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "icons:generate": "tauri icon build/icon.png",
+    "build:linux": "tauri build --bundles deb,appimage",
+    "build:win": "tauri build --bundles nsis",
+    "build:all": "tauri build",
     "release": "bash release.sh"
   },
   "homepage": "https://mychalsmp.xyz",
   "author": "mychalVidea <admin@mychalsmp.xyz>",
   "license": "MIT",
-  "dependencies": {
-    "adm-zip": "^0.6.1",
-    "minecraft-launcher-core": "^3.18.2",
-    "minecraft-server-util": "^5.4.4",
-    "msmc": "^5.0.5",
-    "skinview3d": "^3.4.2"
-  },
   "devDependencies": {
-    "electron": "^33.4.11",
-    "electron-builder": "^26.18.0",
-    "png-to-ico": "^3.0.2",
-    "sharp": "^0.35.5"
+    "@tauri-apps/cli": "^2.1.0"
   }
 }

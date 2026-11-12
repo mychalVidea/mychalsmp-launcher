@@ -64,6 +64,27 @@ if [ -n "$INPUT_VERSION" ] && [ "$INPUT_VERSION" != "$CURRENT_VERSION" ]; then
         fi
 
         git add "$PACKAGE_JSON" 2>/dev/null || true
+
+        # Aktualizace src-tauri/tauri.conf.json a Cargo.toml pokud existují
+        if [ -f "$DIR/src-tauri/tauri.conf.json" ]; then
+            node -e "
+            const fs = require('fs');
+            const conf = JSON.parse(fs.readFileSync('$DIR/src-tauri/tauri.conf.json', 'utf8'));
+            conf.version = '$NEW_VERSION';
+            fs.writeFileSync('$DIR/src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+            " 2>/dev/null || true
+            git add "$DIR/src-tauri/tauri.conf.json" 2>/dev/null || true
+        fi
+        if [ -f "$DIR/src-tauri/Cargo.toml" ]; then
+            node -e "
+            const fs = require('fs');
+            let cargo = fs.readFileSync('$DIR/src-tauri/Cargo.toml', 'utf8');
+            cargo = cargo.replace(/^version\s*=\s*\"[^\"]+\"/m, 'version = \"' + '$NEW_VERSION' + '\"');
+            fs.writeFileSync('$DIR/src-tauri/Cargo.toml', cargo);
+            " 2>/dev/null || true
+            git add "$DIR/src-tauri/Cargo.toml" 2>/dev/null || true
+        fi
+
         echo "✔ Verze nastavena na $NEW_VERSION a zahrnuta do tohoto commitu!" > /dev/tty
         echo "ℹ Po 'git push' GitHub Actions automaticky vytvoří nový release v$NEW_VERSION." > /dev/tty
         echo "" > /dev/tty

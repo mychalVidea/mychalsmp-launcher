@@ -60,14 +60,30 @@ if [ ! -f "$INSTALL_DIR/mychalsmp-launcher" ]; then
     fi
 fi
 
+if [ ! -f "$INSTALL_DIR/mychalsmp-launcher" ] && [ -f "$INSTALL_DIR/SMPClient" ]; then
+    ln -sf "$INSTALL_DIR/SMPClient" "$INSTALL_DIR/mychalsmp-launcher"
+fi
+
 if [ ! -f "$INSTALL_DIR/mychalsmp-launcher" ]; then
     echo "❌ Chyba: Spustitelný soubor mychalsmp-launcher nebyl v archivu nalezen."
     exit 1
 fi
 
-# Vytvoření symlinku do ~/.local/bin a nastavení oprávnění
+# Deaktivace chrome-sandbox pokud nemá SUID root (zabraňuje okamžitému SIGTRAP pádu na moderních distrech)
+if [ -f "$INSTALL_DIR/chrome-sandbox" ]; then
+    mv -f "$INSTALL_DIR/chrome-sandbox" "$INSTALL_DIR/chrome-sandbox.disabled" 2>/dev/null || rm -f "$INSTALL_DIR/chrome-sandbox" 2>/dev/null || true
+fi
+
+# Nastavení oprávnění a vytvoření spouštěcího wrapperu v ~/.local/bin s --no-sandbox
 chmod +x "$INSTALL_DIR/mychalsmp-launcher"
-ln -sf "$INSTALL_DIR/mychalsmp-launcher" "$BIN_DIR/mychalsmp-launcher"
+[ -f "$INSTALL_DIR/SMPClient" ] && chmod +x "$INSTALL_DIR/SMPClient" || true
+
+rm -f "$BIN_DIR/mychalsmp-launcher"
+cat <<EOF > "$BIN_DIR/mychalsmp-launcher"
+#!/usr/bin/env bash
+exec "$INSTALL_DIR/mychalsmp-launcher" --no-sandbox "\$@"
+EOF
+chmod +x "$BIN_DIR/mychalsmp-launcher"
 
 # Zajištění ikony aplikace
 if [ -f "$INSTALL_DIR/resources/app/src/renderer/assets/logo.png" ]; then
@@ -85,7 +101,7 @@ cat <<EOF > "$DESKTOP_DIR/mychalsmp-launcher.desktop"
 [Desktop Entry]
 Name=SMPClient
 Comment=Oficiální Minecraft klient sítě MYCHAL SMP
-Exec=$INSTALL_DIR/mychalsmp-launcher %U
+Exec="$INSTALL_DIR/mychalsmp-launcher" --no-sandbox %U
 Icon=mychalsmp-launcher
 Terminal=false
 Type=Application
@@ -107,7 +123,7 @@ if ([ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]) && [ "$NO_START" != "1" ] &&
     echo "🚀 Spouštím herního klienta a zavírám terminál..."
 
     # Plně odpojené spuštění v nové session nezávislé na terminálu
-    nohup setsid "$INSTALL_DIR/mychalsmp-launcher" </dev/null >/dev/null 2>&1 &
+    nohup setsid "$INSTALL_DIR/mychalsmp-launcher" --no-sandbox </dev/null >/dev/null 2>&1 &
     disown -a 2>/dev/null || true
 
     sleep 1.2
