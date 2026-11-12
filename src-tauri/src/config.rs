@@ -336,8 +336,9 @@ pub fn resolve_profile_dir(config: &Value, profile_id: Option<&str>) -> PathBuf 
         .unwrap_or_else(get_default_game_dir);
 
     let pid = profile_id
+        .or_else(|| config.get("activeProfileId").and_then(|v| v.as_str()))
         .or_else(|| config.get("selectedProfile").and_then(|v| v.as_str()))
-        .unwrap_or("mychalsmp-fabric");
+        .unwrap_or("minecraft-26.3");
 
     if let Some(profiles) = config.get("profiles").and_then(|v| v.as_array()) {
         if let Some(profile) = profiles.iter().find(|p| p.get("id").and_then(|v| v.as_str()) == Some(pid)) {

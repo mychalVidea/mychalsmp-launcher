@@ -177,7 +177,7 @@ button:hover .ui-icon-svg:not(.ui-icon-spin) {
 }
 
 html {
-    background: transparent !important;
+    background-color: var(--bg-dark) !important;
     height: 100%;
 }
 
@@ -190,10 +190,10 @@ body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    border-radius: var(--radius-window, 14px);
+    border-radius: 0;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 16px 42px rgba(0, 0, 0, 0.55);
-    transition: border-radius 0.15s ease, border-color 0.15s ease, opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: none;
+    transition: border-color 0.15s ease, opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body.launch-handoff {

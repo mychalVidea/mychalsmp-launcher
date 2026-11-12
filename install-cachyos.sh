@@ -57,7 +57,7 @@ cat <<EOF > "$DESKTOP_DIR/mychalsmp-launcher.desktop"
 [Desktop Entry]
 Name=MYCHAL SMP Launcher
 Comment=Oficiální Minecraft launcher sítě MYCHAL SMP
-Exec=$INSTALL_DIR/mychalsmp-launcher %U
+Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 $INSTALL_DIR/mychalsmp-launcher %U
 Icon=$ICON_DIR/mychalsmp-launcher.png
 Terminal=false
 Type=Application

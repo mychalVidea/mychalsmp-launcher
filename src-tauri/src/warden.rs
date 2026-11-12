@@ -164,7 +164,9 @@ pub fn scan_profile_mods_warden(profile_id: Option<&str>) -> Value {
     json!({
         "clean": violations.is_empty(),
         "scannedCount": scanned_count,
-        "violations": violations
+        "blockedCount": violations.len(),
+        "violations": violations,
+        "illegalMods": violations
     })
 }
 

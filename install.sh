@@ -90,6 +90,8 @@ chmod +x "$INSTALL_DIR/mychalsmp-launcher"
 rm -f "$BIN_DIR/mychalsmp-launcher"
 cat <<EOF > "$BIN_DIR/mychalsmp-launcher"
 #!/usr/bin/env bash
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+export WEBKIT_DISABLE_COMPOSITING_MODE=1
 exec "$INSTALL_DIR/mychalsmp-launcher" "\$@"
 EOF
 chmod +x "$BIN_DIR/mychalsmp-launcher"
@@ -110,7 +112,7 @@ cat <<EOF > "$DESKTOP_DIR/mychalsmp-launcher.desktop"
 [Desktop Entry]
 Name=SMPClient
 Comment=Oficiální Minecraft klient sítě MYCHAL SMP
-Exec="$INSTALL_DIR/mychalsmp-launcher" %U
+Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 "$INSTALL_DIR/mychalsmp-launcher" %U
 Icon=mychalsmp-launcher
 Terminal=false
 Type=Application

@@ -37,20 +37,16 @@ pub fn get_version_candidates(mc_version: &str) -> Vec<String> {
             list.push("26.1.2".to_string());
             list.push("26.1.1".to_string());
             list.push("26.1".to_string());
-            list.push("1.21.5".to_string());
-            list.push("1.21.4".to_string());
         }
         "26.2" => {
             list.push("26.1.2".to_string());
             list.push("26.1.1".to_string());
             list.push("26.1".to_string());
-            list.push("1.21.4".to_string());
         }
         "26.1.2" | "26.1.1" | "26.1" => {
             list.push("26.1.2".to_string());
             list.push("26.1.1".to_string());
             list.push("26.1".to_string());
-            list.push("1.21.4".to_string());
         }
         _ => {}
     }
@@ -232,11 +228,16 @@ pub async fn find_best_modrinth_version(
         }
     }
 
-    if let Some(found) = versions.iter().find(|v| matches_loader(v)) {
-        return Ok(found.clone());
+    if project_type != "mod" {
+        if let Some(found) = versions.iter().find(|v| matches_loader(v)) {
+            return Ok(found.clone());
+        }
     }
 
-    Ok(versions[0].clone())
+    Err(format!(
+        "Mód '{}' zatím nemá vydanou kompatibilní verzi pro Minecraft {}.",
+        project_id_or_slug, mc_version
+    ))
 }
 
 pub async fn download_file_with_progress(
@@ -314,6 +315,7 @@ pub async fn download_mod_or_pack_with_deps(
     if mc_version.is_empty() {
         if let Some(profiles) = cfg.get("profiles").and_then(|v| v.as_array()) {
             let pid = profile_id
+                .or_else(|| cfg.get("activeProfileId").and_then(|v| v.as_str()))
                 .or_else(|| cfg.get("selectedProfile").and_then(|v| v.as_str()))
                 .unwrap_or("mychalsmp-fabric");
             if let Some(p) = profiles.iter().find(|x| x.get("id").and_then(|v| v.as_str()) == Some(pid)) {
@@ -334,39 +336,69 @@ pub async fn download_mod_or_pack_with_deps(
     let target_dir = prof_dir.join(target_subdir);
     let _ = fs::create_dir_all(&target_dir);
 
-    let _ = app.emit(
-        "mod-download-progress",
-        json!({
-            "id": project_id,
-            "projectId": project_id,
-            "title": title,
-            "percent": 15,
-            "status": format!("Hledám kompatibilní verzi pro {}...", mc_version)
-        }),
-    );
-
-    let ver_info = find_best_modrinth_version(project_id, &mc_version, &loader, project_type).await?;
-    let files = ver_info
-        .get("files")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| "Verze neobsahuje žádné soubory ke stažení.".to_string())?;
-    let primary_file = files
-        .iter()
-        .find(|f| f.get("primary").and_then(|v| v.as_bool()) == Some(true))
-        .or_else(|| files.first())
-        .ok_or_else(|| "Nenalezen primární soubor.".to_string())?;
-
-    let download_url = primary_file
-        .get("url")
+    let direct_url_opt = mod_options
+        .get("directUrl")
+        .or_else(|| mod_options.get("downloadUrl"))
         .and_then(|v| v.as_str())
-        .ok_or_else(|| "Chybí URL ke stažení.".to_string())?;
-    let filename = primary_file
+        .filter(|s| !s.is_empty());
+    let direct_filename_opt = mod_options
         .get("filename")
+        .or_else(|| mod_options.get("newFilename"))
         .and_then(|v| v.as_str())
-        .unwrap_or("mod.jar");
-    let sha1 = primary_file
-        .pointer("/hashes/sha1")
-        .and_then(|v| v.as_str());
+        .filter(|s| !s.is_empty());
+
+    let (download_url, filename, sha1_opt, ver_info) =
+        if let (Some(d_url), Some(d_fname)) = (direct_url_opt, direct_filename_opt) {
+            (
+                d_url.to_string(),
+                d_fname.to_string(),
+                None,
+                json!({
+                    "id": mod_options.get("versionId").cloned().unwrap_or(Value::Null),
+                    "version_number": mod_options.get("versionNumber").or_else(|| mod_options.get("newVersion")).cloned().unwrap_or(json!(""))
+                }),
+            )
+        } else {
+            let _ = app.emit(
+                "mod-download-progress",
+                json!({
+                    "id": project_id,
+                    "projectId": project_id,
+                    "title": title,
+                    "percent": 15,
+                    "status": format!("Hledám kompatibilní verzi pro {}...", mc_version)
+                }),
+            );
+
+            let v_info =
+                find_best_modrinth_version(project_id, &mc_version, &loader, project_type).await?;
+            let files = v_info
+                .get("files")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| "Verze neobsahuje žádné soubory ke stažení.".to_string())?;
+            let primary_file = files
+                .iter()
+                .find(|f| f.get("primary").and_then(|v| v.as_bool()) == Some(true))
+                .or_else(|| files.first())
+                .ok_or_else(|| "Nenalezen primární soubor.".to_string())?;
+
+            let dl_url = primary_file
+                .get("url")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Chybí URL ke stažení.".to_string())?
+                .to_string();
+            let fname = primary_file
+                .get("filename")
+                .and_then(|v| v.as_str())
+                .unwrap_or("mod.jar")
+                .to_string();
+            let sha = primary_file
+                .pointer("/hashes/sha1")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            (dl_url, fname, sha, v_info)
+        };
 
     let _ = app.emit(
         "mod-download-progress",
@@ -379,8 +411,8 @@ pub async fn download_mod_or_pack_with_deps(
         }),
     );
 
-    let dest_path = target_dir.join(filename);
-    download_file_with_progress(download_url, &dest_path, sha1).await?;
+    let dest_path = target_dir.join(&filename);
+    download_file_with_progress(&download_url, &dest_path, sha1_opt.as_deref()).await?;
 
     // If updating/replacing an older version of the same project, remove old jar
     if project_type == "mod" {
@@ -393,7 +425,7 @@ pub async fn download_mod_or_pack_with_deps(
                 }
             }
         }
-        reg[filename] = json!({
+        reg[&filename] = json!({
             "projectId": project_id,
             "versionId": ver_info.get("id").cloned().unwrap_or(Value::Null),
             "versionNumber": ver_info.get("version_number").cloned().unwrap_or(Value::Null),
@@ -403,6 +435,7 @@ pub async fn download_mod_or_pack_with_deps(
             "installedAt": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
         });
         write_registry_file(&prof_dir, &reg);
+        let _ = resolve_profile_mod_collisions(profile_id);
 
         // Resolve required dependencies (1 level deep)
         if let Some(deps) = ver_info.get("dependencies").and_then(|v| v.as_array()) {
@@ -507,8 +540,23 @@ pub fn get_profile_mods_list(profile_id: Option<&str>) -> Value {
     let mods_dir = prof_dir.join("mods");
     let reg = read_registry_file(&prof_dir);
 
+    let pid = profile_id
+        .or_else(|| cfg.get("activeProfileId").and_then(|v| v.as_str()))
+        .or_else(|| cfg.get("selectedProfile").and_then(|v| v.as_str()))
+        .unwrap_or("minecraft-26.3");
+    let profile_name = cfg
+        .get("profiles")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.iter().find(|p| p.get("id").and_then(|v| v.as_str()) == Some(pid)))
+        .and_then(|p| p.get("name").and_then(|v| v.as_str()))
+        .unwrap_or(pid)
+        .to_string();
+
     if !mods_dir.exists() {
         return json!({
+            "success": true,
+            "profileId": pid,
+            "profileName": profile_name,
             "mods": [],
             "collisions": []
         });
@@ -535,17 +583,24 @@ pub fn get_profile_mods_list(profile_id: Option<&str>) -> Value {
 
             let base_jar = fname.trim_end_matches(".disabled");
             let reg_entry = reg.get(&fname).or_else(|| reg.get(base_jar));
+            let display_name = reg_entry
+                .and_then(|r| r.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(&parsed_name);
 
             mods.push(json!({
                 "filename": fname,
+                "id": mod_id,
                 "modId": mod_id,
-                "name": reg_entry.and_then(|r| r.get("name")).and_then(|v| v.as_str()).unwrap_or(&parsed_name),
+                "name": display_name,
+                "cleanName": display_name,
                 "version": version,
                 "description": description.unwrap_or_default(),
                 "enabled": enabled,
                 "sizeBytes": size_bytes,
                 "projectId": reg_entry.and_then(|r| r.get("projectId")).cloned().unwrap_or(Value::Null),
                 "iconUrl": reg_entry.and_then(|r| r.get("iconUrl")).cloned().unwrap_or(Value::Null),
+                "iconDataUrl": reg_entry.and_then(|r| r.get("iconUrl")).cloned().unwrap_or(Value::Null),
                 "isCore": mod_id == "selfnametag"
             }));
         }
@@ -562,12 +617,16 @@ pub fn get_profile_mods_list(profile_id: Option<&str>) -> Value {
         if files.len() > 1 {
             collisions.push(json!({
                 "modId": mid,
+                "count": files.len(),
                 "files": files
             }));
         }
     }
 
     json!({
+        "success": true,
+        "profileId": pid,
+        "profileName": profile_name,
         "mods": mods,
         "collisions": collisions
     })
@@ -724,6 +783,7 @@ pub fn resolve_profile_mod_collisions(profile_id: Option<&str>) -> Value {
 
     json!({
         "success": true,
+        "resolved": removed.len(),
         "removed": removed
     })
 }
@@ -828,6 +888,7 @@ pub async fn check_profile_mod_updates_bulk(profile_id: Option<&str>) -> Value {
     let mut mc_version = "26.3".to_string();
     let mut loader = "fabric".to_string();
     let pid = profile_id
+        .or_else(|| cfg.get("activeProfileId").and_then(|v| v.as_str()))
         .or_else(|| cfg.get("selectedProfile").and_then(|v| v.as_str()))
         .unwrap_or("mychalsmp-fabric");
     if let Some(profiles) = cfg.get("profiles").and_then(|v| v.as_array()) {
@@ -841,7 +902,7 @@ pub async fn check_profile_mod_updates_bulk(profile_id: Option<&str>) -> Value {
     if let Ok(entries) = fs::read_dir(&mods_dir) {
         for entry in entries.flatten() {
             let fname = entry.file_name().to_string_lossy().to_string();
-            if !fname.ends_with(".jar") && !fname.ends_with(".jar.disabled") {
+            if !fname.ends_with(".jar") {
                 continue;
             }
             if let Some(sha1) = compute_sha1_file(&entry.path()) {
@@ -851,11 +912,12 @@ pub async fn check_profile_mod_updates_bulk(profile_id: Option<&str>) -> Value {
     }
 
     if hash_to_file.is_empty() {
-        return json!({ "updates": {} });
+        return json!({ "success": true, "updates": [] });
     }
 
     let hashes: Vec<String> = hash_to_file.keys().cloned().collect();
-    let game_versions = get_version_candidates(&mc_version);
+    // Strict exact game version check for updates so we never downgrade/cross-grade a working mod!
+    let game_versions = vec![mc_version.clone()];
     let client = modrinth_client();
 
     let resp = match client
@@ -870,11 +932,12 @@ pub async fn check_profile_mod_updates_bulk(profile_id: Option<&str>) -> Value {
         .await
     {
         Ok(r) if r.status().is_success() => r,
-        _ => return json!({ "updates": {} }),
+        _ => return json!({ "success": true, "updates": [] }),
     };
 
     let latest_map: HashMap<String, Value> = resp.json().await.unwrap_or_default();
-    let mut updates = serde_json::Map::new();
+    let reg = read_registry_file(&prof_dir);
+    let mut updates_arr = Vec::new();
 
     for (old_hash, new_ver) in latest_map {
         if let Some(old_fname) = hash_to_file.get(&old_hash) {
@@ -888,22 +951,57 @@ pub async fn check_profile_mod_updates_bulk(profile_id: Option<&str>) -> Value {
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
                 if !new_hash.is_empty() && !new_hash.eq_ignore_ascii_case(&old_hash) {
-                    updates.insert(
-                        old_fname.clone(),
-                        json!({
-                            "projectId": new_ver.get("project_id").cloned().unwrap_or(Value::Null),
-                            "versionId": new_ver.get("id").cloned().unwrap_or(Value::Null),
-                            "versionNumber": new_ver.get("version_number").cloned().unwrap_or(Value::Null),
-                            "downloadUrl": primary.get("url").cloned().unwrap_or(Value::Null),
-                            "filename": primary.get("filename").cloned().unwrap_or(Value::Null)
-                        }),
-                    );
+                    let proj_id = new_ver
+                        .get("project_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let new_ver_num = new_ver
+                        .get("version_number")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let dl_url = primary
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let new_fname = primary
+                        .get("filename")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(old_fname)
+                        .to_string();
+                    let base_jar = old_fname.trim_end_matches(".disabled");
+                    let title = reg
+                        .get(old_fname)
+                        .or_else(|| reg.get(base_jar))
+                        .and_then(|r| r.get("name"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(base_jar)
+                        .to_string();
+
+                    updates_arr.push(json!({
+                        "id": proj_id,
+                        "projectId": proj_id,
+                        "title": title,
+                        "versionId": new_ver.get("id").cloned().unwrap_or(Value::Null),
+                        "versionNumber": new_ver_num,
+                        "newVersion": new_ver_num,
+                        "oldFilename": old_fname,
+                        "newFilename": new_fname,
+                        "filename": new_fname,
+                        "directUrl": dl_url,
+                        "downloadUrl": dl_url
+                    }));
                 }
             }
         }
     }
 
-    json!({ "updates": Value::Object(updates) })
+    json!({
+        "success": true,
+        "updates": updates_arr
+    })
 }
 
 pub fn check_is_profile_optimized(profile_id: Option<&str>) -> Value {
@@ -940,8 +1038,13 @@ pub fn check_is_profile_optimized(profile_id: Option<&str>) -> Value {
         }
     }
 
+    let has_sodium = existing_files.iter().any(|f| f.ends_with(".jar") && f.contains("sodium"));
+    let has_lithium = existing_files.iter().any(|f| f.ends_with(".jar") && f.contains("lithium"));
+
     json!({
-        "optimized": installed >= 5,
+        "optimized": installed >= 5 || (has_sodium && has_lithium),
+        "hasSodium": has_sodium,
+        "hasLithium": has_lithium,
         "installedCount": installed,
         "totalCount": OPTIMIZATION_PACK_MODS.len(),
         "missing": missing

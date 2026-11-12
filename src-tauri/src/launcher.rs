@@ -22,10 +22,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::io::{AsyncBufReadExt, BufReader as TokioBufReader};
 
-pub const APP_VERSION: &str = "1.4.6";
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const DEFAULT_MIN_RAM_MB: u64 = 2048;
 pub const DEFAULT_MAX_RAM_MB: u64 = 4096;
 pub const MIN_CLIENT_JAR_SIZE: u64 = 1_000_000; // 1 MB minimum for a valid vanilla client jar
@@ -866,8 +866,25 @@ pub async fn ensure_fabric_profile(
                 let json_path = entry.path().join(format!("{}.json", name));
                 if json_path.exists() {
                     if let Ok(content) = fs::read_to_string(&json_path) {
-                        if let Ok(manifest) = serde_json::from_str::<VersionManifest>(&content) {
+                        if let Ok(mut manifest) = serde_json::from_str::<VersionManifest>(&content) {
                             if manifest.libraries.len() > 15 {
+                                // Ensure libraries in cached manifest are deduplicated (Fabric overrides Vanilla)
+                                let mut seen = std::collections::HashSet::new();
+                                let mut deduped = Vec::new();
+                                for lib in manifest.libraries {
+                                    let parts: Vec<&str> = lib.name.split(':').collect();
+                                    let key = if parts.len() >= 4 {
+                                        format!("{}:{}:{}", parts[0], parts[1], parts[3])
+                                    } else if parts.len() >= 2 {
+                                        format!("{}:{}", parts[0], parts[1])
+                                    } else {
+                                        lib.name.clone()
+                                    };
+                                    if seen.insert(key) {
+                                        deduped.push(lib);
+                                    }
+                                }
+                                manifest.libraries = deduped;
                                 return Ok(manifest);
                             }
                         }
@@ -939,7 +956,9 @@ pub async fn ensure_fabric_profile(
 
     let get_lib_key = |name: &str| -> String {
         let parts: Vec<&str> = name.split(':').collect();
-        if parts.len() >= 2 {
+        if parts.len() >= 4 {
+            format!("{}:{}:{}", parts[0], parts[1], parts[3])
+        } else if parts.len() >= 2 {
             format!("{}:{}", parts[0], parts[1])
         } else {
             name.to_string()
@@ -1255,16 +1274,15 @@ fn is_iris_version_incompatible(path: &Path) -> bool {
                         if let Some(ver) = val.get("version").and_then(|v| v.as_str()) {
                             return ver.starts_with("1.11.7")
                                 || ver.starts_with("1.11.6")
-                                || ver.starts_with("1.11.5")
-                                || ver.starts_with("1.8.")
-                                || ver.starts_with("1.7.");
+                                || ver.starts_with("1.11.5");
                         }
                     }
                 }
             }
         }
+        return false;
     }
-    // Fallback to filename (e.g. mock files in tests)
+    // Fallback to filename (only for mock non-zip files in unit tests)
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
@@ -1273,8 +1291,6 @@ fn is_iris_version_incompatible(path: &Path) -> bool {
     name.contains("1.11.7")
         || name.contains("1.11.6")
         || name.contains("1.11.5")
-        || name.contains("1.8.")
-        || name.contains("1.7.")
 }
 
 pub fn resolve_mod_compatibility(mods_dir: &Path) -> Result<Vec<String>, LaunchError> {
@@ -1514,15 +1530,7 @@ pub fn construct_launch_spec(
         .and_then(|id| id.as_str())
         .unwrap_or("default");
 
-    let game_instance_dir = if let Some(gd) = profile.get("gameDir").and_then(|g| g.as_str()) {
-        if !gd.trim().is_empty() {
-            PathBuf::from(gd.trim())
-        } else {
-            base_dir.join("profiles").join(profile_id)
-        }
-    } else {
-        base_dir.join("profiles").join(profile_id)
-    };
+    let game_instance_dir = crate::config::resolve_profile_dir(config, Some(profile_id));
 
     let mut jvm_args: Vec<String> = Vec::new();
 
@@ -1663,17 +1671,36 @@ pub fn construct_launch_spec(
     }
 
     // 6. Manifest JVM Arguments
+    let sanitize_manifest_jvm_arg = |raw: &str| -> Option<String> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty()
+            || trimmed == "-cp"
+            || trimmed == "-classpath"
+            || trimmed == "${classpath}"
+            || trimmed.contains("${classpath}")
+        {
+            return None;
+        }
+        let expanded = trimmed
+            .replace("${natives_directory}", &natives_dir.to_string_lossy())
+            .replace("${launcher_name}", "mychalsmp")
+            .replace("${launcher_version}", APP_VERSION)
+            .replace("${classpath_separator}", target_os.classpath_separator());
+        if expanded.starts_with("-DFabricMcEmu=") {
+            let val = expanded.trim_start_matches("-DFabricMcEmu=").trim();
+            return Some(format!("-DFabricMcEmu={}", val));
+        }
+        Some(expanded)
+    };
+
     if let Some(ref args) = manifest.arguments {
         if let Some(ref jvm_list) = args.jvm {
             for item in jvm_list {
                 if let Some(s) = item.as_str() {
-                    let expanded = s
-                        .replace("${natives_directory}", &natives_dir.to_string_lossy())
-                        .replace("${launcher_name}", "mychalsmp")
-                        .replace("${launcher_version}", APP_VERSION)
-                        .replace("${classpath_separator}", target_os.classpath_separator());
-                    if !jvm_args.contains(&expanded) {
-                        jvm_args.push(expanded);
+                    if let Some(expanded) = sanitize_manifest_jvm_arg(s) {
+                        if !jvm_args.contains(&expanded) {
+                            jvm_args.push(expanded);
+                        }
                     }
                 } else if let Some(obj) = item.as_object() {
                     let rules_val = obj.get("rules");
@@ -1688,24 +1715,18 @@ pub fn construct_launch_spec(
                     if evaluate_rules(rules_parsed.as_deref(), target_os) {
                         if let Some(val) = obj.get("value") {
                             if let Some(s) = val.as_str() {
-                                let expanded = s
-                                    .replace("${natives_directory}", &natives_dir.to_string_lossy())
-                                    .replace("${launcher_name}", "mychalsmp")
-                                    .replace("${launcher_version}", APP_VERSION)
-                                    .replace("${classpath_separator}", target_os.classpath_separator());
-                                if !jvm_args.contains(&expanded) {
-                                    jvm_args.push(expanded);
+                                if let Some(expanded) = sanitize_manifest_jvm_arg(s) {
+                                    if !jvm_args.contains(&expanded) {
+                                        jvm_args.push(expanded);
+                                    }
                                 }
                             } else if let Some(arr) = val.as_array() {
                                 for sub in arr {
                                     if let Some(s) = sub.as_str() {
-                                        let expanded = s
-                                            .replace("${natives_directory}", &natives_dir.to_string_lossy())
-                                            .replace("${launcher_name}", "mychalsmp")
-                                            .replace("${launcher_version}", APP_VERSION)
-                                            .replace("${classpath_separator}", target_os.classpath_separator());
-                                        if !jvm_args.contains(&expanded) {
-                                            jvm_args.push(expanded);
+                                        if let Some(expanded) = sanitize_manifest_jvm_arg(s) {
+                                            if !jvm_args.contains(&expanded) {
+                                                jvm_args.push(expanded);
+                                            }
                                         }
                                     }
                                 }
@@ -1732,14 +1753,28 @@ pub fn construct_launch_spec(
         }
     }
 
-    // 7. Classpath Assembly
+    // 7. Classpath Assembly (Deduplicated by group:artifact[:classifier])
     let mut classpath_paths = Vec::new();
+    let mut seen_cp_libs = std::collections::HashSet::new();
     let lib_dir = base_dir.join("libraries");
 
     for lib in &manifest.libraries {
         if evaluate_rules(lib.rules.as_deref(), target_os) {
-            let rel = resolve_library_relative_path(&lib.name, lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()));
-            classpath_paths.push(lib_dir.join(rel));
+            let parts: Vec<&str> = lib.name.split(':').collect();
+            let lib_key = if parts.len() >= 4 {
+                format!("{}:{}:{}", parts[0], parts[1], parts[3])
+            } else if parts.len() >= 2 {
+                format!("{}:{}", parts[0], parts[1])
+            } else {
+                lib.name.clone()
+            };
+            if seen_cp_libs.insert(lib_key) {
+                let rel = resolve_library_relative_path(
+                    &lib.name,
+                    lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()),
+                );
+                classpath_paths.push(lib_dir.join(rel));
+            }
         }
     }
 
@@ -2000,6 +2035,8 @@ pub async fn spawn_game_process<R: Runtime>(
     let app_out = app.clone();
     let tp_out = target_progress.clone();
     let logs_out = combined_logs.clone();
+    let tray_hidden = std::sync::Arc::new(AtomicBool::new(false));
+    let tray_hidden_out = tray_hidden.clone();
 
     if let Some(out) = stdout {
         tokio::spawn(async move {
@@ -2026,8 +2063,20 @@ pub async fn spawn_game_process<R: Runtime>(
                     tp_out.store(87, Ordering::SeqCst);
                 } else if line.contains("Backend library: LWJGL") || line.contains("Setting user:") {
                     tp_out.store(95, Ordering::SeqCst);
-                } else if line.contains("Using graphics backend") || line.contains("GL_") {
+                    if !tray_hidden_out.swap(true, Ordering::SeqCst) {
+                        if let Some(win) = app_out.get_webview_window("main") {
+                            let _ = win.hide();
+                            let _ = app_out.emit("window-hidden-to-tray", ());
+                        }
+                    }
+                } else if line.contains("Using graphics backend") || line.contains("GL_") || line.contains("OpenAL initialized") {
                     tp_out.store(98, Ordering::SeqCst);
+                    if !tray_hidden_out.swap(true, Ordering::SeqCst) {
+                        if let Some(win) = app_out.get_webview_window("main") {
+                            let _ = win.hide();
+                            let _ = app_out.emit("window-hidden-to-tray", ());
+                        }
+                    }
                 }
             }
         });
@@ -2052,6 +2101,20 @@ pub async fn spawn_game_process<R: Runtime>(
         });
     }
 
+    // Fallback timer: if game stays alive for 8 seconds (even if log format varies), hide launcher to tray
+    let app_tray_timer = app.clone();
+    let ff_tray = finished_flag.clone();
+    let th_timer = tray_hidden.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(8)).await;
+        if !ff_tray.load(Ordering::SeqCst) && !th_timer.swap(true, Ordering::SeqCst) {
+            if let Some(win) = app_tray_timer.get_webview_window("main") {
+                let _ = win.hide();
+                let _ = app_tray_timer.emit("window-hidden-to-tray", ());
+            }
+        }
+    });
+
     let status = child.wait().await?;
     finished_flag.store(true, Ordering::SeqCst);
     IS_LAUNCHING.store(false, Ordering::SeqCst);
@@ -2061,6 +2124,13 @@ pub async fn spawn_game_process<R: Runtime>(
     {
         let mut session = ACTIVE_SESSION.lock().unwrap();
         *session = None;
+    }
+
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+        let _ = app.emit("window-restored-from-tray", ());
     }
 
     let _ = app.emit("game-stopped", ());

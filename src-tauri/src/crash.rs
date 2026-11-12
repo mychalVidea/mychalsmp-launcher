@@ -29,8 +29,8 @@ pub fn find_latest_crash_report(game_dir: &Path) -> Option<PathBuf> {
                 if let Ok(meta) = entry.metadata() {
                     if let Ok(mtime) = meta.modified() {
                         if let Ok(elapsed) = mtime.elapsed() {
-                            // Within last 30 minutes (1800 seconds)
-                            if elapsed.as_secs() <= 1800 {
+                            // Only consider crash reports created by the just-exited session (within 15 seconds)
+                            if elapsed.as_secs() <= 15 {
                                 match &latest_file {
                                     Some((_, prev_mtime)) => {
                                         if mtime > *prev_mtime {
@@ -151,13 +151,41 @@ pub fn extract_missing_dependency(text: &str) -> Option<(String, String)> {
     None
 }
 
-/// Extracts incompatible mod filename from logs.
+/// Extracts incompatible mod filename from logs ONLY when explicitly identified as a duplicate or remove target.
 pub fn extract_incompatible_mod_filename(text: &str) -> Option<String> {
-    let re_jar = Regex::new(r"([a-zA-Z0-9_\-\.\+]+\.jar)").unwrap();
-    if let Some(caps) = re_jar.captures(text) {
-        return Some(caps[1].to_string());
+    // 1. Explicit duplicate mod file in mods/ folder
+    let re_dup = Regex::new(r"(?i)(?:Duplicate[^\n]+|mods[/\\])([a-zA-Z0-9_\-\.\+]+\.jar)").unwrap();
+    if let Some(caps) = re_dup.captures(text) {
+        let fname = caps[1].to_string();
+        let lower = fname.to_lowercase();
+        if !lower.starts_with("fabric-loader")
+            && !lower.starts_with("fabric-api")
+            && !lower.starts_with("minecraft")
+            && !lower.starts_with("selfnametag")
+        {
+            return Some(fname);
+        }
     }
     None
+}
+
+const PROTECTED_CORE_MOD_IDS: &[&str] = &[
+    "minecraft",
+    "java",
+    "fabricloader",
+    "fabric-loader",
+    "fabric",
+    "fabric-api",
+    "fabric_api",
+    "mixinextras",
+    "sodium",
+    "lithium",
+    "selfnametag",
+];
+
+fn is_protected_mod_id(mod_id: &str) -> bool {
+    let lower = mod_id.to_lowercase();
+    PROTECTED_CORE_MOD_IDS.contains(&lower.as_str()) || lower.starts_with("fabric-")
 }
 
 /// Extracts the true culprit mod ID from deep Mixin / SpongePowered crash stacks,
@@ -167,7 +195,7 @@ pub fn extract_mixin_culprit_mod(text: &str) -> Option<String> {
     let re_from_mod = Regex::new(r"Mixin\s*\[[^\]]+?\s+from\s+mod\s+([a-zA-Z0-9_\-]+)\]").unwrap();
     if let Some(caps) = re_from_mod.captures(text) {
         let mod_id = caps[1].to_string();
-        if !mod_id.eq_ignore_ascii_case("minecraft") {
+        if !is_protected_mod_id(&mod_id) {
             return Some(mod_id);
         }
     }
@@ -176,7 +204,7 @@ pub fn extract_mixin_culprit_mod(text: &str) -> Option<String> {
     let re_target_mod = Regex::new(r"@Mixin\s+target[^\n]+?from\s+mod\s+([a-zA-Z0-9_\-]+)").unwrap();
     if let Some(caps) = re_target_mod.captures(text) {
         let mod_id = caps[1].to_string();
-        if !mod_id.eq_ignore_ascii_case("minecraft") {
+        if !is_protected_mod_id(&mod_id) {
             return Some(mod_id);
         }
     }
@@ -185,7 +213,7 @@ pub fn extract_mixin_culprit_mod(text: &str) -> Option<String> {
     let re_caused_by = Regex::new(r"Caused\s+by:[^\n]+?from\s+mod\s+([a-zA-Z0-9_\-]+)").unwrap();
     if let Some(caps) = re_caused_by.captures(text) {
         let mod_id = caps[1].to_string();
-        if !mod_id.eq_ignore_ascii_case("minecraft") {
+        if !is_protected_mod_id(&mod_id) {
             return Some(mod_id);
         }
     }
@@ -194,7 +222,7 @@ pub fn extract_mixin_culprit_mod(text: &str) -> Option<String> {
     let re_mixin_config = Regex::new(r"Mixin\s*\[([a-zA-Z0-9_\-]+)\.mixins\.json").unwrap();
     if let Some(caps) = re_mixin_config.captures(text) {
         let mod_id = caps[1].to_string();
-        if !mod_id.eq_ignore_ascii_case("minecraft") {
+        if !is_protected_mod_id(&mod_id) {
             return Some(mod_id);
         }
     }
@@ -265,25 +293,36 @@ pub fn analyze_crash(
             .join("\n")
     };
 
+    let report_path_str = crash_report_path
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string());
+
     // 1. Out of Memory
     if full_lower.contains("outofmemoryerror")
         || full_lower.contains("java heap space")
         || full_lower.contains("gc overhead limit")
     {
+        let msg = "Minecraftu došla alokovaná paměť RAM (OutOfMemoryError). Pro plynulý běh s módy zvyšte paměť RAM v nastavení profilu.";
         return json!({
             "hasCrash": true,
             "isCleanShutdown": false,
             "fixed": false,
+            "exitCode": exit_code,
             "crashType": "OUT_OF_MEMORY",
             "title": "Nedostatek paměti RAM",
-            "message": "Minecraftu došla alokovaná paměť RAM (OutOfMemoryError). Pro plynulý běh s módy zvyšte paměť RAM v nastavení profilu.",
+            "message": msg,
+            "description": msg,
+            "recommendation": "Navýšit alokovanou paměť RAM pro tento profil.",
             "autoFix": {
+                "id": "INCREASE_RAM",
                 "type": "increase_ram",
                 "label": "Zvýšit alokovanou RAM o 2 GB",
                 "addRamGb": 2
             },
             "logExcerpt": log_excerpt,
-            "crashReportPath": crash_report_path.as_ref().map(|p| p.to_string_lossy())
+            "stackExcerpt": log_excerpt,
+            "crashReportPath": report_path_str,
+            "reportPath": report_path_str
         });
     }
 
@@ -292,19 +331,26 @@ pub fn analyze_crash(
         || full_lower.contains("compiled by a more recent version of the java runtime")
         || full_lower.contains("class file format")
     {
+        let msg = "Nainstalované módy vyžadují novější verzi Javy (např. Java 21 nebo Java 25). Zkontrolujte nastavení runtime v launcheru.";
         return json!({
             "hasCrash": true,
             "isCleanShutdown": false,
             "fixed": false,
+            "exitCode": exit_code,
             "crashType": "JAVA_VERSION_MISMATCH",
             "title": "Nekompatibilní verze Java",
-            "message": "Nainstalované módy vyžadují novější verzi Javy (např. Java 21 nebo Java 25). Zkontrolujte nastavení runtime v launcheru.",
+            "message": msg,
+            "description": msg,
+            "recommendation": "Přepnout na vestavěné prostředí Java 21/25.",
             "autoFix": {
+                "id": "SWITCH_JAVA",
                 "type": "switch_java",
                 "label": "Detekovat a přepnout na Java 21/25"
             },
             "logExcerpt": log_excerpt,
-            "crashReportPath": crash_report_path.as_ref().map(|p| p.to_string_lossy())
+            "stackExcerpt": log_excerpt,
+            "crashReportPath": report_path_str,
+            "reportPath": report_path_str
         });
     }
 
@@ -316,20 +362,30 @@ pub fn analyze_crash(
         || full_lower.contains("depends on")
     {
         if let Some((dep_id, mod_name)) = extract_missing_dependency(&full_text) {
+            let msg = format!(
+                "Mód '{}' vyžaduje pro spuštění doplněk '{}'. Můžete jej nainstalovat jedním kliknutím.",
+                mod_name, dep_id
+            );
             return json!({
                 "hasCrash": true,
                 "isCleanShutdown": false,
                 "fixed": false,
+                "exitCode": exit_code,
                 "crashType": "MISSING_DEPENDENCY",
                 "title": "Chybějící závislost módu",
-                "message": format!("Mód '{}' vyžaduje pro spuštění doplněk '{}'. Můžete jej nainstalovat jedním kliknutím.", mod_name, dep_id),
+                "message": msg,
+                "description": msg,
+                "recommendation": format!("Automaticky stáhnout a nainstalovat závislost '{}' z Modrinthu.", dep_id),
                 "autoFix": {
+                    "id": "INSTALL_DEP",
                     "type": "install_mod",
                     "label": format!("Nainstalovat chybějící mód '{}'", dep_id),
                     "modId": dep_id
                 },
                 "logExcerpt": log_excerpt,
-                "crashReportPath": crash_report_path.as_ref().map(|p| p.to_string_lossy())
+                "stackExcerpt": log_excerpt,
+                "crashReportPath": report_path_str,
+                "reportPath": report_path_str
             });
         }
     }
@@ -337,11 +393,14 @@ pub fn analyze_crash(
     // Helper to find a mod JAR matching an ID or prefix in the mods directory
     let find_mod_file_in_dir = |mods_dir: &Path, mod_id: &str| -> Option<String> {
         let lower_id = mod_id.to_lowercase();
+        if is_protected_mod_id(&lower_id) {
+            return None;
+        }
         if let Ok(entries) = fs::read_dir(mods_dir) {
             for entry in entries.flatten() {
                 let fname = entry.file_name().to_string_lossy().to_string();
                 let fname_lower = fname.to_lowercase();
-                if (fname_lower.ends_with(".jar") || fname_lower.ends_with(".jar.disabled"))
+                if fname_lower.ends_with(".jar")
                     && (fname_lower.starts_with(&lower_id) || fname_lower.contains(&lower_id))
                 {
                     return Some(fname);
@@ -353,19 +412,26 @@ pub fn analyze_crash(
 
     // 4. Missing / Corrupted Client JAR (ClassNotFoundException: net.minecraft.client.main.Main)
     if full_text.contains("ClassNotFoundException: net.minecraft.client.main.Main") {
+        let msg = "Základní herní soubor Minecraftu (client.jar) chybí nebo je poškozený. Kliknutím níže jej můžete znovu stáhnout a opravit.";
         return json!({
             "hasCrash": true,
             "isCleanShutdown": false,
             "fixed": false,
+            "exitCode": exit_code,
             "crashType": "CORRUPT_CLIENT_JAR",
             "title": "Chybějící nebo poškozený herní soubor Minecraftu",
-            "message": "Základní herní soubor Minecraftu (client.jar) chybí nebo je poškozený. Kliknutím níže jej můžete znovu stáhnout a opravit.",
+            "message": msg,
+            "description": msg,
+            "recommendation": "Znovu stáhnout a ověřit čistý Minecraft Client JAR.",
             "autoFix": {
+                "id": "REPAIR_CLIENT",
                 "type": "repair_client_jar",
                 "label": "Znovu stáhnout čistý Minecraft Client JAR"
             },
             "logExcerpt": log_excerpt,
-            "crashReportPath": crash_report_path.as_ref().map(|p| p.to_string_lossy())
+            "stackExcerpt": log_excerpt,
+            "crashReportPath": report_path_str,
+            "reportPath": report_path_str
         });
     }
 
@@ -375,52 +441,68 @@ pub fn analyze_crash(
             || (full_lower.contains("mod 'sodium'") && full_lower.contains("mod 'iris'")))
     {
         let mods_dir = game_dir.join("mods");
-        let iris_file = find_mod_file_in_dir(&mods_dir, "iris")
-            .unwrap_or_else(|| "iris.jar".to_string());
-        return json!({
-            "hasCrash": true,
-            "isCleanShutdown": false,
-            "fixed": false,
-            "crashType": "INCOMPATIBLE_MODS",
-            "title": "Nekompatibilita módů Sodium a Iris",
-            "message": "Detekován konflikt verzí mezi Sodium a Iris pro tuto verzi Minecraftu. Doporučujeme Iris dočasně vypnout nebo aktualizovat na kompatibilní verzi.",
-            "autoFix": {
-                "type": "disable_mod",
-                "label": format!("Zakázat kolidující mód {}", iris_file),
-                "filename": iris_file,
-                "modId": "iris"
-            },
-            "logExcerpt": log_excerpt,
-            "crashReportPath": crash_report_path.as_ref().map(|p| p.to_string_lossy())
-        });
+        if let Some(iris_file) = find_mod_file_in_dir(&mods_dir, "iris") {
+            let msg = "Detekován konflikt verzí mezi Sodium a Iris pro tuto verzi Minecraftu. Doporučujeme Iris dočasně vypnout nebo aktualizovat na kompatibilní verzi.";
+            return json!({
+                "hasCrash": true,
+                "isCleanShutdown": false,
+                "fixed": false,
+                "exitCode": exit_code,
+                "crashType": "INCOMPATIBLE_MODS",
+                "title": "Nekompatibilita módů Sodium a Iris",
+                "message": msg,
+                "description": msg,
+                "recommendation": format!("Zakázat nekompatibilní soubor {}.", iris_file),
+                "autoFix": {
+                    "id": "DISABLE_MOD",
+                    "type": "disable_mod",
+                    "label": format!("Zakázat kolidující mód {}", iris_file),
+                    "filename": iris_file,
+                    "modId": "iris"
+                },
+                "logExcerpt": log_excerpt,
+                "stackExcerpt": log_excerpt,
+                "crashReportPath": report_path_str,
+                "reportPath": report_path_str
+            });
+        }
     }
 
     // 6. Deep Mixin Culprit Diagnosis (e.g. brightnessplus failing inside SodiumPreLaunch)
-    // Never blame 'sodium' simply because it provided the preLaunch stage!
+    // Never blame 'sodium' or core mods simply because they provided the preLaunch stage!
     if let Some(culprit_id) = extract_mixin_culprit_mod(&full_text) {
         let mods_dir = game_dir.join("mods");
-        let matching_file = find_mod_file_in_dir(&mods_dir, &culprit_id)
-            .unwrap_or_else(|| format!("{}.jar", culprit_id));
-
-        return json!({
-            "hasCrash": true,
-            "isCleanShutdown": false,
-            "fixed": false,
-            "crashType": "INCOMPATIBLE_MODS",
-            "title": format!("Chyba módu '{}' (Mixin pád)", culprit_id),
-            "message": format!("Mód '{}' způsobil pád hry při aplikaci Mixin transformace herního kódu. Doporučujeme tento mód vypnout.", culprit_id),
-            "autoFix": {
-                "type": "disable_mod",
-                "label": format!("Zakázat nekompatibilní mód '{}'", culprit_id),
-                "filename": matching_file,
-                "modId": culprit_id
-            },
-            "logExcerpt": log_excerpt,
-            "crashReportPath": crash_report_path.as_ref().map(|p| p.to_string_lossy())
-        });
+        if let Some(matching_file) = find_mod_file_in_dir(&mods_dir, &culprit_id) {
+            let msg = format!(
+                "Mód '{}' ({}) způsobil pád hry při aplikaci Mixin transformace herního kódu.",
+                culprit_id, matching_file
+            );
+            return json!({
+                "hasCrash": true,
+                "isCleanShutdown": false,
+                "fixed": false,
+                "exitCode": exit_code,
+                "crashType": "INCOMPATIBLE_MODS",
+                "title": format!("Chyba módu '{}' (Mixin pád)", culprit_id),
+                "message": msg,
+                "description": msg,
+                "recommendation": format!("Zakázat nekompatibilní mód '{}'.", matching_file),
+                "autoFix": {
+                    "id": "DISABLE_MOD",
+                    "type": "disable_mod",
+                    "label": format!("Zakázat nekompatibilní mód '{}'", culprit_id),
+                    "filename": matching_file,
+                    "modId": culprit_id
+                },
+                "logExcerpt": log_excerpt,
+                "stackExcerpt": log_excerpt,
+                "crashReportPath": report_path_str,
+                "reportPath": report_path_str
+            });
+        }
     }
 
-    // 7. Incompatible Mods / Mixin Collision / Duplicate
+    // 7. Incompatible Mods / Duplicate Mods (Never auto-disable random jars!)
     if full_lower.contains("incompatible mods found!")
         || full_lower.contains("duplicate mod")
         || full_lower.contains("duplicate files found for mod")
@@ -428,25 +510,34 @@ pub fn analyze_crash(
         || full_lower.contains("critical injection failure")
         || full_lower.contains("failed to inject into")
     {
-        let conflicting_file = extract_incompatible_mod_filename(&full_text);
+        let mods_dir = game_dir.join("mods");
+        let conflicting_file = extract_incompatible_mod_filename(&full_text)
+            .filter(|fname| mods_dir.join(fname).exists());
         let auto_fix = conflicting_file.as_ref().map(|fname| {
             json!({
+                "id": "DISABLE_MOD",
                 "type": "disable_mod",
-                "label": format!("Zakázat konfliktní soubor {}", fname),
+                "label": format!("Zakázat duplicitní soubor {}", fname),
                 "filename": fname
             })
         });
+        let msg = "Detekován konflikt mezi nainstalovanými módy nebo chybějící závislost pro vybranou verzi Minecraftu. Zkontrolujte výpis chyby níže.";
 
         return json!({
             "hasCrash": true,
             "isCleanShutdown": false,
             "fixed": false,
+            "exitCode": exit_code,
             "crashType": "INCOMPATIBLE_MODS",
             "title": "Konflikt mezi módy",
-            "message": "Detekován konflikt mezi nainstalovanými módy nebo nekompatibilní modifikace herního jádra.",
+            "message": msg,
+            "description": msg,
+            "recommendation": "Zkontrolujte kompatibilitu nainstalovaných módů s touto verzí Minecraftu ve Správci módů.",
             "autoFix": auto_fix,
             "logExcerpt": log_excerpt,
-            "crashReportPath": crash_report_path.as_ref().map(|p| p.to_string_lossy())
+            "stackExcerpt": log_excerpt,
+            "crashReportPath": report_path_str,
+            "reportPath": report_path_str
         });
     }
 
@@ -457,34 +548,42 @@ pub fn analyze_crash(
         || full_lower.contains("ig9ic64.dll")
         || full_lower.contains("nvoglv64.dll")
     {
+        let msg = "Grafická karta nepodporuje požadovanou verzi OpenGL nebo chybí ovladače výrobce grafické karty (NVIDIA, AMD nebo Intel).";
         return json!({
             "hasCrash": true,
             "isCleanShutdown": false,
             "fixed": false,
+            "exitCode": exit_code,
             "crashType": "OPENGL_DRIVER",
             "title": "Chyba grafického ovladače",
-            "message": "Grafická karta nepodporuje požadovanou verzi OpenGL nebo chybí ovladače výrobce grafické karty (NVIDIA, AMD nebo Intel).",
-            "autoFix": {
-                "type": "open_url",
-                "label": "Otevřít návod na aktualizaci ovladačů",
-                "url": "https://mychalsmp.xyz"
-            },
+            "message": msg,
+            "description": msg,
+            "recommendation": "Aktualizujte ovladače grafické karty.",
+            "autoFix": Value::Null,
             "logExcerpt": log_excerpt,
-            "crashReportPath": crash_report_path.as_ref().map(|p| p.to_string_lossy())
+            "stackExcerpt": log_excerpt,
+            "crashReportPath": report_path_str,
+            "reportPath": report_path_str
         });
     }
 
-    // 6. Generic Game Crash
+    // 9. Generic Game Crash
+    let generic_msg = format!("Hra byla neočekávaně ukončena s kódem {}.", exit_code);
     json!({
         "hasCrash": true,
         "isCleanShutdown": false,
         "fixed": false,
+        "exitCode": exit_code,
         "crashType": "GAME_CRASH",
         "title": "Kritický pád herního jádra",
-        "message": format!("Hra byla neočekávaně ukončena s kódem {}.", exit_code),
+        "message": generic_msg,
+        "description": generic_msg,
+        "recommendation": "Zkontrolujte výpis chyby níže nebo otevřete plný crash report.",
         "autoFix": Value::Null,
         "logExcerpt": log_excerpt,
-        "crashReportPath": crash_report_path.as_ref().map(|p| p.to_string_lossy())
+        "stackExcerpt": log_excerpt,
+        "crashReportPath": report_path_str,
+        "reportPath": report_path_str
     })
 }
 
@@ -496,10 +595,11 @@ pub async fn apply_crash_fix(
 ) -> Value {
     let fix_type = auto_fix
         .get("type")
+        .or_else(|| auto_fix.get("id"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
-    match fix_type {
+    match fix_type.to_lowercase().as_str() {
         "increase_ram" => {
             let mut cfg = load_config();
             let current_max = cfg
@@ -590,7 +690,7 @@ pub async fn apply_crash_fix(
                 }),
             }
         }
-        "repair_client_jar" => {
+        "repair_client_jar" | "repair_client" => {
             let cfg = load_config();
             let base_dir = crate::config::get_default_game_dir();
             let profile = cfg
@@ -629,7 +729,7 @@ pub async fn apply_crash_fix(
                 }),
             }
         }
-        "install_mod" => {
+        "install_mod" | "install_dep" => {
             let mod_id = match auto_fix.get("modId").and_then(|v| v.as_str()) {
                 Some(id) => id,
                 None => return json!({ "success": false, "error": "Chybí identifikátor módu." }),
@@ -657,6 +757,14 @@ pub async fn apply_crash_fix(
                     "success": false,
                     "error": "Aplikace není připravena pro stahování doplňků."
                 })
+            }
+        }
+        "open_crash_report" => {
+            if let Some(rp) = auto_fix.get("reportPath").and_then(|v| v.as_str()) {
+                let _ = open::that_detached(rp);
+                json!({ "success": true })
+            } else {
+                json!({ "success": false, "error": "Cesta k reportu nebyla nalezena." })
             }
         }
         "open_url" => {

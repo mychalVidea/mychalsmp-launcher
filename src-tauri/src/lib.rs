@@ -132,7 +132,16 @@ async fn launch_game(
             "launch-progress",
             json!({ "percent": 15, "text": "Příprava herního manifestu..." }),
         );
-        let manifest = match crate::launcher::ensure_fabric_profile(&base_dir, &mc_ver_owned).await {
+        let loader_type = profile
+            .get("loader")
+            .and_then(|v| v.as_str())
+            .unwrap_or("fabric");
+        let manifest_res = if loader_type.eq_ignore_ascii_case("vanilla") {
+            crate::launcher::fetch_or_cache_mojang_manifest(&base_dir, &mc_ver_owned).await
+        } else {
+            crate::launcher::ensure_fabric_profile(&base_dir, &mc_ver_owned).await
+        };
+        let manifest = match manifest_res {
             Ok(m) => m,
             Err(e) => {
                 let _ = app_clone.emit(
@@ -140,7 +149,8 @@ async fn launch_game(
                     json!({
                         "hasCrash": true,
                         "title": "Chyba manifestu",
-                        "message": format!("Nepodařilo se načíst manifest verze: {}", e)
+                        "message": format!("Nepodařilo se načíst manifest verze: {}", e),
+                        "description": format!("Nepodařilo se načíst manifest verze: {}", e)
                     }),
                 );
                 return;
@@ -220,18 +230,32 @@ async fn launch_game(
             }
         }
 
-        let _ = app_clone.emit(
-            "launch-progress",
-            json!({ "percent": 65, "text": "Warden kontrola modifikací..." }),
-        );
-        let warden_scan = crate::warden::scan_profile_mods_warden(Some(&pid_clone));
-        if let Some(violations) = warden_scan.get("violations").and_then(|v| v.as_array()) {
-            if !violations.is_empty() {
-                let _ = crate::warden::disable_all_illegal_mods(Some(&pid_clone));
+        let is_mychal_srv = server_clone
+            .as_deref()
+            .map(|s| {
+                let sl = s.to_lowercase();
+                sl.contains("mychalsmp") || sl == "130.61.89.37"
+            })
+            .unwrap_or(false);
+
+        if is_mychal_srv {
+            let _ = app_clone.emit(
+                "launch-progress",
+                json!({ "percent": 65, "text": "Warden kontrola modifikací..." }),
+            );
+            let warden_scan = crate::warden::scan_profile_mods_warden(Some(&pid_clone));
+            if let Some(violations) = warden_scan.get("violations").and_then(|v| v.as_array()) {
+                if !violations.is_empty() {
+                    let _ = crate::warden::disable_all_illegal_mods(Some(&pid_clone));
+                }
             }
         }
 
-        let _ = crate::launcher::resolve_mod_compatibility(&prof_dir.join("mods"));
+        if !loader_type.eq_ignore_ascii_case("vanilla") {
+            let _ = crate::mods::resolve_profile_mod_collisions(Some(&pid_clone));
+            let _ = crate::launcher::resolve_mod_compatibility(&prof_dir.join("mods"));
+        }
+        crate::mods::ensure_default_options_and_servers(&prof_dir);
 
         let auth_session = if let Some(ms) = cfg.get("microsoftAccount").filter(|x| !x.is_null()) {
             json!({
@@ -659,7 +683,12 @@ fn window_maximize(window: Window) {
 
 #[tauri::command]
 fn window_close(window: Window) {
-    let _ = window.close();
+    if crate::launcher::is_game_running() {
+        let _ = window.hide();
+        let _ = window.emit("window-hidden-to-tray", ());
+    } else {
+        let _ = window.close();
+    }
 }
 
 #[tauri::command]
@@ -1133,9 +1162,85 @@ pub fn run() {
             toggle_profile_pack,
             delete_profile_pack
         ])
-        .setup(|_app| {
+        .setup(|app| {
             let _ = crate::config::load_config();
+
+            // Setup Native System Tray (SMPClient)
+            let show_item = tauri::menu::MenuItem::with_id(
+                app,
+                "show",
+                "Otevřít SMPClient",
+                true,
+                None::<&str>,
+            );
+            let quit_item = tauri::menu::MenuItem::with_id(
+                app,
+                "quit",
+                "Ukončit",
+                true,
+                None::<&str>,
+            );
+
+            if let (Ok(show_i), Ok(quit_i)) = (show_item, quit_item) {
+                if let Ok(menu) = tauri::menu::Menu::with_items(app, &[&show_i, &quit_i]) {
+                    let mut tray_builder = tauri::tray::TrayIconBuilder::with_id("smpclient-tray")
+                        .tooltip("SMPClient — MYCHAL SMP Launcher")
+                        .menu(&menu)
+                        .show_menu_on_left_click(false)
+                        .on_menu_event(|app_handle, event| match event.id.as_ref() {
+                            "show" => {
+                                if let Some(win) = app_handle.get_webview_window("main") {
+                                    let _ = win.show();
+                                    let _ = win.unminimize();
+                                    let _ = win.set_focus();
+                                    let _ = app_handle.emit("window-restored-from-tray", ());
+                                }
+                            }
+                            "quit" => {
+                                app_handle.exit(0);
+                            }
+                            _ => {}
+                        })
+                        .on_tray_icon_event(|tray, event| {
+                            if let tauri::tray::TrayIconEvent::Click {
+                                button: tauri::tray::MouseButton::Left,
+                                button_state: tauri::tray::MouseButtonState::Up,
+                                ..
+                            } = event
+                            {
+                                let app_handle = tray.app_handle();
+                                if let Some(win) = app_handle.get_webview_window("main") {
+                                    let is_vis = win.is_visible().unwrap_or(false);
+                                    if is_vis {
+                                        let _ = win.set_focus();
+                                    } else {
+                                        let _ = win.show();
+                                        let _ = win.unminimize();
+                                        let _ = win.set_focus();
+                                        let _ = app_handle.emit("window-restored-from-tray", ());
+                                    }
+                                }
+                            }
+                        });
+
+                    if let Some(icon) = app.default_window_icon().cloned() {
+                        tray_builder = tray_builder.icon(icon);
+                    }
+
+                    let _ = tray_builder.build(app);
+                }
+            }
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if crate::launcher::is_game_running() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    let _ = window.emit("window-hidden-to-tray", ());
+                }
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
