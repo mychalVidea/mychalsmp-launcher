@@ -16,6 +16,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }, { passive: false });
 
+    // ── Měřič reálné snímkové frekvence (FPS / Obnovovací frekvence) ─────────────
+    let fpsFrames = 0;
+    let lastFpsTime = performance.now();
+    function startFpsMonitor() {
+        const badge = document.getElementById('launcherFpsBadge');
+        function tick(now) {
+            fpsFrames++;
+            if (now - lastFpsTime >= 500) {
+                const fps = Math.round((fpsFrames * 1000) / (now - lastFpsTime));
+                fpsFrames = 0;
+                lastFpsTime = now;
+                if (badge) {
+                    badge.textContent = `${fps} FPS`;
+                    badge.style.color = fps >= 120 ? '#21DE00' : (fps >= 55 ? '#0a67e5' : '#f51515');
+                }
+            }
+            window.requestAnimationFrame(tick);
+        }
+        window.requestAnimationFrame(tick);
+    }
+    startFpsMonitor();
+
     // ── Element References ──────────────────────────────────────────────────
     // Window Controls
     const btnMin = document.getElementById('btnMinimize');
@@ -192,6 +214,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function updateLaunchProgressUI(rawPercent, statusText) {
+        if (!isLaunching && !isRunning) {
+            if (globalDownloadChip) globalDownloadChip.style.display = 'none';
+            if (progressContainer) progressContainer.style.display = 'none';
+            return;
+        }
         const val = Math.min(Math.max(Number(rawPercent) || 0, 0), 100);
         maxRenderedProgress = Math.max(maxRenderedProgress, val);
         const percent = Math.min(99, Math.round(maxRenderedProgress));
@@ -397,14 +424,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 2. Obnovit 3D renderování pouze pro aktivní záložku
         const curTab = (document.querySelector('.nav-icon-btn.active, .nav-btn.active')?.dataset?.tab) || 'play';
-        if (heroSkinViewer) {
-            heroSkinViewer.renderPaused = (curTab !== 'play');
-            if (curTab === 'play') {
-                heroSkinViewer.setSize(220, 280);
-                try { heroSkinViewer.render(); } catch (_) { }
+        if (curTab === 'play') {
+            if (heroSkinViewer) {
+                heroSkinViewer.renderPaused = false;
+                try {
+                    heroSkinViewer.setSize(220, 280);
+                    heroSkinViewer.render();
+                } catch (_) {
+                    if (typeof initHeroSkinViewer3D === 'function') initHeroSkinViewer3D(true);
+                }
                 if (typeof scheduleHeroReturn === 'function') scheduleHeroReturn();
                 if (typeof triggerHeroWave === 'function') triggerHeroWave(true);
+            } else if (typeof initHeroSkinViewer3D === 'function') {
+                initHeroSkinViewer3D(true);
             }
+        } else if (heroSkinViewer) {
+            heroSkinViewer.renderPaused = true;
         }
         if (skinViewer) {
             skinViewer.renderPaused = (curTab !== 'character');
@@ -3491,7 +3526,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         appendLog(`[AKTUALIZACE MÓDŮ] Stahuji ${u.title} (v${u.newVersion})...`);
 
                         try {
-                            await window.api.downloadModOrPack({
+                            const dlRes = await window.api.downloadModOrPack({
                                 id: u.id,
                                 title: u.title,
                                 projectType: 'mod',
@@ -3502,7 +3537,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 directUrl: u.directUrl,
                                 filename: u.newFilename
                             });
-                            appendLog(`[AKTUALIZACE MÓDŮ] [OK] ${u.title} úspěšně aktualizován.`);
+                            if (dlRes && dlRes.success === false) {
+                                const errMsg = dlRes.error || 'Neznámá chyba';
+                                console.warn(`Chyba při stahování aktualizace módu ${u.title}:`, errMsg);
+                                appendLog(`[AKTUALIZACE MÓDŮ] [VAROVÁNÍ] Selhalo stažení ${u.title}: ${errMsg}`);
+                            } else {
+                                appendLog(`[AKTUALIZACE MÓDŮ] [OK] ${u.title} úspěšně aktualizován.`);
+                            }
                         } catch (dlErr) {
                             console.warn(`Chyba při stahování aktualizace módu ${u.title}:`, dlErr);
                             appendLog(`[AKTUALIZACE MÓDŮ] [VAROVÁNÍ] Selhalo stažení ${u.title}: ${dlErr.message}`);
@@ -4944,7 +4985,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function renderModCards(mods) {
         if (!modsCardsList) return;
-        const rawList = Array.isArray(mods) ? mods : (mods && Array.isArray(mods.hits) ? mods.hits : []);
+        const rawList = (Array.isArray(mods) ? mods : (mods && Array.isArray(mods.hits) ? mods.hits : [])).map(m => {
+            if (!m || typeof m !== 'object') return m;
+            if (!m.id) m.id = m.project_id || m.slug || '';
+            if (!m.latest_game_versions && Array.isArray(m.versions)) m.latest_game_versions = m.versions;
+            return m;
+        });
         if (!rawList || rawList.length === 0) {
             modsCardsList.innerHTML = `<div class="mods-loading">Nenalezeny žádné položky odpovídající hledání.</div>`;
             const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
@@ -5243,7 +5289,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const action = btn.dataset.action;
                 const modId = btn.dataset.mod;
                 const oldFile = btn.dataset.oldFile;
-                const modItem = (mods || []).find(x => x.id === modId);
+                const modItem = rawList.find(x => (x.id || x.project_id || x.slug) === modId);
                 const title = modItem ? modItem.title : modId;
                 const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
                 const targetProfile = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
@@ -5577,28 +5623,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         const markHeroActivity = () => {
             lastHeroUserActivityTime = Date.now();
         };
+
+        // Cache pro geometrii plátna hlavy postavy – zabraňuje nuceným synchronous layout reflows (layout thrashing)
+        let cachedCanvasRect = null;
+        let lastRectUpdate = 0;
+        let cachedHeadCenterX = 0;
+        let cachedHeadCenterY = 0;
+        let cachedWinW = Math.max(window.innerWidth, 800);
+        let cachedWinH = Math.max(window.innerHeight, 600);
+
+        function refreshCanvasMetrics(force = false) {
+            const now = performance.now();
+            if (force || !cachedCanvasRect || (now - lastRectUpdate > 1000)) {
+                const canvas = document.getElementById('heroSkinCanvas3D');
+                if (canvas) {
+                    cachedCanvasRect = canvas.getBoundingClientRect();
+                    cachedHeadCenterX = cachedCanvasRect.left + cachedCanvasRect.width / 2;
+                    cachedHeadCenterY = cachedCanvasRect.top + cachedCanvasRect.height * 0.28;
+                    cachedWinW = Math.max(window.innerWidth, 800);
+                    cachedWinH = Math.max(window.innerHeight, 600);
+                    lastRectUpdate = now;
+                }
+            }
+        }
+
         window.addEventListener('pointerdown', markHeroActivity, { passive: true });
         window.addEventListener('keydown', markHeroActivity, { passive: true });
         window.addEventListener('wheel', markHeroActivity, { passive: true });
-        window.addEventListener('focus', markHeroActivity, { passive: true });
-        window.addEventListener('resize', markHeroActivity, { passive: true });
+        window.addEventListener('focus', () => { markHeroActivity(); refreshCanvasMetrics(true); }, { passive: true });
+        window.addEventListener('resize', () => { markHeroActivity(); refreshCanvasMetrics(true); }, { passive: true });
 
         window.addEventListener('pointermove', (e) => {
             markHeroActivity();
-            const canvas = document.getElementById('heroSkinCanvas3D');
-            if (!canvas) return;
+            refreshCanvasMetrics(false);
+            if (!cachedCanvasRect) return;
 
-            const rect = canvas.getBoundingClientRect();
-            // Střed hlavy postavy v souřadnicích okna
-            const headCenterX = rect.left + rect.width / 2;
-            const headCenterY = rect.top + rect.height * 0.28;
-
+            const headCenterX = cachedHeadCenterX;
+            const headCenterY = cachedHeadCenterY;
             const dx = e.clientX - headCenterX;
             const dy = e.clientY - headCenterY;
 
-            // Plynule normalizovaný dosah podle velikosti okna
-            const winW = Math.max(window.innerWidth, 800);
-            const winH = Math.max(window.innerHeight, 600);
+            const winW = cachedWinW;
+            const winH = cachedWinH;
 
             const normX = Math.max(-1, Math.min(1, dx / (winW * 0.45)));
             const normY = Math.max(-1, Math.min(1, dy / (winH * 0.45)));
@@ -5642,13 +5708,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.addEventListener('pointerover', (e) => {
             const playBtn = e.target?.closest?.('.btn-launch-profile, #sidebarPlayBtn, #btnQuickPlayMychal, .btn-install-v');
             if (playBtn) {
-                const canvas = document.getElementById('heroSkinCanvas3D');
-                if (canvas) {
-                    const rect = canvas.getBoundingClientRect();
-                    const headCenterX = rect.left + rect.width / 2;
+                refreshCanvasMetrics(false);
+                if (cachedCanvasRect) {
                     const btnRect = playBtn.getBoundingClientRect();
                     const btnCenterX = btnRect.left + btnRect.width / 2;
-                    targetHeroCuriosityTilt = (btnCenterX >= headCenterX ? 0.08 : -0.08);
+                    targetHeroCuriosityTilt = (btnCenterX >= cachedHeadCenterX ? 0.08 : -0.08);
                 }
             } else if (e.target?.closest?.('#heroSkinWrapper, #heroSkinCanvas3D, #stageNickPill')) {
                 targetHeroCuriosityTilt = 0.04;
@@ -5691,13 +5755,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         return null;
     }
 
-    // 🛡️ Globální pojistka smyčky: zamezuje duplicitnímu spouštění requestAnimationFrame smyček v skinview3d
+    // 🛡️ Globální pojistka smyčky pro skinview3d: zamezuje duplicitním requestAnimationFrame smyčkám a odemyká plný 60-240 FPS render
     function ensureSkinViewerLoopGuarded() {
         if (window.skinview3d && window.skinview3d.SkinViewer && !window.skinview3d.SkinViewer._loopGuarded) {
             window.skinview3d.SkinViewer._loopGuarded = true;
             const origDraw = window.skinview3d.SkinViewer.prototype.draw;
             window.skinview3d.SkinViewer.prototype.draw = function () {
                 if (this._disposed || this._renderPaused) return;
+
                 if (this.animationID !== null) {
                     window.cancelAnimationFrame(this.animationID);
                     this.animationID = null;
@@ -7637,18 +7702,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             appendLog(`[HERNÍ ČAS] Zaznamenán nový odehraný čas: +${addedText} (Celkem: ${formatPlaytime(data.totalPlaytime)}).`);
         }
         resetPlayState();
+        resumeLauncherBackgroundActivity();
+        if (progressContainer) progressContainer.style.display = 'none';
+        if (globalDownloadChip) globalDownloadChip.style.display = 'none';
+
         // Refresh profiles to display updated playtime
         window.api.getConfig().then(cfg => {
             if (cfg) {
                 currentConfig = cfg;
                 renderProfilesList();
+                if (typeof initHeroSkinViewer3D === 'function') {
+                    initHeroSkinViewer3D();
+                }
             }
         });
-        setTimeout(() => {
-            if (progressContainer && !isRunning && !isLaunching) {
-                progressContainer.style.display = 'none';
-            }
-        }, 2000);
     });
 
     // Live Playtime & Session Updates

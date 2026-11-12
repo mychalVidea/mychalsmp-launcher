@@ -858,33 +858,27 @@ pub async fn ensure_fabric_profile(
     let versions_dir = central_root.join("versions");
     fs::create_dir_all(&versions_dir)?;
 
+    let vanilla_manifest_opt = fetch_or_cache_mojang_manifest(central_root, target_version)
+        .await
+        .ok();
+
     // Check if an existing merged Fabric profile already exists on disk
+    let current_os = TargetOs::current();
     if let Ok(entries) = fs::read_dir(&versions_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with("fabric-loader-") && name.contains(target_version) && !name.contains("0.20.0") {
+            if name.starts_with("fabric-loader-")
+                && name.ends_with(&format!("-{}", target_version))
+                && !name.contains("0.20.0")
+            {
                 let json_path = entry.path().join(format!("{}.json", name));
                 if json_path.exists() {
                     if let Ok(content) = fs::read_to_string(&json_path) {
-                        if let Ok(mut manifest) = serde_json::from_str::<VersionManifest>(&content) {
-                            if manifest.libraries.len() > 15 {
-                                // Ensure libraries in cached manifest are deduplicated (Fabric overrides Vanilla)
-                                let mut seen = std::collections::HashSet::new();
-                                let mut deduped = Vec::new();
-                                for lib in manifest.libraries {
-                                    let parts: Vec<&str> = lib.name.split(':').collect();
-                                    let key = if parts.len() >= 4 {
-                                        format!("{}:{}:{}", parts[0], parts[1], parts[3])
-                                    } else if parts.len() >= 2 {
-                                        format!("{}:{}", parts[0], parts[1])
-                                    } else {
-                                        lib.name.clone()
-                                    };
-                                    if seen.insert(key) {
-                                        deduped.push(lib);
-                                    }
-                                }
-                                manifest.libraries = deduped;
+                        if let Ok(manifest) = serde_json::from_str::<VersionManifest>(&content) {
+                            let covers_vanilla = vanilla_manifest_opt.as_ref().map_or(true, |vm| {
+                                manifest_covers_vanilla_os_libs(&manifest.libraries, &vm.libraries, current_os)
+                            });
+                            if manifest.libraries.len() > 15 && covers_vanilla {
                                 return Ok(manifest);
                             }
                         }
@@ -896,6 +890,8 @@ pub async fn ensure_fabric_profile(
 
     let client = reqwest::Client::builder()
         .user_agent("MYCHALSMP-Launcher")
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
         .build()?;
 
     let meta_url = format!("{}/{}", FABRIC_META_BASE, target_version);
@@ -948,40 +944,21 @@ pub async fn ensure_fabric_profile(
         .unwrap_or(&format!("fabric-loader-{}-{}", loader_version, target_version))
         .to_string();
 
-    let vanilla_manifest = fetch_or_cache_mojang_manifest(central_root, target_version).await?;
-
-    // Combine libraries: Fabric libraries take precedence, vanilla fills the rest
-    let mut combined_libs: Vec<LibraryEntry> = Vec::new();
-    let mut seen_keys = std::collections::HashSet::new();
-
-    let get_lib_key = |name: &str| -> String {
-        let parts: Vec<&str> = name.split(':').collect();
-        if parts.len() >= 4 {
-            format!("{}:{}:{}", parts[0], parts[1], parts[3])
-        } else if parts.len() >= 2 {
-            format!("{}:{}", parts[0], parts[1])
-        } else {
-            name.to_string()
-        }
+    let vanilla_manifest = match vanilla_manifest_opt {
+        Some(vm) => vm,
+        None => fetch_or_cache_mojang_manifest(central_root, target_version).await?,
     };
 
+    // Combine libraries: Fabric libraries take precedence, vanilla fills the rest
+    let mut fabric_libs_parsed = Vec::new();
     if let Some(fabric_libs) = fabric_json.get("libraries").and_then(|l| l.as_array()) {
         for l in fabric_libs {
             if let Ok(entry) = serde_json::from_value::<LibraryEntry>(l.clone()) {
-                seen_keys.insert(get_lib_key(&entry.name));
-                combined_libs.push(entry);
+                fabric_libs_parsed.push(entry);
             }
         }
     }
-
-    for entry in vanilla_manifest.libraries {
-        let key = get_lib_key(&entry.name);
-        // Only deduplicate vanilla libraries if Fabric didn't already supply a replacement
-        if !seen_keys.contains(&key) {
-            seen_keys.insert(key);
-            combined_libs.push(entry);
-        }
-    }
+    let combined_libs = merge_libraries_fabric_over_vanilla(fabric_libs_parsed, vanilla_manifest.libraries);
 
     let mut merged_game_args = Vec::new();
     let mut merged_jvm_args = Vec::new();
@@ -1036,6 +1013,105 @@ pub async fn ensure_fabric_profile(
 // 6. Library & Asset Verification, Integrity & Mod Compatibility
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Computes a canonical `group:artifact[:classifier]` key for Maven library coordinates.
+fn library_dedup_key(name: &str) -> String {
+    let parts: Vec<&str> = name.split(':').collect();
+    if parts.len() >= 4 {
+        format!("{}:{}:{}", parts[0], parts[1], parts[3])
+    } else if parts.len() >= 2 {
+        format!("{}:{}", parts[0], parts[1])
+    } else {
+        name.to_string()
+    }
+}
+
+/// Returns true if a library entry provides only OS classifier natives without a main Java artifact.
+fn is_classifiers_only(lib: &LibraryEntry) -> bool {
+    lib.downloads
+        .as_ref()
+        .map_or(false, |d| d.artifact.is_none() && d.classifiers.is_some())
+}
+
+/// Merges Fabric loader libraries ahead of Vanilla libraries without dropping OS-conditional Vanilla variants.
+fn merge_libraries_fabric_over_vanilla(
+    fabric_libs: Vec<LibraryEntry>,
+    vanilla_libs: Vec<LibraryEntry>,
+) -> Vec<LibraryEntry> {
+    let mut combined = Vec::with_capacity(fabric_libs.len() + vanilla_libs.len());
+    let mut fabric_keys = std::collections::HashSet::new();
+
+    for entry in fabric_libs {
+        fabric_keys.insert(library_dedup_key(&entry.name));
+        combined.push(entry);
+    }
+
+    // Only skip Vanilla libraries explicitly overridden by Fabric; keep sibling OS-conditional entries intact.
+    for entry in vanilla_libs {
+        if !fabric_keys.contains(&library_dedup_key(&entry.name)) {
+            combined.push(entry);
+        }
+    }
+
+    combined
+}
+
+/// Verifies that a cached merged manifest contains every active-OS library declared in the Vanilla manifest.
+fn manifest_covers_vanilla_os_libs(
+    cached_libs: &[LibraryEntry],
+    vanilla_libs: &[LibraryEntry],
+    target_os: TargetOs,
+) -> bool {
+    let cached_active_keys: std::collections::HashSet<String> = cached_libs
+        .iter()
+        .filter(|lib| !is_classifiers_only(lib) && evaluate_rules(lib.rules.as_deref(), target_os))
+        .map(|lib| library_dedup_key(&lib.name))
+        .collect();
+
+    vanilla_libs.iter().all(|vlib| {
+        if is_classifiers_only(vlib) || !evaluate_rules(vlib.rules.as_deref(), target_os) {
+            return true;
+        }
+        cached_active_keys.contains(&library_dedup_key(&vlib.name))
+    })
+}
+
+fn os_arch_matches(rule_arch: &str) -> bool {
+    let current = std::env::consts::ARCH;
+    match rule_arch.to_lowercase().as_str() {
+        "x86" | "i386" | "i686" => current == "x86",
+        "x86_64" | "amd64" | "x64" => current == "x86_64",
+        "arm64" | "aarch64" => current == "aarch64",
+        other => current.eq_ignore_ascii_case(other),
+    }
+}
+
+fn classifier_matches_os(classifier_key: &str, target_os: TargetOs) -> bool {
+    let c_lower = classifier_key.to_lowercase();
+    let matches_os = match target_os {
+        TargetOs::Linux => c_lower.contains("linux"),
+        TargetOs::Windows => c_lower.contains("windows") || c_lower.contains("win"),
+        TargetOs::MacOs => c_lower.contains("osx") || c_lower.contains("macos") || c_lower.contains("mac"),
+    };
+    if !matches_os {
+        return false;
+    }
+
+    let current_arch = std::env::consts::ARCH;
+    let has_arm64 = c_lower.contains("arm64") || c_lower.contains("aarch64");
+    let has_x86 = c_lower.ends_with("-x86") || c_lower.contains("-x86-") || c_lower.ends_with("_x86");
+    let has_x64 = c_lower.contains("x86_64") || c_lower.contains("amd64") || c_lower.ends_with("-x64");
+
+    if current_arch == "x86_64" {
+        !has_arm64 && !has_x86
+    } else if current_arch == "aarch64" {
+        !has_x86 && !has_x64
+    } else if current_arch == "x86" {
+        !has_arm64 && !has_x64
+    } else {
+        true
+    }
+}
+
 pub fn evaluate_rules(rules: Option<&[Rule]>, target_os: TargetOs) -> bool {
     let rules = match rules {
         Some(r) if !r.is_empty() => r,
@@ -1050,6 +1126,11 @@ pub fn evaluate_rules(rules: Option<&[Rule]>, target_os: TargetOs) -> bool {
         if let Some(ref os) = rule.os {
             if let Some(ref name) = os.name {
                 if name != target_os.as_str() {
+                    applies = false;
+                }
+            }
+            if let Some(ref arch) = os.arch {
+                if !os_arch_matches(arch) {
                     applies = false;
                 }
             }
@@ -1343,6 +1424,79 @@ pub fn resolve_mod_compatibility(mods_dir: &Path) -> Result<Vec<String>, LaunchE
     Ok(actions)
 }
 
+async fn download_and_verify_jar(
+    client: &reqwest::Client,
+    url: &str,
+    dest: &Path,
+    expected_sha1: Option<&str>,
+) -> Result<(), String> {
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    let tmp_path = dest.with_extension("jar.tmp");
+    let mut last_err = String::new();
+
+    for attempt in 0..3 {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(350 * attempt as u64)).await;
+        }
+
+        let res = match client.get(url).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = format!("HTTP požadavek selhal: {}", e);
+                continue;
+            }
+        };
+
+        if !res.status().is_success() {
+            last_err = format!("HTTP {}", res.status().as_u16());
+            continue;
+        }
+
+        let bytes = match res.bytes().await {
+            Ok(b) if !b.is_empty() => b,
+            Ok(_) => {
+                last_err = "Prázdná odpověď serveru".to_string();
+                continue;
+            }
+            Err(e) => {
+                last_err = format!("Chyba při čtení dat: {}", e);
+                continue;
+            }
+        };
+
+        if let Err(e) = fs::write(&tmp_path, &bytes) {
+            last_err = format!("Zápis dočasného souboru selhal: {}", e);
+            continue;
+        }
+
+        let valid = match expected_sha1 {
+            Some(sha) => verify_file_sha1(&tmp_path, sha),
+            None => is_jar_file_valid(&tmp_path),
+        };
+        if !valid {
+            let _ = fs::remove_file(&tmp_path);
+            last_err = "Poškozený nebo neplatný JAR archiv (SHA1/ZIP kontrola)".to_string();
+            continue;
+        }
+
+        if dest.exists() {
+            let _ = fs::remove_file(dest);
+        }
+        fs::rename(&tmp_path, dest).map_err(|e| {
+            let _ = fs::remove_file(&tmp_path);
+            format!("Přesun JAR souboru selhal: {}", e)
+        })?;
+
+        return Ok(());
+    }
+
+    let _ = fs::remove_file(&tmp_path);
+    Err(last_err)
+}
+
 pub async fn ensure_libraries<F>(
     central_root: &Path,
     libraries: &[LibraryEntry],
@@ -1358,6 +1512,8 @@ where
     let mut result = Vec::new();
     let client = reqwest::Client::builder()
         .user_agent("MYCHALSMP-Launcher")
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
         .build()?;
 
     let total = libraries.len();
@@ -1366,92 +1522,88 @@ where
             continue;
         }
 
-        let rel_path = resolve_library_relative_path(&lib.name, lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()));
-        let dest = lib_dir.join(&rel_path);
+        if !is_classifiers_only(lib) {
+            let rel_path = resolve_library_relative_path(
+                &lib.name,
+                lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()),
+            );
+            let dest = lib_dir.join(&rel_path);
 
-        let expected_sha1 = lib
-            .downloads
-            .as_ref()
-            .and_then(|d| d.artifact.as_ref())
-            .and_then(|a| a.sha1.as_deref());
+            let expected_sha1 = lib
+                .downloads
+                .as_ref()
+                .and_then(|d| d.artifact.as_ref())
+                .and_then(|a| a.sha1.as_deref());
 
-        let mut valid = false;
-        if dest.exists() {
-            if let Some(sha) = expected_sha1 {
-                valid = verify_file_sha1(&dest, sha);
-            } else {
-                valid = is_jar_file_valid(&dest);
+            let mut valid = false;
+            if dest.exists() {
+                valid = match expected_sha1 {
+                    Some(sha) => verify_file_sha1(&dest, sha),
+                    None => is_jar_file_valid(&dest),
+                };
             }
-        }
 
-        if !valid {
-            let url = if let Some(ref d) = lib.downloads {
-                if let Some(ref a) = d.artifact {
-                    a.url.clone()
+            if !valid {
+                let url = if let Some(ref d) = lib.downloads {
+                    d.artifact.as_ref().and_then(|a| a.url.clone())
+                } else if let Some(ref u) = lib.url {
+                    Some(format!("{}{}", u, rel_path))
                 } else {
-                    None
-                }
-            } else if let Some(ref u) = lib.url {
-                Some(format!("{}{}", u, rel_path))
-            } else {
-                Some(format!("{}/{}", MOJANG_LIBRARIES_BASE, rel_path))
-            };
+                    Some(format!("{}/{}", MOJANG_LIBRARIES_BASE, rel_path))
+                };
 
-            if let Some(dl_url) = url {
-                if let Some(parent) = dest.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-
-                if let Ok(res) = client.get(&dl_url).send().await {
-                    if res.status().is_success() {
-                        if let Ok(bytes) = res.bytes().await {
-                            let _ = fs::write(&dest, bytes);
-                        }
+                if let Some(dl_url) = url {
+                    if let Err(err) = download_and_verify_jar(&client, &dl_url, &dest, expected_sha1).await {
+                        return Err(LaunchError::LibraryError(format!(
+                            "Nepodařilo se stáhnout knihovnu {} ({}): {}",
+                            lib.name, dl_url, err
+                        )));
                     }
+                    valid = dest.exists();
                 }
             }
-        }
 
-        if dest.exists() {
-            result.push(dest);
+            if valid && dest.exists() {
+                result.push(dest);
+            } else if lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()).is_some()
+                || lib.downloads.is_none()
+            {
+                return Err(LaunchError::LibraryError(format!(
+                    "Chybí nebo je poškozená povinná knihovna {}",
+                    lib.name
+                )));
+            }
         }
 
         // Also check and download native classifiers for target_os
         if let Some(ref d) = lib.downloads {
             if let Some(ref classifiers) = d.classifiers {
                 for (ckey, art) in classifiers {
-                    let c_lower = ckey.to_lowercase();
-                    let matches_os = match target_os {
-                        TargetOs::Linux => c_lower.contains("linux"),
-                        TargetOs::Windows => c_lower.contains("windows") || c_lower.contains("win"),
-                        TargetOs::MacOs => c_lower.contains("osx") || c_lower.contains("macos") || c_lower.contains("mac"),
-                    };
-                    if matches_os {
+                    if classifier_matches_os(ckey, target_os) {
                         let rel_native = resolve_library_relative_path(&lib.name, Some(art));
                         let dest_native = lib_dir.join(&rel_native);
+                        let expected_sha1 = art.sha1.as_deref();
                         let mut native_valid = false;
                         if dest_native.exists() {
-                            if let Some(ref sha) = art.sha1 {
-                                native_valid = verify_file_sha1(&dest_native, sha);
-                            } else {
-                                native_valid = is_jar_file_valid(&dest_native);
-                            }
+                            native_valid = match expected_sha1 {
+                                Some(sha) => verify_file_sha1(&dest_native, sha),
+                                None => is_jar_file_valid(&dest_native),
+                            };
                         }
                         if !native_valid {
                             if let Some(ref dl_url) = art.url {
-                                if let Some(parent) = dest_native.parent() {
-                                    let _ = fs::create_dir_all(parent);
+                                if let Err(err) =
+                                    download_and_verify_jar(&client, dl_url, &dest_native, expected_sha1).await
+                                {
+                                    return Err(LaunchError::LibraryError(format!(
+                                        "Nepodařilo se stáhnout nativní knihovnu {} ({}): {}",
+                                        lib.name, dl_url, err
+                                    )));
                                 }
-                                if let Ok(res) = client.get(dl_url).send().await {
-                                    if res.status().is_success() {
-                                        if let Ok(bytes) = res.bytes().await {
-                                            let _ = fs::write(&dest_native, bytes);
-                                        }
-                                    }
-                                }
+                                native_valid = dest_native.exists();
                             }
                         }
-                        if dest_native.exists() {
+                        if native_valid && dest_native.exists() {
                             result.push(dest_native);
                         }
                     }
@@ -1545,13 +1697,7 @@ pub fn extract_natives(
             if let Some(ref d) = lib.downloads {
                 if let Some(ref classifiers) = d.classifiers {
                     for (ckey, art) in classifiers {
-                        let c_lower = ckey.to_lowercase();
-                        let matches_os = match target_os {
-                            TargetOs::Linux => c_lower.contains("linux"),
-                            TargetOs::Windows => c_lower.contains("windows") || c_lower.contains("win"),
-                            TargetOs::MacOs => c_lower.contains("osx") || c_lower.contains("macos") || c_lower.contains("mac"),
-                        };
-                        if matches_os {
+                        if classifier_matches_os(ckey, target_os) {
                             let rel = resolve_library_relative_path(&lib.name, Some(art));
                             let jar_p = lib_dir.join(&rel);
                             if jar_p.exists() && !native_jars.contains(&jar_p) {
@@ -2092,15 +2238,8 @@ pub fn construct_launch_spec(
     let lib_dir = base_dir.join("libraries");
 
     for lib in &manifest.libraries {
-        if evaluate_rules(lib.rules.as_deref(), target_os) {
-            let parts: Vec<&str> = lib.name.split(':').collect();
-            let lib_key = if parts.len() >= 4 {
-                format!("{}:{}:{}", parts[0], parts[1], parts[3])
-            } else if parts.len() >= 2 {
-                format!("{}:{}", parts[0], parts[1])
-            } else {
-                lib.name.clone()
-            };
+        if !is_classifiers_only(lib) && evaluate_rules(lib.rules.as_deref(), target_os) {
+            let lib_key = library_dedup_key(&lib.name);
             if seen_cp_libs.insert(lib_key) {
                 let rel = resolve_library_relative_path(
                     &lib.name,
@@ -2326,6 +2465,11 @@ pub async fn spawn_game_process<R: Runtime>(
     }
 
     let _ = app.emit("game-started", json!({ "profileId": profile_id, "pid": pid }));
+    crate::services::set_discord_activity(
+        &format!("Hraje {}", profile_id),
+        "mychalsmp.xyz",
+        Some(chrono::Utc::now().timestamp()),
+    );
 
     // Kinetic progress engine state
     let target_progress = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(20));
@@ -2475,6 +2619,7 @@ pub async fn spawn_game_process<R: Runtime>(
     }
 
     let _ = app.emit("game-stopped", ());
+    crate::services::set_discord_activity("V launcheru", "mychalsmp.xyz", Some(chrono::Utc::now().timestamp()));
     let _ = app.emit(
         "launch-exit",
         json!({ "exitCode": exit_code, "profileId": profile_id }),
@@ -2619,6 +2764,122 @@ mod tests {
         assert!(natives_dir.join("jna").exists());
         assert!(natives_dir.join("netty").exists());
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    fn make_os_lib(name: &str, os_name: Option<&str>, os_arch: Option<&str>, has_artifact: bool) -> LibraryEntry {
+        LibraryEntry {
+            name: name.to_string(),
+            downloads: Some(LibraryDownloads {
+                artifact: if has_artifact {
+                    Some(ArtifactInfo {
+                        path: None,
+                        url: Some("https://example.invalid/lib.jar".to_string()),
+                        sha1: None,
+                        size: None,
+                    })
+                } else {
+                    None
+                },
+                classifiers: None,
+            }),
+            rules: os_name.map(|n| {
+                vec![Rule {
+                    action: "allow".to_string(),
+                    os: Some(RuleOs {
+                        name: Some(n.to_string()),
+                        arch: os_arch.map(|a| a.to_string()),
+                    }),
+                    features: None,
+                }]
+            }),
+            url: None,
+        }
+    }
+
+    #[test]
+    fn test_fabric_merge_preserves_vanilla_os_variants() {
+        let fabric_libs = vec![make_os_lib("net.fabricmc:fabric-loader:0.19.5", None, None, true)];
+        // Mac OS entry appears BEFORE Windows and Linux entries with identical group:artifact
+        let vanilla_libs = vec![
+            make_os_lib("org.lwjgl:lwjgl:3.4.3", Some("osx"), None, true),
+            make_os_lib("org.lwjgl:lwjgl:3.4.3", Some("windows"), None, true),
+            make_os_lib("org.lwjgl:lwjgl:3.4.3", Some("linux"), None, true),
+        ];
+
+        let merged = merge_libraries_fabric_over_vanilla(fabric_libs, vanilla_libs);
+        assert!(
+            merged.iter().any(|l| l.name == "org.lwjgl:lwjgl:3.4.3" && evaluate_rules(l.rules.as_deref(), TargetOs::Windows)),
+            "Windows LWJGL entry must survive merge even if macOS entry came first"
+        );
+        assert!(
+            merged.iter().any(|l| l.name == "org.lwjgl:lwjgl:3.4.3" && evaluate_rules(l.rules.as_deref(), TargetOs::Linux)),
+            "Linux LWJGL entry must survive merge even if macOS entry came first"
+        );
+
+        let temp_dir = std::env::temp_dir().join("mychalsmp_test_lwjgl_cp");
+        let config = json!({});
+        let profile = json!({ "id": "p", "name": "P", "version": "26.3", "loader": "fabric" });
+        let auth = json!({ "name": "Steve", "uuid": "0", "access_token": "x", "user_type": "legacy" });
+        let manifest = VersionManifest {
+            id: "fabric-loader-0.19.5-26.3".to_string(),
+            inherits_from: Some("26.3".to_string()),
+            main_class: "net.fabricmc.loader.impl.launch.knot.KnotClient".to_string(),
+            arguments: None,
+            libraries: merged,
+            asset_index: None,
+            assets: None,
+            downloads: None,
+        };
+        let spec = construct_launch_spec(
+            &config,
+            &profile,
+            &auth,
+            &manifest,
+            &temp_dir,
+            Path::new("/usr/bin/java"),
+            TargetOs::Windows,
+        )
+        .unwrap();
+        assert!(
+            spec.classpath_str.contains("lwjgl-3.4.3.jar"),
+            "Windows classpath must include lwjgl-3.4.3.jar, got: {}",
+            spec.classpath_str
+        );
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_cached_fabric_manifest_detects_missing_vanilla_libs() {
+        let vanilla = vec![
+            make_os_lib("org.lwjgl:lwjgl:3.4.3", Some("osx"), None, true),
+            make_os_lib("org.lwjgl:lwjgl:3.4.3", Some("windows"), None, true),
+        ];
+        // Broken cache that only kept osx entry
+        let broken_cache = vec![make_os_lib("org.lwjgl:lwjgl:3.4.3", Some("osx"), None, true)];
+        assert!(
+            !manifest_covers_vanilla_os_libs(&broken_cache, &vanilla, TargetOs::Windows),
+            "Must detect missing Windows LWJGL entry in stale cache"
+        );
+        assert!(manifest_covers_vanilla_os_libs(&vanilla, &vanilla, TargetOs::Windows));
+    }
+
+    #[test]
+    fn test_classifier_and_os_arch_rules() {
+        let x86_rule = vec![Rule {
+            action: "allow".to_string(),
+            os: Some(RuleOs {
+                name: Some("windows".to_string()),
+                arch: Some("x86".to_string()),
+            }),
+            features: None,
+        }];
+        if std::env::consts::ARCH == "x86_64" {
+            assert!(!evaluate_rules(Some(&x86_rule), TargetOs::Windows));
+            assert!(classifier_matches_os("natives-windows", TargetOs::Windows));
+            assert!(!classifier_matches_os("natives-windows-x86", TargetOs::Windows));
+            assert!(!classifier_matches_os("natives-windows-arm64", TargetOs::Windows));
+            assert!(!classifier_matches_os("natives-linux-aarch64", TargetOs::Linux));
+        }
     }
 }
 

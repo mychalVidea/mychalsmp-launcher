@@ -1224,6 +1224,7 @@ pub fn run() {
         ])
         .setup(|app| {
             let _ = crate::config::load_config();
+            crate::services::set_discord_activity("V launcheru", "mychalsmp.xyz", Some(chrono::Utc::now().timestamp()));
 
             // Setup Native System Tray (SMPClient)
             if is_tray_supported_on_linux() {

@@ -126,6 +126,9 @@ pub async fn search_modrinth_api(
     );
 
     let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("Modrinth API vrátilo chybu HTTP {}", resp.status().as_u16()));
+    }
     let mut data: Value = resp.json().await.map_err(|e| e.to_string())?;
 
     // If 0 hits with version filter on 26.x, fallback without version filter so players always find mods/packs
@@ -144,13 +147,80 @@ pub async fn search_modrinth_api(
             limit.clamp(1, 50)
         );
         if let Ok(r2) = client.get(&fallback_url).send().await {
-            if let Ok(d2) = r2.json::<Value>().await {
-                data = d2;
+            if r2.status().is_success() {
+                if let Ok(d2) = r2.json::<Value>().await {
+                    data = d2;
+                }
             }
         }
     }
 
+    normalize_modrinth_search_hits(&mut data);
     Ok(data)
+}
+
+/// Normalizes Modrinth `/v2/search` hits so the frontend always receives `id`, `loaders`, and `latest_game_versions`.
+fn normalize_modrinth_search_hits(data: &mut Value) {
+    const KNOWN_LOADERS: &[&str] = &[
+        "fabric", "quilt", "forge", "neoforge", "rift", "liteloader",
+        "iris", "optifine", "vanilla", "minecraft",
+    ];
+    let Some(hits) = data.get_mut("hits").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    for hit in hits.iter_mut() {
+        let Some(obj) = hit.as_object_mut() else {
+            continue;
+        };
+        let resolved_id = ["id", "project_id", "slug"].iter().find_map(|k| {
+            obj.get(*k)
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        });
+        if let Some(id_val) = resolved_id {
+            obj.insert("id".to_string(), Value::String(id_val.clone()));
+            if !obj.contains_key("project_id") {
+                obj.insert("project_id".to_string(), Value::String(id_val));
+            }
+        }
+
+        let has_loaders = obj
+            .get("loaders")
+            .and_then(|v| v.as_array())
+            .map(|a| !a.is_empty())
+            .unwrap_or(false);
+        if !has_loaders {
+            let mut loaders: Vec<Value> = Vec::new();
+            for cat_key in ["categories", "display_categories"] {
+                if let Some(cats) = obj.get(cat_key).and_then(|v| v.as_array()) {
+                    for c in cats {
+                        if let Some(cs) = c.as_str() {
+                            let low = cs.to_lowercase();
+                            if KNOWN_LOADERS.contains(&low.as_str())
+                                && !loaders.iter().any(|x| x.as_str() == Some(low.as_str()))
+                            {
+                                loaders.push(Value::String(low));
+                            }
+                        }
+                    }
+                }
+            }
+            obj.insert("loaders".to_string(), Value::Array(loaders));
+        }
+
+        let has_latest_gv = obj
+            .get("latest_game_versions")
+            .and_then(|v| v.as_array())
+            .map(|a| !a.is_empty())
+            .unwrap_or(false);
+        if !has_latest_gv {
+            if let Some(vers) = obj.get("versions").cloned().filter(|v| v.is_array()) {
+                obj.insert("latest_game_versions".to_string(), vers);
+            }
+        }
+    }
 }
 
 fn read_registry_file(profile_dir: &Path) -> Value {
@@ -288,6 +358,8 @@ pub async fn download_mod_or_pack_with_deps(
         .or_else(|| mod_options.get("id"))
         .or_else(|| mod_options.get("slug"))
         .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
         .ok_or_else(|| "Chybí ID projektu.".to_string())?;
     let title = mod_options
         .get("title")
@@ -1190,7 +1262,16 @@ pub async fn install_optimization_pack_for_profile(
     let mods_dir = prof_dir.join("mods");
     let _ = fs::create_dir_all(&mods_dir);
 
-    let mc_ver = version.unwrap_or("26.3");
+    let resolved_pid = profile_id
+        .or_else(|| cfg.get("activeProfileId").and_then(|v| v.as_str()))
+        .or_else(|| cfg.get("selectedProfile").and_then(|v| v.as_str()));
+    let profile_mc_ver = resolved_pid.and_then(|pid| {
+        cfg.get("profiles")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.iter().find(|p| p.get("id").and_then(|v| v.as_str()) == Some(pid)))
+            .and_then(|p| p.get("version").and_then(|v| v.as_str()))
+    });
+    let mc_ver = version.or(profile_mc_ver).unwrap_or("26.3");
     let enabled_mods = cfg.get("mods").cloned().unwrap_or_else(|| json!({}));
 
     let total = OPTIMIZATION_PACK_MODS.len();
@@ -1407,6 +1488,29 @@ mod tests {
         let list = get_profile_mods_list(None);
         assert!(list.get("success").and_then(|v| v.as_bool()).unwrap_or(false));
         assert!(list.get("mods").and_then(|v| v.as_array()).is_some());
+    }
+
+    #[test]
+    fn test_normalize_modrinth_search_hits_populates_id_loaders_and_versions() {
+        let mut payload = json!({
+            "hits": [
+                {
+                    "project_id": "AANobbMI",
+                    "slug": "sodium",
+                    "categories": ["fabric", "optimization"],
+                    "display_categories": ["fabric", "quilt"],
+                    "versions": ["1.21.1", "26.1", "26.3"]
+                }
+            ]
+        });
+        normalize_modrinth_search_hits(&mut payload);
+        let hit = &payload["hits"][0];
+        assert_eq!(hit.get("id").and_then(|v| v.as_str()), Some("AANobbMI"));
+        let loaders = hit.get("loaders").and_then(|v| v.as_array()).unwrap();
+        assert!(loaders.iter().any(|v| v.as_str() == Some("fabric")));
+        assert!(loaders.iter().any(|v| v.as_str() == Some("quilt")));
+        let gv = hit.get("latest_game_versions").and_then(|v| v.as_array()).unwrap();
+        assert!(gv.iter().any(|v| v.as_str() == Some("26.3")));
     }
 }
 

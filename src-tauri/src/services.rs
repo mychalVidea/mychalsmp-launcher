@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+#[allow(unused_imports)]
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::System;
@@ -836,62 +837,33 @@ pub fn copy_to_clipboard(_text: &str) -> bool {
 
 const DISCORD_CLIENT_ID: &str = "1557874962956550154";
 
-pub struct DiscordRpcClient {
-    client_id: String,
-    connected: Arc<Mutex<bool>>,
-    activity: Arc<Mutex<Option<Value>>>,
+use once_cell::sync::Lazy;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::mpsc;
+
+pub static DISCORD_TX: Lazy<mpsc::UnboundedSender<Option<Value>>> = Lazy::new(|| {
+    let (tx, rx) = mpsc::unbounded_channel();
+    tauri::async_runtime::spawn(discord_rpc_worker(rx));
+    tx
+});
+
+pub fn set_discord_activity(details: &str, state: &str, start_time: Option<i64>) {
+    let mut act = json!({
+        "details": details,
+        "state": state,
+        "assets": {
+            "large_image": "logo",
+            "large_text": "MYCHAL SMP (mychalsmp.xyz)"
+        }
+    });
+    if let Some(ts) = start_time {
+        act["timestamps"] = json!({ "start": ts * 1000 });
+    }
+    let _ = DISCORD_TX.send(Some(act));
 }
 
-impl DiscordRpcClient {
-    pub fn new() -> Self {
-        Self {
-            client_id: DISCORD_CLIENT_ID.to_string(),
-            connected: Arc::new(Mutex::new(false)),
-            activity: Arc::new(Mutex::new(None)),
-        }
-    }
-
-    pub fn is_connected(&self) -> bool {
-        *self.connected.lock().unwrap()
-    }
-
-    pub fn set_activity(&self, activity: Value) {
-        *self.activity.lock().unwrap() = Some(activity);
-    }
-
-    pub async fn send_handshake_ipc(&self) -> Result<(), String> {
-        let payload = json!({
-            "v": 1,
-            "client_id": self.client_id
-        });
-        let _packet = encode_ipc_packet(0, &payload);
-
-        #[cfg(unix)]
-        {
-            let socket_path = get_unix_discord_socket();
-            if let Some(sp) = socket_path {
-                if let Ok(mut stream) = tokio::net::UnixStream::connect(sp).await {
-                    let _ = tokio::io::AsyncWriteExt::write_all(&mut stream, &_packet).await;
-                    *self.connected.lock().unwrap() = true;
-                    return Ok(());
-                }
-            }
-        }
-
-        #[cfg(windows)]
-        {
-            for i in 0..10 {
-                let pipe_name = format!(r"\\.\pipe\discord-ipc-{}", i);
-                if let Ok(mut client) = tokio::net::windows::named_pipe::ClientOptions::new().open(&pipe_name) {
-                    let _ = tokio::io::AsyncWriteExt::write_all(&mut client, &_packet).await;
-                    *self.connected.lock().unwrap() = true;
-                    return Ok(());
-                }
-            }
-        }
-
-        Err("Discord IPC socket unavailable".to_string())
-    }
+pub fn clear_discord_activity() {
+    let _ = DISCORD_TX.send(None);
 }
 
 fn encode_ipc_packet(opcode: u32, payload: &Value) -> Vec<u8> {
@@ -908,18 +880,192 @@ fn get_unix_discord_socket() -> Option<PathBuf> {
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR").ok().map(PathBuf::from);
     let tmp_dir = PathBuf::from("/tmp");
 
-    let candidates = [
-        runtime_dir.as_ref().map(|d| d.join("discord-ipc-0")),
-        runtime_dir.as_ref().map(|d| d.join("app/com.discordapp.Discord/discord-ipc-0")),
-        Some(tmp_dir.join("discord-ipc-0")),
-    ];
+    for i in 0..10 {
+        let name = format!("discord-ipc-{}", i);
+        let candidates = [
+            runtime_dir.as_ref().map(|d| d.join(&name)),
+            runtime_dir.as_ref().map(|d| d.join(format!("app/com.discordapp.Discord/{}", name))),
+            Some(tmp_dir.join(&name)),
+        ];
 
-    for c in candidates.into_iter().flatten() {
-        if c.exists() {
-            return Some(c);
+        for c in candidates.into_iter().flatten() {
+            if c.exists() {
+                return Some(c);
+            }
         }
     }
     None
+}
+
+async fn discord_rpc_worker(mut rx: mpsc::UnboundedReceiver<Option<Value>>) {
+    let mut current_activity: Option<Value> = None;
+
+    loop {
+        // 1. Zjistit, zda je povolen Discord RPC v konfiguraci
+        let cfg = crate::config::load_config();
+        let enabled = cfg.get("enableDiscordRpc").and_then(|v| v.as_bool()).unwrap_or(true);
+        if !enabled {
+            tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
+            while let Ok(msg) = rx.try_recv() {
+                current_activity = msg;
+            }
+            continue;
+        }
+
+        // 2. Připojení na Linuxu (Unix domain socket)
+        #[cfg(unix)]
+        {
+            if let Some(sock_path) = get_unix_discord_socket() {
+                if let Ok(mut stream) = tokio::net::UnixStream::connect(&sock_path).await {
+                    let handshake = json!({
+                        "v": 1,
+                        "client_id": DISCORD_CLIENT_ID
+                    });
+                    let h_pkt = encode_ipc_packet(0, &handshake);
+                    if stream.write_all(&h_pkt).await.is_ok() {
+                        let mut hdr = [0u8; 8];
+                        if stream.read_exact(&mut hdr).await.is_ok() {
+                            let len = u32::from_le_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]) as usize;
+                            let mut body = vec![0u8; len];
+                            let _ = stream.read_exact(&mut body).await;
+
+                            let act_val = current_activity.clone().unwrap_or_else(|| json!({
+                                "details": "V launcheru",
+                                "state": "mychalsmp.xyz",
+                                "assets": {
+                                    "large_image": "logo",
+                                    "large_text": "MYCHAL SMP (mychalsmp.xyz)"
+                                }
+                            }));
+                            let frame = json!({
+                                "cmd": "SET_ACTIVITY",
+                                "args": {
+                                    "pid": std::process::id(),
+                                    "activity": act_val
+                                },
+                                "nonce": uuid::Uuid::new_v4().to_string()
+                            });
+                            let f_pkt = encode_ipc_packet(1, &frame);
+                            let _ = stream.write_all(&f_pkt).await;
+
+                            let mut read_buf = [0u8; 1024];
+                            loop {
+                                tokio::select! {
+                                    msg = rx.recv() => {
+                                        match msg {
+                                            Some(new_act) => {
+                                                current_activity = new_act.clone();
+                                                let frame_obj = json!({
+                                                    "cmd": "SET_ACTIVITY",
+                                                    "args": {
+                                                        "pid": std::process::id(),
+                                                        "activity": new_act
+                                                    },
+                                                    "nonce": uuid::Uuid::new_v4().to_string()
+                                                });
+                                                let pkt = encode_ipc_packet(1, &frame_obj);
+                                                if stream.write_all(&pkt).await.is_err() {
+                                                    break;
+                                                }
+                                            }
+                                            None => return,
+                                        }
+                                    }
+                                    read_res = stream.read(&mut read_buf) => {
+                                        match read_res {
+                                            Ok(0) | Err(_) => break,
+                                            Ok(_) => {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Připojení na Windows (Named Pipe)
+        #[cfg(windows)]
+        {
+            let mut connected_pipe = None;
+            for i in 0..10 {
+                let pipe_name = format!(r"\\.\pipe\discord-ipc-{}", i);
+                if let Ok(client) = tokio::net::windows::named_pipe::ClientOptions::new().open(&pipe_name) {
+                    connected_pipe = Some(client);
+                    break;
+                }
+            }
+            if let Some(mut pipe) = connected_pipe {
+                let handshake = json!({ "v": 1, "client_id": DISCORD_CLIENT_ID });
+                let h_pkt = encode_ipc_packet(0, &handshake);
+                if pipe.write_all(&h_pkt).await.is_ok() {
+                    let mut hdr = [0u8; 8];
+                    if pipe.read_exact(&mut hdr).await.is_ok() {
+                        let len = u32::from_le_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]) as usize;
+                        let mut body = vec![0u8; len];
+                        let _ = pipe.read_exact(&mut body).await;
+
+                        let act_val = current_activity.clone().unwrap_or_else(|| json!({
+                            "details": "V launcheru",
+                            "state": "mychalsmp.xyz",
+                            "assets": {
+                                "large_image": "logo",
+                                "large_text": "MYCHAL SMP (mychalsmp.xyz)"
+                            }
+                        }));
+                        let frame = json!({
+                            "cmd": "SET_ACTIVITY",
+                            "args": {
+                                "pid": std::process::id(),
+                                "activity": act_val
+                            },
+                            "nonce": uuid::Uuid::new_v4().to_string()
+                        });
+                        let f_pkt = encode_ipc_packet(1, &frame);
+                        let _ = pipe.write_all(&f_pkt).await;
+
+                        let mut read_buf = [0u8; 1024];
+                        loop {
+                            tokio::select! {
+                                msg = rx.recv() => {
+                                    match msg {
+                                        Some(new_act) => {
+                                            current_activity = new_act.clone();
+                                            let frame_obj = json!({
+                                                "cmd": "SET_ACTIVITY",
+                                                "args": {
+                                                    "pid": std::process::id(),
+                                                    "activity": new_act
+                                                },
+                                                "nonce": uuid::Uuid::new_v4().to_string()
+                                            });
+                                            let pkt = encode_ipc_packet(1, &frame_obj);
+                                            if pipe.write_all(&pkt).await.is_err() {
+                                                break;
+                                            }
+                                        }
+                                        None => return,
+                                    }
+                                }
+                                read_res = pipe.read(&mut read_buf) => {
+                                    match read_res {
+                                        Ok(0) | Err(_) => break,
+                                        Ok(_) => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+        while let Ok(msg) = rx.try_recv() {
+            current_activity = msg;
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

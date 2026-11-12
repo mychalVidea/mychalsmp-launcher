@@ -125,6 +125,10 @@
     onCrash: (callback) => on('launch-crash', callback),
     onPlaytimeUpdated: (callback) => on('playtime-updated', callback),
     onServersUpdated: (callback) => on('servers-updated', callback),
+    onGameStarted: (callback) => on('game-started', callback),
+    onGameStopped: (callback) => on('game-stopped', callback),
+    onWindowHiddenToTray: (callback) => on('window-hidden-to-tray', callback),
+    onWindowRestoredFromTray: (callback) => on('window-restored-from-tray', callback),
 
     // Window controls
     minimizeWindow: () => send('window_minimize'),
@@ -182,12 +186,6 @@
     // Mod Collisions & Drag Skin
     resolveModCollisions: (profileId) => invoke('resolve_mod_collisions', { profileId: profileId ?? null }),
     saveDraggedSkin: (filePath) => invoke('save_dragged_skin', { filePath }),
-
-    // Game lifecycle events for background pause
-    onGameStarted: (callback) => on('game-started', () => callback()),
-    onGameStopped: (callback) => on('game-stopped', () => callback()),
-    onWindowRestoredFromTray: (callback) => on('window-restored-from-tray', () => callback()),
-    onWindowHiddenToTray: (callback) => on('window-hidden-to-tray', () => callback()),
     preloadLaunchEnvironment: (profileId) => invoke('preload_launch_environment', { profileId: profileId ?? null })
   };
 
