@@ -735,30 +735,23 @@ body.is-maximized {
     height: 100%;
     opacity: 0;
     transform: translateY(4px);
-    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab-pane.active {
     display: block;
-    animation: tabPaneFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    will-change: transform, opacity, filter;
+    animation: tabPaneFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes tabPaneFadeIn {
     0% {
         opacity: 0;
-        transform: translateY(6px);
-        filter: blur(4px);
-    }
-
-    50% {
-        filter: blur(1.5px);
+        transform: translateY(5px);
     }
 
     100% {
         opacity: 1;
         transform: translateY(0);
-        filter: blur(0px);
     }
 }
 
@@ -1021,50 +1014,42 @@ body.is-maximized {
     background-repeat: no-repeat;
     opacity: 0;
     transform: translateX(0) scale(1.02);
-    filter: blur(0px) brightness(1.02) contrast(1.05) saturate(1.10);
     pointer-events: none;
-    will-change: transform, opacity, filter;
     transition:
-        opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1),
-        transform 0.70s cubic-bezier(0.16, 1, 0.3, 1),
-        filter 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+        opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.50s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .stage-keyart-layer.stage-keyart-active,
 .stage-keyart-bg.has-keyart {
     opacity: 0.98;
     transform: translateX(0) scale(1);
-    filter: blur(0px) brightness(1.02) contrast(1.05) saturate(1.10);
     z-index: 2;
 }
 
-/* Motion blur sliding transitions (pohyb a vytlačování pozadí) */
+/* Motion sliding transitions */
 .stage-keyart-layer.stage-keyart-entering-right {
     opacity: 0;
-    transform: translateX(70px) scale(1.07);
-    filter: blur(24px) brightness(1.25) contrast(1.12) saturate(1.25);
+    transform: translateX(48px) scale(1.04);
     z-index: 3;
 }
 
 .stage-keyart-layer.stage-keyart-leaving-left {
     opacity: 0;
-    transform: translateX(-70px) scale(0.95);
-    filter: blur(24px) brightness(0.65) contrast(1.05) saturate(0.80);
+    transform: translateX(-48px) scale(0.97);
     z-index: 1;
     pointer-events: none;
 }
 
 .stage-keyart-layer.stage-keyart-entering-left {
     opacity: 0;
-    transform: translateX(-70px) scale(1.07);
-    filter: blur(24px) brightness(1.25) contrast(1.12) saturate(1.25);
+    transform: translateX(-48px) scale(1.04);
     z-index: 3;
 }
 
 .stage-keyart-layer.stage-keyart-leaving-right {
     opacity: 0;
-    transform: translateX(70px) scale(0.95);
-    filter: blur(24px) brightness(0.65) contrast(1.05) saturate(0.80);
+    transform: translateX(48px) scale(0.97);
     z-index: 1;
     pointer-events: none;
 }
@@ -1162,7 +1147,7 @@ body.is-maximized {
     position: relative;
     z-index: 2;
     cursor: grab;
-    filter: drop-shadow(0 14px 20px rgba(0, 0, 0, 0.55));
+/* Remove expensive per-frame Gaussian blur filter on WebGL canvas */
     border-radius: 0;
     outline: none;
     user-select: none;
@@ -1361,13 +1346,11 @@ body.is-maximized {
     align-items: center;
     gap: 7px;
     padding: 6px 12px;
-    background: rgba(10, 14, 26, 0.90);
+    background: rgba(10, 14, 26, 0.92);
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: var(--radius-control);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     font-size: 11.5px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.16s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.50);
 }
 

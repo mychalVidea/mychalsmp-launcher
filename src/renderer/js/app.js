@@ -379,14 +379,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (isLauncherSuspendedInTray) return;
         isLauncherSuspendedInTray = true;
 
-        // 1. Okamžitě zmrazit 3D WebGL renderování v skinview3d a smrštit buffery na 1x1 pro uvolnění VRAM
+        // 1. Okamžitě zmrazit 3D WebGL renderování v skinview3d (bez 1x1 resize, které by rozbilo FBO/viewport)
         if (heroSkinViewer) {
             heroSkinViewer.renderPaused = true;
-            try { heroSkinViewer.setSize(1, 1); } catch (_) { }
         }
         if (skinViewer) {
             skinViewer.renderPaused = true;
-            try { skinViewer.setSize(1, 1); } catch (_) { }
         }
 
         // 2. Vynulovat interakce a sledování kurzoru hero modelu
@@ -1336,8 +1334,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             const equippedBadge = document.getElementById('equippedCapeBadge');
             if (equippedBadge) equippedBadge.style.display = 'none';
             activeMojangCapeUrl = null;
-            updateSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
-            updateHeroSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
+            if (lastLoadedSkinUrl) {
+                updateSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
+                updateHeroSkinViewer3D(lastLoadedSkinUrl, null, currentConfig.customSkinVariant === 'slim');
+            }
         }
 
         // Labels for offline paths
@@ -5759,6 +5759,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     function ensureSkinViewerLoopGuarded() {
         if (window.skinview3d && window.skinview3d.SkinViewer && !window.skinview3d.SkinViewer._loopGuarded) {
             window.skinview3d.SkinViewer._loopGuarded = true;
+            const normalizeTextureUrl = (src) => {
+                if (typeof src !== 'string') return src;
+                const trimmed = src.trim();
+                if (!trimmed) return '';
+                if (trimmed.startsWith('http://textures.minecraft.net/')) {
+                    return 'https://textures.minecraft.net/' + trimmed.slice('http://textures.minecraft.net/'.length);
+                }
+                return trimmed;
+            };
+            const preloadSkinImage = (src) => new Promise((resolve, reject) => {
+                const img = document.createElement('img');
+                if (/^https?:/i.test(src)) img.crossOrigin = 'anonymous';
+                img.onload = () => resolve(img);
+                img.onerror = (err) => reject(err || new Error(`Failed to load texture: ${src}`));
+                img.src = src;
+            });
             const origDraw = window.skinview3d.SkinViewer.prototype.draw;
             window.skinview3d.SkinViewer.prototype.draw = function () {
                 if (this._disposed || this._renderPaused) return;
@@ -5768,6 +5784,62 @@ document.addEventListener('DOMContentLoaded', async () => {
                     this.animationID = null;
                 }
                 origDraw.call(this);
+            };
+            const origRender = window.skinview3d.SkinViewer.prototype.render;
+            window.skinview3d.SkinViewer.prototype.render = function () {
+                if (this._disposed) return;
+                if (this.renderer && this.scene && this.camera) {
+                    this.renderer.render(this.scene, this.camera);
+                    return;
+                }
+                origRender.call(this);
+            };
+            const origLoadSkin = window.skinview3d.SkinViewer.prototype.loadSkin;
+            window.skinview3d.SkinViewer.prototype.loadSkin = function (source, options = {}) {
+                if (this._disposed) return Promise.resolve();
+                if (source === null || source === undefined || source === '') {
+                    return Promise.resolve();
+                }
+                if (typeof source === 'string') {
+                    const url = normalizeTextureUrl(source);
+                    if (!url) return Promise.resolve();
+                    const reqToken = (this._skinReqToken = (this._skinReqToken || 0) + 1);
+                    return preloadSkinImage(url).then((img) => {
+                        if (this._disposed || reqToken !== this._skinReqToken) return;
+                        const res = origLoadSkin.call(this, img, options);
+                        if (this.playerObject && this.playerObject.skin) {
+                            this.playerObject.skin.visible = true;
+                        }
+                        try { this.render(); } catch (_) { }
+                        return res;
+                    });
+                }
+                this._skinReqToken = (this._skinReqToken || 0) + 1;
+                return Promise.resolve(origLoadSkin.call(this, source, options));
+            };
+            const origLoadCape = window.skinview3d.SkinViewer.prototype.loadCape;
+            window.skinview3d.SkinViewer.prototype.loadCape = function (source, options = {}) {
+                if (this._disposed) return Promise.resolve();
+                if (source === null || source === undefined || source === '') {
+                    this._capeReqToken = (this._capeReqToken || 0) + 1;
+                    return origLoadCape.call(this, null, options);
+                }
+                if (typeof source === 'string') {
+                    const url = normalizeTextureUrl(source);
+                    if (!url) {
+                        this._capeReqToken = (this._capeReqToken || 0) + 1;
+                        return origLoadCape.call(this, null, options);
+                    }
+                    const reqToken = (this._capeReqToken = (this._capeReqToken || 0) + 1);
+                    return preloadSkinImage(url).then((img) => {
+                        if (this._disposed || reqToken !== this._capeReqToken) return;
+                        const res = origLoadCape.call(this, img, options);
+                        try { this.render(); } catch (_) { }
+                        return res;
+                    });
+                }
+                this._capeReqToken = (this._capeReqToken || 0) + 1;
+                return Promise.resolve(origLoadCape.call(this, source, options));
             };
         }
     }
@@ -6297,7 +6369,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 canvas: canvas,
                 width: 220,
                 height: 280,
-                model: isSlim ? 'slim' : 'default'
+                model: isSlim ? 'slim' : 'default',
+                preserveDrawingBuffer: true
             });
             heroSkinViewer.renderPaused = false;
 
