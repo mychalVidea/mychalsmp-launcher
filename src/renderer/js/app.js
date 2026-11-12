@@ -3,6 +3,19 @@
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // ── Zákaz nechtěného výběru textu a přetahování prvků (Desktop UI chování) ──
+    window.addEventListener('selectstart', (e) => {
+        if (!e.target.closest('input, textarea, [contenteditable="true"], .selectable-text, .log-content, .crash-log-body, pre, code')) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    window.addEventListener('dragstart', (e) => {
+        if (!e.target.closest('input, textarea')) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
     // ── Element References ──────────────────────────────────────────────────
     // Window Controls
     const btnMin = document.getElementById('btnMinimize');
