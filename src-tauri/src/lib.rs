@@ -1313,10 +1313,12 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
-                let _ = window.emit("window-hidden-to-tray", ());
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    let _ = window.emit("window-hidden-to-tray", ());
+                }
             }
         })
         .run(tauri::generate_context!())

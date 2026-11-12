@@ -53,7 +53,13 @@ pub fn create_offline_auth(username: &str) -> Result<Value, String> {
         return Err("Herní nick musí mít 3–16 znaků (pouze písmena, čísla a podtržítko).".to_string());
     }
     let uuid = generate_offline_uuid(clean);
+    save_config(&json!({
+        "authType": "offline",
+        "username": clean,
+        "offlineUsername": clean
+    }));
     Ok(json!({
+        "success": true,
         "access_token": uuid,
         "client_token": uuid,
         "uuid": uuid,

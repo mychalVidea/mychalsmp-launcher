@@ -196,6 +196,7 @@ pub async fn get_mojang_profile_data() -> Result<Value, String> {
                                 "mode": "microsoft",
                                 "id": profile.get("id").cloned().unwrap_or(Value::Null),
                                 "name": profile.get("name").cloned().unwrap_or(Value::Null),
+                                "profile": profile.clone(),
                                 "activeSkin": active_skin,
                                 "activeCape": active_cape,
                                 "capes": capes

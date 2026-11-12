@@ -131,10 +131,9 @@ pub fn scan_launcher_cache() -> Value {
         }
     }
 
-    // 3. Temps and caches in base_dir
+    // 3. Temps and caches in base_dir (natives jsou vynechány, aby se nesmazaly systémové knihovny Minecraftu liblwjgl.so apod.)
     let temp_dirs = [
         base_dir.join("temp"),
-        base_dir.join("natives"),
         base_dir.join("cache"),
         base_dir.join("webcache"),
     ];
@@ -264,7 +263,6 @@ pub fn clean_launcher_cache() -> Value {
     let base_dir = get_default_game_dir();
     let cleanup_dirs = [
         base_dir.join("temp"),
-        base_dir.join("natives"),
         base_dir.join("cache"),
         base_dir.join("webcache"),
     ];
