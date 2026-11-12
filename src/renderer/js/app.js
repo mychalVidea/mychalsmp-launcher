@@ -4999,22 +4999,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const targetProfile = (currentConfig.profiles || []).find(p => p.id === (selectedModsProfileId || currentConfig.activeProfileId));
-        const targetMcVersion = targetProfile?.version || currentModFilter.version || '26.3';
+        const activeFilterVer = currentModFilter.version === 'all'
+            ? ''
+            : (currentModFilter.version || targetProfile?.version || '26.3');
+        const targetMcVersion = targetProfile?.version || activeFilterVer || '26.3';
 
-        // Pokud je vybrána verze hry, zobrazujeme v katalogu kompatibilní položky
-        let displayMods = rawList.filter(m => {
-            if (!targetMcVersion) return true;
-            const vers = m.versions || m.latest_game_versions;
-            if (!vers || !Array.isArray(vers) || vers.length === 0) return true;
-            if (vers.includes(targetMcVersion)) return true;
-            if (targetMcVersion.startsWith('26.')) {
-                return vers.some(v => typeof v === 'string' && (v.startsWith('26.') || v === '1.21.11'));
-            }
-            return true;
-        });
+        // Pokud je vybrána konkrétní verze hry, zobrazujeme v katalogu výhradně mody kompatibilní s touto verzí
+        const displayMods = !activeFilterVer
+            ? rawList
+            : rawList.filter(m => {
+                const vers = (Array.isArray(m.versions) && m.versions.length > 0)
+                    ? m.versions
+                    : m.latest_game_versions;
+                if (!vers || !Array.isArray(vers) || vers.length === 0) return false;
+                return vers.includes(activeFilterVer);
+            });
 
         if (displayMods.length === 0) {
-            displayMods = rawList;
+            modsCardsList.innerHTML = `<div class="mods-loading">Pro verzi MC ${escapeHtml(activeFilterVer || targetMcVersion)} nebyly nalezeny žádné kompatibilní položky.</div>`;
+            const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
+            if (btnUpdateAll) btnUpdateAll.style.display = 'none';
+            return;
         }
 
         const updateableMods = [];
@@ -5653,15 +5658,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.addEventListener('focus', () => { markHeroActivity(); refreshCanvasMetrics(true); }, { passive: true });
         window.addEventListener('resize', () => { markHeroActivity(); refreshCanvasMetrics(true); }, { passive: true });
 
-        window.addEventListener('pointermove', (e) => {
-            markHeroActivity();
+        let pendingHoverRaf = 0;
+        let lastPointerSample = null;
+
+        const processPointerHoverSample = () => {
+            pendingHoverRaf = 0;
+            const sample = lastPointerSample;
+            if (!sample) return;
+
+            const canvas = document.getElementById('heroSkinCanvas3D');
+            if (!canvas || canvas.offsetParent === null) return;
+
             refreshCanvasMetrics(false);
-            if (!cachedCanvasRect) return;
+            if (!cachedCanvasRect || cachedCanvasRect.width <= 0 || cachedCanvasRect.height <= 0) return;
 
             const headCenterX = cachedHeadCenterX;
             const headCenterY = cachedHeadCenterY;
-            const dx = e.clientX - headCenterX;
-            const dy = e.clientY - headCenterY;
+            const dx = sample.clientX - headCenterX;
+            const dy = sample.clientY - headCenterY;
 
             const winW = cachedWinW;
             const winH = cachedWinH;
@@ -5669,9 +5683,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             const normX = Math.max(-1, Math.min(1, dx / (winW * 0.45)));
             const normY = Math.max(-1, Math.min(1, dy / (winH * 0.45)));
 
+            const targetEl = sample.target instanceof Element ? sample.target : null;
+
             // 1. Zvláštní chování pro tlačítka "Hrát" a postavičku (organický jemný náklon hlavy)
-            const playBtn = e.target?.closest?.('.btn-launch-profile, #sidebarPlayBtn, #btnQuickPlayMychal, .btn-install-v');
-            const heroCanvas = e.target?.closest?.('#heroSkinWrapper, #heroSkinCanvas3D, #stageNickPill');
+            const playBtn = targetEl?.closest?.('.btn-launch-profile, #sidebarPlayBtn, #btnQuickPlayMychal, .btn-install-v');
+            const heroCanvas = targetEl?.closest?.('#heroSkinWrapper, #heroSkinCanvas3D, #stageNickPill');
 
             if (playBtn) {
                 const btnRect = playBtn.getBoundingClientRect();
@@ -5696,11 +5712,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 targetHeroCuriosityTilt = 0;
                 // Běžné sledování kurzoru
-                const isInteractive = !!e.target?.closest?.('button, .mc-btn, .profile-row-card, .sidebar-nav-item, .dash-action-chip, .stage-nick-pill, .control-field');
+                const isInteractive = !!targetEl?.closest?.('button, .mc-btn, .profile-row-card, .sidebar-nav-item, .dash-action-chip, .stage-nick-pill, .control-field');
                 const focusMultiplier = isInteractive ? 1.08 : 1.0;
 
                 targetHeroHeadLookY = normX * 0.28 * focusMultiplier;
                 targetHeroHeadLookX = normY * 0.16 * focusMultiplier;
+            }
+        };
+
+        window.addEventListener('pointermove', (e) => {
+            markHeroActivity();
+            lastPointerSample = { clientX: e.clientX, clientY: e.clientY, target: e.target };
+            if (!pendingHoverRaf) {
+                pendingHoverRaf = requestAnimationFrame(processPointerHoverSample);
             }
         }, { passive: true });
 

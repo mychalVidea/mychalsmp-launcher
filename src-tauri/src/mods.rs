@@ -81,6 +81,33 @@ pub fn compute_sha1_file(path: &Path) -> Option<String> {
     Some(hex::encode(hasher.finalize()))
 }
 
+/// Builds a strict JSON-encoded Modrinth search facets array for catalog filtering.
+fn build_modrinth_catalog_facets(
+    project_type: &str,
+    loader: &str,
+    category: &str,
+    version: &str,
+) -> String {
+    let ptype = if project_type.trim().is_empty() {
+        "mod"
+    } else {
+        project_type.trim()
+    };
+    let mut facets: Vec<Vec<String>> = Vec::new();
+    facets.push(vec![format!("project_type:{}", ptype)]);
+    if ptype == "mod" && !loader.is_empty() && loader != "all" && loader != "vanilla" {
+        facets.push(vec![format!("categories:{}", loader)]);
+    }
+    if !category.is_empty() && category != "all" {
+        facets.push(vec![format!("categories:{}", category)]);
+    }
+    let ver = version.trim();
+    if !ver.is_empty() && ver != "all" {
+        facets.push(vec![format!("versions:{}", ver)]);
+    }
+    serde_json::to_string(&facets).unwrap_or_else(|_| "[]".to_string())
+}
+
 pub async fn search_modrinth_api(
     query: &str,
     version: &str,
@@ -91,32 +118,7 @@ pub async fn search_modrinth_api(
     limit: u32,
 ) -> Result<Value, String> {
     let client = modrinth_client();
-    let ptype = if project_type.trim().is_empty() {
-        "mod"
-    } else {
-        project_type.trim()
-    };
-
-    let build_facets = |ver_opt: Option<&str>| -> String {
-        let mut facets: Vec<Vec<String>> = Vec::new();
-        facets.push(vec![format!("project_type:{}", ptype)]);
-        if ptype == "mod" && !loader.is_empty() && loader != "all" && loader != "vanilla" {
-            facets.push(vec![format!("categories:{}", loader)]);
-        }
-        if !category.is_empty() && category != "all" {
-            facets.push(vec![format!("categories:{}", category)]);
-        }
-        if let Some(v) = ver_opt {
-            if !v.is_empty() && v != "all" {
-                let cands = get_version_candidates(v);
-                let ver_group: Vec<String> = cands.into_iter().map(|c| format!("versions:{}", c)).collect();
-                facets.push(ver_group);
-            }
-        }
-        serde_json::to_string(&facets).unwrap_or_else(|_| "[]".to_string())
-    };
-
-    let facets_str = build_facets(if version.is_empty() { None } else { Some(version) });
+    let facets_str = build_modrinth_catalog_facets(project_type, loader, category, version);
     let url = format!(
         "https://api.modrinth.com/v2/search?query={}&facets={}&offset={}&limit={}&index=relevance",
         urlencoding::encode(query),
@@ -130,30 +132,6 @@ pub async fn search_modrinth_api(
         return Err(format!("Modrinth API vrátilo chybu HTTP {}", resp.status().as_u16()));
     }
     let mut data: Value = resp.json().await.map_err(|e| e.to_string())?;
-
-    // If 0 hits with version filter on 26.x, fallback without version filter so players always find mods/packs
-    let hits_len = data
-        .get("hits")
-        .and_then(|v| v.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0);
-    if hits_len == 0 && !version.is_empty() {
-        let fallback_facets = build_facets(None);
-        let fallback_url = format!(
-            "https://api.modrinth.com/v2/search?query={}&facets={}&offset={}&limit={}&index=relevance",
-            urlencoding::encode(query),
-            urlencoding::encode(&fallback_facets),
-            offset,
-            limit.clamp(1, 50)
-        );
-        if let Ok(r2) = client.get(&fallback_url).send().await {
-            if r2.status().is_success() {
-                if let Ok(d2) = r2.json::<Value>().await {
-                    data = d2;
-                }
-            }
-        }
-    }
 
     normalize_modrinth_search_hits(&mut data);
     Ok(data)
@@ -1511,6 +1489,29 @@ mod tests {
         assert!(loaders.iter().any(|v| v.as_str() == Some("quilt")));
         let gv = hit.get("latest_game_versions").and_then(|v| v.as_array()).unwrap();
         assert!(gv.iter().any(|v| v.as_str() == Some("26.3")));
+    }
+
+    #[test]
+    fn test_build_modrinth_catalog_facets_uses_strict_version() {
+        let facets = build_modrinth_catalog_facets("mod", "fabric", "all", "26.3");
+        let parsed: Vec<Vec<String>> = serde_json::from_str(&facets).unwrap();
+        assert!(parsed.contains(&vec!["project_type:mod".to_string()]));
+        assert!(parsed.contains(&vec!["categories:fabric".to_string()]));
+        assert!(parsed.contains(&vec!["versions:26.3".to_string()]));
+        assert!(!facets.contains("versions:26.2"));
+        assert!(!facets.contains("versions:26.1"));
+    }
+
+    #[test]
+    fn test_build_modrinth_catalog_facets_omits_all_or_empty_version() {
+        for ver in ["", "   ", "all"] {
+            let facets = build_modrinth_catalog_facets("shader", "fabric", "optimization", ver);
+            let parsed: Vec<Vec<String>> = serde_json::from_str(&facets).unwrap();
+            assert!(parsed.contains(&vec!["project_type:shader".to_string()]));
+            assert!(parsed.contains(&vec!["categories:optimization".to_string()]));
+            assert!(!facets.contains("categories:fabric"));
+            assert!(!facets.contains("versions:"));
+        }
     }
 }
 

@@ -5358,22 +5358,20 @@ input[type="range"].slider.is-dragging::-webkit-slider-thumb {
 
 /* ── Micro-Animations & Interactive States ── */
 .mc-btn {
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease !important;
 }
 
 .mc-btn:active {
-    transform: translateY(0) scale(0.97) !important;
+    transform: scale(0.975) !important;
 }
 
 .mod-card-row {
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.16s ease, border-color 0.16s ease;
 }
 
 .mod-card-row:hover {
     background: var(--surface2, #18181c) !important;
     border-color: rgba(10, 103, 229, 0.4) !important;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 
 .spinner-inline {
