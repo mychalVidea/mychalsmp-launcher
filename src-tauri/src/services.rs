@@ -1225,17 +1225,32 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
             }
         }
 
-        // Ensure ~/.local/bin/mychalsmp-launcher symlink exists
+        // Ensure ~/.local/bin/mychalsmp-launcher wrapper and .desktop entry are clean
         let local_bin_dir = home_dir.join(".local/bin");
         let _ = fs::create_dir_all(&local_bin_dir);
         #[cfg(unix)]
         {
-            let link_path = local_bin_dir.join("mychalsmp-launcher");
-            if !link_path.exists() {
-                let _ = std::os::unix::fs::symlink(
-                    local_install_dir.join("mychalsmp-launcher"),
-                    &link_path,
-                );
+            use std::os::unix::fs::PermissionsExt;
+            let wrapper_path = local_bin_dir.join("mychalsmp-launcher");
+            let _ = fs::remove_file(&wrapper_path);
+            let wrapper_content = format!(
+                "#!/usr/bin/env bash\nexport WEBKIT_DISABLE_DMABUF_RENDERER=1\nexport WEBKIT_DISABLE_COMPOSITING_MODE=1\nexec \"{}\" \"$@\"\n",
+                local_install_dir.join("mychalsmp-launcher").to_string_lossy()
+            );
+            if fs::write(&wrapper_path, wrapper_content).is_ok() {
+                let _ = fs::set_permissions(&wrapper_path, fs::Permissions::from_mode(0o755));
+            }
+
+            let desktop_path = home_dir.join(".local/share/applications/mychalsmp-launcher.desktop");
+            let desktop_content = format!(
+                "[Desktop Entry]\nName=SMPClient\nComment=Oficiální Minecraft klient sítě MYCHAL SMP\nExec={} %U\nIcon=mychalsmp-launcher\nTerminal=false\nType=Application\nCategories=Game;ActionGame;AdventureGame;\nStartupWMClass=xyz.mychalsmp.launcher\n",
+                wrapper_path.to_string_lossy()
+            );
+            if let Some(parent) = desktop_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if fs::write(&desktop_path, desktop_content).is_ok() {
+                let _ = fs::set_permissions(&desktop_path, fs::Permissions::from_mode(0o755));
             }
         }
 

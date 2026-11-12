@@ -45,9 +45,15 @@ else
     cp "$DIR/src-tauri/target/release/mychalsmp-launcher" "$INSTALL_DIR/SMPClient"
 fi
 
-# 2. Spouštěcí symlink
-ln -sf "$INSTALL_DIR/mychalsmp-launcher" "$BIN_DIR/mychalsmp-launcher"
-chmod +x "$INSTALL_DIR/mychalsmp-launcher"
+# 2. Spouštěcí wrapper
+rm -f "$BIN_DIR/mychalsmp-launcher"
+cat <<EOF > "$BIN_DIR/mychalsmp-launcher"
+#!/usr/bin/env bash
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+export WEBKIT_DISABLE_COMPOSITING_MODE=1
+exec "$INSTALL_DIR/mychalsmp-launcher" "\$@"
+EOF
+chmod +x "$BIN_DIR/mychalsmp-launcher" "$INSTALL_DIR/mychalsmp-launcher"
 
 # 3. Ikona aplikace
 cp "$DIR/build/icon.png" "$ICON_DIR/mychalsmp-launcher.png"
@@ -57,7 +63,7 @@ cat <<EOF > "$DESKTOP_DIR/mychalsmp-launcher.desktop"
 [Desktop Entry]
 Name=MYCHAL SMP Launcher
 Comment=Oficiální Minecraft launcher sítě MYCHAL SMP
-Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 $INSTALL_DIR/mychalsmp-launcher %U
+Exec=$BIN_DIR/mychalsmp-launcher %U
 Icon=$ICON_DIR/mychalsmp-launcher.png
 Terminal=false
 Type=Application
