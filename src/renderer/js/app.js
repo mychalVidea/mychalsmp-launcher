@@ -2816,7 +2816,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return { type: 'png', src: 'assets/icons/old.png' };
         };
 
-        const cardsHtml = sortedProfiles.map(p => {
+        const buildCardsHtml = (isProfilesTab) => sortedProfiles.map(p => {
             const isActive = p.id === activeId;
             const pKeyart = resolveCardKeyartUrl(p.keyart || p.version);
             const keyartBgStyle = pKeyart ? `background-image: url('${escapeHtml(pKeyart)}');` : '';
@@ -2830,7 +2830,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const lastPlayedStr = p.lastPlayed ? formatLastPlayed(p.lastPlayed) : null;
             const canUpgrade = p.version && !String(p.version).includes('26.3') && !String(p.version).includes('26.4');
 
-            const specBarHtml = `
+            const specBarHtml = isProfilesTab ? `
                 <div class="profile-spec-bar">
                     <span class="spec-item spec-loader">${escapeHtml(loaderTag)}</span>
                     <span class="spec-divider"></span>
@@ -2841,6 +2841,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <span class="spec-item spec-playtime">${escapeHtml(playtimeStr)}</span>
                     ${lastPlayedStr ? `<span class="spec-divider"></span><span class="spec-item spec-last">${escapeHtml(lastPlayedStr)}</span>` : ''}
                     ${canUpgrade ? `<span class="spec-divider"></span><span class="spec-item spec-upgrade-hint" data-upgrade-pid="${escapeHtml(p.id)}">Upgrade → 26.3</span>` : ''}
+                </div>
+            ` : `
+                <div class="profile-spec-bar">
+                    <span class="spec-item spec-loader">${escapeHtml(loaderTag)}</span>
+                    <span class="spec-divider"></span>
+                    <span class="spec-item spec-version">v${escapeHtml(p.version || '26.3')}</span>
                 </div>
             `;
 
@@ -2877,6 +2883,29 @@ document.addEventListener('DOMContentLoaded', async () => {
                     : '<svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Stáhnout';
             }
 
+            const actionsHtml = isProfilesTab ? `
+                <div class="profile-actions">
+                    <button class="profile-tool-btn btn-profile-quick-folder" data-profile-id="${escapeHtml(p.id)}" title="Otevřít složku profilu">
+                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    </button>
+                    <button class="profile-tool-btn btn-profile-duplicate" data-profile-id="${escapeHtml(p.id)}" title="Duplikovat profil">
+                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                    <button class="profile-tool-btn btn-profile-settings" data-profile-id="${escapeHtml(p.id)}" title="Nastavení profilu">
+                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    </button>
+                    <button class="${launchBtnClass}" ${launchBtnAttrs}>
+                        <span>${launchBtnContent}</span>
+                    </button>
+                </div>
+            ` : `
+                <div class="profile-actions">
+                    <button class="${launchBtnClass}" ${launchBtnAttrs}>
+                        <span>${launchBtnContent}</span>
+                    </button>
+                </div>
+            `;
+
             return `
                 <div class="profile-row-card ${isActive ? 'active-profile' : ''}" data-profile-id="${escapeHtml(p.id)}">
                     ${pKeyart ? `<div class="profile-card-keyart-bg" style="${keyartBgStyle}"></div><div class="profile-card-keyart-overlay"></div>` : ''}
@@ -2888,28 +2917,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="profile-meta-line">${specBarHtml}</div>
                     </div>
                     <div class="profile-card-right">
-                        <div class="profile-actions">
-                            <button class="profile-tool-btn btn-profile-quick-folder" data-profile-id="${escapeHtml(p.id)}" title="Otevřít složku profilu">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                            </button>
-                            <button class="profile-tool-btn btn-profile-duplicate" data-profile-id="${escapeHtml(p.id)}" title="Duplikovat profil">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                            </button>
-                            <button class="profile-tool-btn btn-profile-settings" data-profile-id="${escapeHtml(p.id)}" title="Nastavení profilu">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                            </button>
-                            <button class="${launchBtnClass}" ${launchBtnAttrs}>
-                                <span>${launchBtnContent}</span>
-                            </button>
-                        </div>
+                        ${actionsHtml}
                     </div>
                 </div>
             `;
         }).join('');
 
-        function attachProfileEvents(container) {
+        function attachProfileEvents(container, isProfilesTab) {
             if (!container) return;
-            container.innerHTML = cardsHtml;
+            container.innerHTML = buildCardsHtml(isProfilesTab);
 
             // Bind card click for selection
             container.querySelectorAll('.profile-row-card').forEach(card => {
@@ -3044,8 +3060,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
-        if (list) attachProfileEvents(list);
-        if (tabList) attachProfileEvents(tabList);
+        if (list) attachProfileEvents(list, false);
+        if (tabList) attachProfileEvents(tabList, true);
     }
 
     function selectActiveProfile(profileId, isManual = true) {

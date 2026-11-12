@@ -269,25 +269,54 @@ async fn launch_game(
         }
         crate::mods::ensure_default_options_and_servers(&prof_dir);
 
-        let auth_session = if let Some(ms) = cfg.get("microsoftAccount").filter(|x| !x.is_null()) {
-            json!({
-                "name": ms
-                    .get("name")
+        let auth_type = cfg
+            .get("authType")
+            .or_else(|| cfg.get("accountType"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("offline");
+
+        let auth_session = if auth_type.eq_ignore_ascii_case("microsoft") {
+            let ms_account = match crate::auth::refresh_microsoft_session(false).await {
+                Ok(refreshed) => refreshed,
+                Err(e) => {
+                    eprintln!("[LAUNCHER] Varování při obnově Microsoft session: {}", e);
+                    cfg.get("microsoftAccount").cloned().unwrap_or(Value::Null)
+                }
+            };
+            if ms_account.is_object() {
+                json!({
+                    "name": ms_account
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Player"),
+                    "uuid": ms_account
+                        .get("uuid")
+                        .or_else(|| ms_account.get("id"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("00000000-0000-0000-0000-000000000000"),
+                    "access_token": ms_account
+                        .get("accessToken")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("offline"),
+                    "user_type": "msa",
+                })
+            } else {
+                let uname = cfg
+                    .get("username")
+                    .or_else(|| cfg.get("offlineUsername"))
                     .and_then(|v| v.as_str())
-                    .unwrap_or("Player"),
-                "uuid": ms
-                    .get("id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("00000000-0000-0000-0000-000000000000"),
-                "access_token": ms
-                    .get("accessToken")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("offline"),
-                "user_type": "msa",
-            })
+                    .unwrap_or("Player");
+                json!({
+                    "name": uname,
+                    "uuid": crate::auth::generate_offline_uuid(uname),
+                    "access_token": "offline",
+                    "user_type": "legacy",
+                })
+            }
         } else {
             let uname = cfg
                 .get("username")
+                .or_else(|| cfg.get("offlineUsername"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("Player");
             json!({
@@ -695,12 +724,8 @@ fn window_maximize(window: Window) {
 
 #[tauri::command]
 fn window_close(window: Window) {
-    if crate::launcher::is_game_running() {
-        let _ = window.hide();
-        let _ = window.emit("window-hidden-to-tray", ());
-    } else {
-        let _ = window.close();
-    }
+    let _ = window.hide();
+    let _ = window.emit("window-hidden-to-tray", ());
 }
 
 #[tauri::command]
@@ -1209,16 +1234,23 @@ pub fn run() {
                     true,
                     None::<&str>,
                 );
+                let kill_game_item = tauri::menu::MenuItem::with_id(
+                    app,
+                    "kill_game",
+                    "Ukončit běžící hru",
+                    true,
+                    None::<&str>,
+                );
                 let quit_item = tauri::menu::MenuItem::with_id(
                     app,
                     "quit",
-                    "Ukončit",
+                    "Ukončit launcher",
                     true,
                     None::<&str>,
                 );
 
-                if let (Ok(show_i), Ok(quit_i)) = (show_item, quit_item) {
-                    if let Ok(menu) = tauri::menu::Menu::with_items(app, &[&show_i, &quit_i]) {
+                if let (Ok(show_i), Ok(kill_i), Ok(quit_i)) = (show_item, kill_game_item, quit_item) {
+                    if let Ok(menu) = tauri::menu::Menu::with_items(app, &[&show_i, &kill_i, &quit_i]) {
                         let mut tray_builder = tauri::tray::TrayIconBuilder::with_id("smpclient-tray")
                             .tooltip("SMPClient — MYCHAL SMP Launcher")
                             .menu(&menu)
@@ -1232,7 +1264,14 @@ pub fn run() {
                                         let _ = app_handle.emit("window-restored-from-tray", ());
                                     }
                                 }
+                                "kill_game" => {
+                                    let _ = crate::launcher::kill_game();
+                                    if let Some(win) = app_handle.get_webview_window("main") {
+                                        let _ = win.emit("game-stopped", ());
+                                    }
+                                }
                                 "quit" => {
+                                    let _ = crate::launcher::kill_game();
                                     app_handle.exit(0);
                                 }
                                 _ => {}
@@ -1248,7 +1287,8 @@ pub fn run() {
                                     if let Some(win) = app_handle.get_webview_window("main") {
                                         let is_vis = win.is_visible().unwrap_or(false);
                                         if is_vis {
-                                            let _ = win.set_focus();
+                                            let _ = win.hide();
+                                            let _ = app_handle.emit("window-hidden-to-tray", ());
                                         } else {
                                             let _ = win.show();
                                             let _ = win.unminimize();
@@ -1274,11 +1314,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if crate::launcher::is_game_running() {
-                    api.prevent_close();
-                    let _ = window.hide();
-                    let _ = window.emit("window-hidden-to-tray", ());
-                }
+                api.prevent_close();
+                let _ = window.hide();
+                let _ = window.emit("window-hidden-to-tray", ());
             }
         })
         .run(tauri::generate_context!())
