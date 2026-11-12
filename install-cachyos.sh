@@ -32,7 +32,12 @@ if [ -f "$DIR/src-tauri/target/release/mychalsmp-launcher" ]; then
     [ -d "$DIR/assets" ] && cp -r "$DIR/assets" "$INSTALL_DIR/" 2>/dev/null || true
 elif [ -f "$DIR/mychalsmp-launcher.tar.gz" ]; then
     echo "📦 Rozbaluji archiv..."
-    tar -xzf "$DIR/mychalsmp-launcher.tar.gz" -C "$INSTALL_DIR/" --strip-components=1 2>/dev/null || tar -xzf "$DIR/mychalsmp-launcher.tar.gz" -C "$INSTALL_DIR/"
+    rm -f "$INSTALL_DIR/mychalsmp-launcher" "$INSTALL_DIR/SMPClient"
+    if tar -tf "$DIR/mychalsmp-launcher.tar.gz" 2>/dev/null | grep -q "^mychalsmp-launcher/"; then
+        tar -xzf "$DIR/mychalsmp-launcher.tar.gz" -C "$INSTALL_DIR/" --strip-components=1
+    else
+        tar -xzf "$DIR/mychalsmp-launcher.tar.gz" -C "$INSTALL_DIR/"
+    fi
 else
     echo "⚙️ Kompiluji nativní Tauri v2 launcher..."
     cd "$DIR" && npm run tauri:build

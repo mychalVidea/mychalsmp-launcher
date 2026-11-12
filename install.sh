@@ -40,9 +40,9 @@ else
 fi
 
 echo "📦 Rozbaluji herního klienta do $INSTALL_DIR..."
-# Pokusíme se o rozbalení s odstraněním nadřazené složky (--strip-components=1)
-if tar -xzf "$TEMP_TAR" -C "$INSTALL_DIR" --strip-components=1 2>/dev/null; then
-    :
+rm -f "$INSTALL_DIR/mychalsmp-launcher" "$INSTALL_DIR/SMPClient"
+if tar -tf "$TEMP_TAR" 2>/dev/null | grep -q "^mychalsmp-launcher/"; then
+    tar -xzf "$TEMP_TAR" -C "$INSTALL_DIR" --strip-components=1
 else
     tar -xzf "$TEMP_TAR" -C "$INSTALL_DIR"
 fi

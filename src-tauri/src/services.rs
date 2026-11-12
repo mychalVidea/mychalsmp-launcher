@@ -1264,6 +1264,7 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
     })
 }
 
+#[cfg(target_os = "linux")]
 fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {

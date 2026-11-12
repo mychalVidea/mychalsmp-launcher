@@ -22,15 +22,17 @@ permissions:
 
 jobs:
   build:
-    name: Build (${{ matrix.platform }})
+    name: Build (${{ matrix.label }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: ubuntu-22.04
             os: linux
+            label: Linux
           - platform: windows-latest
             os: windows
+            label: Windows
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
@@ -130,17 +132,17 @@ jobs:
           fi
 
           if [ -n "$BIN_PATH" ]; then
-            mkdir -p /tmp/tar-build/mychalsmp-launcher
-            cp "$BIN_PATH" /tmp/tar-build/mychalsmp-launcher/mychalsmp-launcher
-            chmod +x /tmp/tar-build/mychalsmp-launcher/mychalsmp-launcher
-            ln -sf mychalsmp-launcher /tmp/tar-build/mychalsmp-launcher/SMPClient
-            [ -d "assets" ] && cp -r assets /tmp/tar-build/mychalsmp-launcher/ 2>/dev/null || true
-            mkdir -p /tmp/tar-build/mychalsmp-launcher/resources
-            cp src/renderer/assets/logo.png /tmp/tar-build/mychalsmp-launcher/resources/ 2>/dev/null || true
-            cp src/renderer/assets/server-icon.png /tmp/tar-build/mychalsmp-launcher/resources/ 2>/dev/null || true
+            mkdir -p /tmp/tar-build
+            cp "$BIN_PATH" /tmp/tar-build/mychalsmp-launcher
+            chmod +x /tmp/tar-build/mychalsmp-launcher
+            ln -sf mychalsmp-launcher /tmp/tar-build/SMPClient
+            [ -d "assets" ] && cp -r assets /tmp/tar-build/ 2>/dev/null || true
+            mkdir -p /tmp/tar-build/resources
+            cp src/renderer/assets/logo.png /tmp/tar-build/resources/ 2>/dev/null || true
+            cp src/renderer/assets/server-icon.png /tmp/tar-build/resources/ 2>/dev/null || true
 
             VERSION=$(node -p "require('./package.json').version")
-            GZIP=-9 tar -czvf "artifacts/linux/mychalsmp-launcher-${VERSION}.tar.gz" -C /tmp/tar-build mychalsmp-launcher
+            GZIP=-9 tar -czvf "artifacts/linux/mychalsmp-launcher-${VERSION}.tar.gz" -C /tmp/tar-build mychalsmp-launcher SMPClient resources $([ -d "/tmp/tar-build/assets" ] && echo assets)
             cp "artifacts/linux/mychalsmp-launcher-${VERSION}.tar.gz" "artifacts/linux/mychalsmp-launcher.tar.gz"
             rm -rf /tmp/tar-build
           fi
