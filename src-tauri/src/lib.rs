@@ -584,8 +584,10 @@ fn update_profile_settings(profile_id: String, updates: Value) -> Value {
 }
 
 #[tauri::command]
-fn delete_profile(profile_id: String) -> Value {
-    crate::profiles::delete_profile(&profile_id)
+async fn delete_profile(profile_id: String) -> Value {
+    tokio::task::spawn_blocking(move || crate::profiles::delete_profile(&profile_id))
+        .await
+        .unwrap_or_else(|e| json!({ "success": false, "error": format!("Chyba vlákna při mazání profilu: {}", e) }))
 }
 
 #[tauri::command]
@@ -1225,6 +1227,10 @@ pub fn run() {
         .setup(|app| {
             let _ = crate::config::load_config();
             crate::services::set_discord_activity("V launcheru", "mychalsmp.xyz", Some(chrono::Utc::now().timestamp()));
+            std::thread::spawn(|| {
+                let _ = crate::services::cleanup_obsolete_electron_files();
+                crate::services::repair_linux_launcher_wrapper();
+            });
 
             // Setup Native System Tray (SMPClient)
             if is_tray_supported_on_linux() {

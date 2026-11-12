@@ -1211,17 +1211,16 @@ pub fn update_profile_settings(profile_id: &str, updates: &Value) -> Value {
     json!({ "success": true })
 }
 
-/// Deletes a profile from configuration and removes its disk files.
-pub fn delete_profile(profile_id: &str) -> Value {
+/// Deletes a profile from configuration and removes its disk files within `base_dir`.
+pub fn delete_profile_in_dir(base_dir: &Path, cfg: &mut Value, profile_id: &str) -> Result<Value, String> {
     let safe_id = Path::new(profile_id)
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("");
     if safe_id.is_empty() || safe_id != profile_id || safe_id == "." || safe_id == ".." {
-        return json!({ "success": false, "error": "Neplatné ID profilu." });
+        return Err("Neplatné ID profilu.".to_string());
     }
 
-    let mut cfg = load_config();
     let profiles = cfg
         .get("profiles")
         .and_then(|p| p.as_array())
@@ -1229,40 +1228,58 @@ pub fn delete_profile(profile_id: &str) -> Value {
         .unwrap_or_default();
 
     if profiles.len() <= 1 {
-        return json!({ "success": false, "error": "V launcheru musí zůstat alespoň jeden profil." });
+        return Err("V launcheru musí zůstat alespoň jeden profil.".to_string());
     }
 
     let target_profile = profiles
         .iter()
         .find(|p| p.get("id").and_then(|v| v.as_str()) == Some(safe_id))
-        .cloned();
-
-    let target_profile = match target_profile {
-        Some(p) => p,
-        None => return json!({ "success": false, "error": "Profil nebyl nalezen." }),
-    };
-
-    let base_dir = get_default_game_dir();
-    if let Some(game_dir_str) = target_profile.get("gameDir").and_then(|v| v.as_str()) {
-        let gdir = PathBuf::from(game_dir_str);
-        if gdir != base_dir && gdir.starts_with(&base_dir) && gdir.exists() {
-            let _ = fs::remove_dir_all(&gdir);
-        }
-    }
-
-    let prof_sub = base_dir.join("profiles").join(safe_id);
-    if prof_sub.exists() && prof_sub.starts_with(&base_dir) {
-        let _ = fs::remove_dir_all(&prof_sub);
-    }
-    let inst_sub = base_dir.join("instances").join(safe_id);
-    if inst_sub.exists() && inst_sub.starts_with(&base_dir) {
-        let _ = fs::remove_dir_all(&inst_sub);
-    }
+        .cloned()
+        .ok_or_else(|| "Profil nebyl nalezen.".to_string())?;
 
     let updated_profiles: Vec<Value> = profiles
         .into_iter()
         .filter(|p| p.get("id").and_then(|v| v.as_str()) != Some(safe_id))
         .collect();
+
+    let is_shared_dir = |candidate: &Path| {
+        updated_profiles.iter().any(|p| {
+            p.get("gameDir")
+                .and_then(|v| v.as_str())
+                .map(|s| Path::new(s) == candidate)
+                .unwrap_or(false)
+        })
+    };
+
+    if let Some(game_dir_str) = target_profile.get("gameDir").and_then(|v| v.as_str()) {
+        let gdir = PathBuf::from(game_dir_str);
+        if gdir != base_dir && gdir.starts_with(base_dir) && gdir.exists() && !is_shared_dir(&gdir) {
+            let _ = fs::remove_dir_all(&gdir);
+        }
+    }
+
+    let prof_sub = base_dir.join("profiles").join(safe_id);
+    if prof_sub.exists() && prof_sub.starts_with(base_dir) && !is_shared_dir(&prof_sub) {
+        let _ = fs::remove_dir_all(&prof_sub);
+    }
+    let inst_sub = base_dir.join("instances").join(safe_id);
+    if inst_sub.exists() && inst_sub.starts_with(base_dir) && !is_shared_dir(&inst_sub) {
+        let _ = fs::remove_dir_all(&inst_sub);
+    }
+
+    let mut deleted_defaults: Vec<String> = cfg
+        .get("deletedDefaultProfiles")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    if !deleted_defaults.iter().any(|x| x == safe_id) {
+        deleted_defaults.push(safe_id.to_string());
+    }
+    cfg["deletedDefaultProfiles"] = json!(deleted_defaults);
 
     let active_id = cfg
         .get("activeProfileId")
@@ -1286,6 +1303,9 @@ pub fn delete_profile(profile_id: &str) -> Value {
 
     cfg["profiles"] = Value::Array(updated_profiles);
     cfg["activeProfileId"] = json!(new_active_id);
+    if cfg.get("selectedProfile").and_then(|v| v.as_str()) == Some(safe_id) {
+        cfg["selectedProfile"] = json!(new_active_id);
+    }
     if let Some(ap) = new_active_profile {
         if let Some(ver) = ap.get("version") {
             cfg["version"] = ver.clone();
@@ -1295,9 +1315,20 @@ pub fn delete_profile(profile_id: &str) -> Value {
         }
     }
 
-    save_config(&cfg);
+    Ok(json!({ "success": true, "activeProfileId": new_active_id }))
+}
 
-    json!({ "success": true, "activeProfileId": new_active_id })
+/// Deletes a profile from configuration and removes its disk files.
+pub fn delete_profile(profile_id: &str) -> Value {
+    let mut cfg = load_config();
+    let base_dir = get_default_game_dir();
+    match delete_profile_in_dir(&base_dir, &mut cfg, profile_id) {
+        Ok(res) => {
+            save_config(&cfg);
+            res
+        }
+        Err(err) => json!({ "success": false, "error": err }),
+    }
 }
 
 /// Resets launcher state and data.
@@ -1549,5 +1580,75 @@ pub async fn import_profile_seed(
         "failedCount": failed_count,
         "failedItems": failed_items
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_temp_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("mychalsmp_{}_{}", label, nanos));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_delete_profile_removes_dir_and_records_deleted_default() {
+        let base = make_temp_dir("del_prof");
+        let inst_dir = base.join("instances").join("vanilla-26-1");
+        fs::create_dir_all(inst_dir.join("mods")).unwrap();
+        fs::write(inst_dir.join("mods").join("test.jar"), b"abc").unwrap();
+
+        let mut cfg = json!({
+            "activeProfileId": "vanilla-26-1",
+            "selectedProfile": "vanilla-26-1",
+            "profiles": [
+                {
+                    "id": "mychalsmp-fabric",
+                    "name": "MYCHAL SMP",
+                    "version": "26.3",
+                    "loader": "fabric"
+                },
+                {
+                    "id": "vanilla-26-1",
+                    "name": "Vanilla 26.1.2",
+                    "version": "26.1.2",
+                    "loader": "vanilla",
+                    "gameDir": inst_dir.to_string_lossy()
+                }
+            ]
+        });
+
+        let res = delete_profile_in_dir(&base, &mut cfg, "vanilla-26-1").expect("should delete");
+        assert_eq!(res["success"], json!(true));
+        assert_eq!(res["activeProfileId"], json!("mychalsmp-fabric"));
+        assert!(!inst_dir.exists(), "instance folder should be removed");
+        assert_eq!(cfg["profiles"].as_array().unwrap().len(), 1);
+        assert_eq!(cfg["selectedProfile"], json!("mychalsmp-fabric"));
+        assert!(cfg["deletedDefaultProfiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "vanilla-26-1"));
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_delete_profile_rejects_last_profile() {
+        let base = make_temp_dir("del_last");
+        let mut cfg = json!({
+            "activeProfileId": "mychalsmp-fabric",
+            "profiles": [{ "id": "mychalsmp-fabric", "version": "26.3", "loader": "fabric" }]
+        });
+        let err = delete_profile_in_dir(&base, &mut cfg, "mychalsmp-fabric").unwrap_err();
+        assert!(err.contains("alespoň jeden"));
+        let _ = fs::remove_dir_all(&base);
+    }
 }
 

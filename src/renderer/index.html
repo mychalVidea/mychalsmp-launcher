@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
         rel="stylesheet" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/style.css?v=1.5.6">
+    <link rel="stylesheet" href="css/style.css?v=1.5.7">
 </head>
 
 <body>
@@ -23,8 +23,8 @@
                 <span class="brand-title">SMP<span>Client</span></span>
             </div>
 
-            <!-- Real-time FPS Monitor Badge -->
-            <span class="fps-badge" id="launcherFpsBadge" title="Aktuální snímková frekvence launcheru">-- FPS</span>
+            <!-- Real-time FPS Monitor Badge (hidden by default; optional in Advanced Settings) -->
+            <span class="fps-badge" id="launcherFpsBadge" title="Aktuální snímková frekvence launcheru" style="display: none;">-- FPS</span>
 
             <!-- Network Status Chip -->
             <div class="network-status-chip" id="networkChip">
@@ -1677,6 +1677,12 @@
                                     </div>
                                 </details>
                             </div>
+
+                            <!-- Diskrétní přepínač FPS čítače launcheru (skrytý v pokročilém submenu) -->
+                            <label class="settings-subtle-toggle" for="checkShowFpsCounter">
+                                <input type="checkbox" id="checkShowFpsCounter">
+                                <span>Zobrazovat diagnostický FPS čítač launcheru v horní liště</span>
+                            </label>
 
                             <!-- Danger Zone: Reset launcher data -->
                             <div class="danger-zone-card" style="margin-top: 20px;">
@@ -3356,7 +3362,7 @@
 
     <script src="js/lib/skinview3d.bundle.js"></script>
     <script src="js/tauri-bridge.js?v=1.5.4"></script>
-    <script src="js/app.js?v=1.5.6"></script>
+    <script src="js/app.js?v=1.5.7"></script>
 </body>
 
 </html>

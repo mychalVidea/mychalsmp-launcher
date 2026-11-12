@@ -115,6 +115,8 @@ pub fn default_config() -> Value {
         "discordRpc": true,
         "downloadAudioDlc": false,
         "enableSnapshots": false,
+        "showFpsCounter": false,
+        "deletedDefaultProfiles": [],
         "gameDirectory": game_dir,
         "javaPath": "auto",
         "jvmArgs": "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch",
@@ -205,7 +207,17 @@ pub fn load_config() -> Value {
         }
     }
 
-    // Migrate default profiles (26.2 -> 26.3, ensure vanilla-26-3, vanilla-26-2, vanilla-26-1 exist)
+    // Migrate default profiles (26.2 -> 26.3, ensure vanilla-26-3, vanilla-26-2, vanilla-26-1 exist unless deleted by user)
+    let deleted_defaults: Vec<String> = base
+        .get("deletedDefaultProfiles")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
     if let Some(profiles) = base.get_mut("profiles").and_then(|v| v.as_array_mut()) {
         for p in profiles.iter_mut() {
             if p.get("id").and_then(|v| v.as_str()) == Some("mychalsmp-fabric") {
@@ -217,10 +229,11 @@ pub fn load_config() -> Value {
                 }
             }
         }
-        let has_id = |arr: &[Value], id: &str| {
-            arr.iter().any(|x| x.get("id").and_then(|v| v.as_str()) == Some(id))
+        let has_or_deleted = |arr: &[Value], id: &str| {
+            deleted_defaults.iter().any(|d| d == id)
+                || arr.iter().any(|x| x.get("id").and_then(|v| v.as_str()) == Some(id))
         };
-        if !has_id(profiles, "vanilla-26-3") {
+        if !has_or_deleted(profiles, "vanilla-26-3") {
             profiles.insert(
                 (1usize).min(profiles.len()),
                 json!({
@@ -235,7 +248,7 @@ pub fn load_config() -> Value {
                 }),
             );
         }
-        if !has_id(profiles, "vanilla-26-2") {
+        if !has_or_deleted(profiles, "vanilla-26-2") {
             profiles.push(json!({
                 "id": "vanilla-26-2",
                 "name": "Vanilla 26.2",
@@ -247,7 +260,7 @@ pub fn load_config() -> Value {
                 "description": "Čistý nemodovaný Minecraft 26.2 přímo od Mojangu."
             }));
         }
-        if !has_id(profiles, "vanilla-26-1") {
+        if !has_or_deleted(profiles, "vanilla-26-1") {
             profiles.push(json!({
                 "id": "vanilla-26-1",
                 "name": "Vanilla 26.1.2",

@@ -278,6 +278,10 @@ pub fn clean_launcher_cache() -> Value {
         }
     }
 
+    let electron_res = cleanup_obsolete_electron_files();
+    deleted_files += electron_res.get("deletedFiles").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    freed_bytes += electron_res.get("freedBytes").and_then(|v| v.as_u64()).unwrap_or(0);
+
     let formatted = format_bytes(freed_bytes);
     let msg = format!("Vyčištěno {} souborů (uvolněno {})", deleted_files, formatted);
     json!({
@@ -287,6 +291,249 @@ pub fn clean_launcher_cache() -> Value {
         "formattedFreed": formatted,
         "message": msg
     })
+}
+
+fn dir_size_and_file_count(path: &Path) -> (u64, u64) {
+    let mut files = 0u64;
+    let mut bytes = 0u64;
+    for entry in WalkDir::new(path).into_iter().flatten() {
+        if entry.file_type().is_file() {
+            files += 1;
+            bytes += entry.metadata().map(|m| m.len()).unwrap_or(0);
+        }
+    }
+    (files, bytes)
+}
+
+/// Removes obsolete Electron/Chromium runtime files and directories left inside a Tauri install dir.
+pub fn cleanup_obsolete_electron_in_dir(install_dir: &Path) -> (u64, u64) {
+    if !install_dir.is_dir() {
+        return (0, 0);
+    }
+
+    // Safety guard: only clean inside directories containing our launcher binary
+    let has_launcher_bin = ["mychalsmp-launcher", "mychalsmp-launcher.exe", "SMPClient", "SMPClient.exe"]
+        .iter()
+        .any(|name| install_dir.join(name).exists());
+    if !has_launcher_bin {
+        return (0, 0);
+    }
+
+    let obsolete_files = [
+        "icudtl.dat",
+        "LICENSES.chromium.html",
+        "LICENSE.electron.txt",
+        "libGLESv2.so",
+        "libEGL.so",
+        "libffmpeg.so",
+        "libvulkan.so.1",
+        "libvk_swiftshader.so",
+        "vk_swiftshader_icd.json",
+        "resources.pak",
+        "chrome_100_percent.pak",
+        "chrome_200_percent.pak",
+        "v8_context_snapshot.bin",
+        "snapshot_blob.bin",
+        "chrome_crashpad_handler",
+        "chrome-sandbox",
+        "chrome-sandbox.disabled",
+        "ffmpeg.dll",
+        "d3dcompiler_47.dll",
+        "libEGL.dll",
+        "libGLESv2.dll",
+        "vk_swiftshader.dll",
+        "vulkan-1.dll",
+        "Squirrel.exe",
+    ];
+
+    let obsolete_dirs = ["locales", "mychalsmp-launcher-1.0.0"];
+
+    let mut deleted_files = 0u64;
+    let mut freed_bytes = 0u64;
+
+    for name in &obsolete_files {
+        let p = install_dir.join(name);
+        if p.is_file() {
+            let sz = fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+            if fs::remove_file(&p).is_ok() {
+                deleted_files += 1;
+                freed_bytes += sz;
+            }
+        }
+    }
+
+    for dir_name in &obsolete_dirs {
+        let d = install_dir.join(dir_name);
+        if d.is_dir() {
+            let (cnt, sz) = dir_size_and_file_count(&d);
+            if fs::remove_dir_all(&d).is_ok() {
+                deleted_files += cnt;
+                freed_bytes += sz;
+            }
+        }
+    }
+
+    // Electron stored app.asar + app-update.yml + unpacked `app/` inside `resources/`,
+    // whereas Tauri keeps only lightweight icon assets (`logo.png`, `server-icon.png`) there.
+    let res_dir = install_dir.join("resources");
+    if res_dir.is_dir() {
+        for name in ["app.asar", "app.asar.bak", "app-update.yml", "elevate.exe"] {
+            let p = res_dir.join(name);
+            if p.is_file() {
+                let sz = fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+                if fs::remove_file(&p).is_ok() {
+                    deleted_files += 1;
+                    freed_bytes += sz;
+                }
+            }
+        }
+        for sub in ["app", "assets"] {
+            let d = res_dir.join(sub);
+            if d.is_dir() {
+                let (cnt, sz) = dir_size_and_file_count(&d);
+                if fs::remove_dir_all(&d).is_ok() {
+                    deleted_files += cnt;
+                    freed_bytes += sz;
+                }
+            }
+        }
+    }
+
+    // Remove leftover *.update_new staging files from previous interrupted atomic updates
+    if let Ok(entries) = fs::read_dir(install_dir) {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().to_string();
+            if fname.ends_with(".update_new") {
+                let p = entry.path();
+                if p.is_file() {
+                    let sz = fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+                    if fs::remove_file(&p).is_ok() {
+                        deleted_files += 1;
+                        freed_bytes += sz;
+                    }
+                }
+            }
+        }
+    }
+
+    (deleted_files, freed_bytes)
+}
+
+/// Removes Chromium/Electron cache directories from legacy Electron userData directories.
+pub fn cleanup_obsolete_electron_appdata(appdata_electron_dir: &Path) -> (u64, u64) {
+    if !appdata_electron_dir.is_dir() {
+        return (0, 0);
+    }
+    let cache_subdirs = [
+        "Cache",
+        "Code Cache",
+        "GPUCache",
+        "DawnCache",
+        "DawnGraphiteCache",
+        "DawnWebGPUCache",
+        "Service Worker",
+        "Session Storage",
+        "Local Storage",
+        "IndexedDB",
+        "blob_storage",
+        "Crashpad",
+        "logs",
+    ];
+    let mut deleted_files = 0u64;
+    let mut freed_bytes = 0u64;
+    for sub in &cache_subdirs {
+        let p = appdata_electron_dir.join(sub);
+        if p.is_dir() {
+            let (cnt, sz) = dir_size_and_file_count(&p);
+            if fs::remove_dir_all(&p).is_ok() {
+                deleted_files += cnt;
+                freed_bytes += sz;
+            }
+        }
+    }
+    (deleted_files, freed_bytes)
+}
+
+/// Cleans obsolete Electron binaries, libraries, locales, and updater caches on Linux and Windows.
+pub fn cleanup_obsolete_electron_files() -> Value {
+    let mut candidate_dirs: HashSet<PathBuf> = HashSet::new();
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            if !parent.to_string_lossy().contains("/tmp/.mount_") {
+                candidate_dirs.insert(parent.to_path_buf());
+            }
+        }
+    }
+
+    let mut total_deleted = 0u64;
+    let mut total_freed = 0u64;
+
+    #[cfg(target_os = "linux")]
+    if let Some(home) = dirs::home_dir() {
+        candidate_dirs.insert(home.join(".local/share/mychalsmp-launcher"));
+        let (cnt, sz) = cleanup_obsolete_electron_appdata(&home.join(".config/mychalsmp-launcher"));
+        total_deleted += cnt;
+        total_freed += sz;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+            let local_pb = PathBuf::from(&local_appdata);
+            candidate_dirs.insert(local_pb.join("Programs").join("mychalsmp-launcher"));
+            candidate_dirs.insert(local_pb.join("Programs").join("SMPClient"));
+            let updater_dir = local_pb.join("mychalsmp-launcher-updater");
+            if updater_dir.is_dir() {
+                let (cnt, sz) = dir_size_and_file_count(&updater_dir);
+                if fs::remove_dir_all(&updater_dir).is_ok() {
+                    total_deleted += cnt;
+                    total_freed += sz;
+                }
+            }
+        }
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let (cnt, sz) = cleanup_obsolete_electron_appdata(&PathBuf::from(appdata).join("mychalsmp-launcher"));
+            total_deleted += cnt;
+            total_freed += sz;
+        }
+    }
+
+    for dir in candidate_dirs {
+        let (cnt, sz) = cleanup_obsolete_electron_in_dir(&dir);
+        total_deleted += cnt;
+        total_freed += sz;
+    }
+
+    json!({
+        "success": true,
+        "deletedFiles": total_deleted,
+        "freedBytes": total_freed,
+        "formattedFreed": format_bytes(total_freed)
+    })
+}
+
+/// Ensures ~/.local/bin/mychalsmp-launcher does not force legacy WEBKIT_DISABLE_DMABUF_RENDERER=1.
+pub fn repair_linux_launcher_wrapper() {
+    #[cfg(target_os = "linux")]
+    if let Some(home) = dirs::home_dir() {
+        use std::os::unix::fs::PermissionsExt;
+        let wrapper_path = home.join(".local/bin/mychalsmp-launcher");
+        let bin_path = home.join(".local/share/mychalsmp-launcher/mychalsmp-launcher");
+        if wrapper_path.is_file() && bin_path.is_file() {
+            if let Ok(content) = fs::read_to_string(&wrapper_path) {
+                if content.contains("WEBKIT_DISABLE_DMABUF_RENDERER") {
+                    let clean_content = format!(
+                        "#!/usr/bin/env bash\nexec \"{}\" \"$@\"\n",
+                        bin_path.to_string_lossy()
+                    );
+                    if fs::write(&wrapper_path, clean_content).is_ok() {
+                        let _ = fs::set_permissions(&wrapper_path, fs::Permissions::from_mode(0o755));
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1381,7 +1628,7 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
             let wrapper_path = local_bin_dir.join("mychalsmp-launcher");
             let _ = fs::remove_file(&wrapper_path);
             let wrapper_content = format!(
-                "#!/usr/bin/env bash\nexport WEBKIT_DISABLE_DMABUF_RENDERER=1\nexec \"{}\" \"$@\"\n",
+                "#!/usr/bin/env bash\nexec \"{}\" \"$@\"\n",
                 local_install_dir.join("mychalsmp-launcher").to_string_lossy()
             );
             if fs::write(&wrapper_path, wrapper_content).is_ok() {
@@ -1404,6 +1651,8 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
         let _ = fs::remove_file(&temp_path);
         let _ = fs::remove_dir_all(&extract_dir);
     }
+
+    let _ = cleanup_obsolete_electron_files();
 
     if let Some(a) = app {
         let _ = a.emit(
@@ -1480,6 +1729,58 @@ mod tests {
         assert!(msg.is_some(), "clean_launcher_cache must return message field");
         assert!(!msg.unwrap().is_empty());
         assert!(res.get("formattedFreed").is_some());
+    }
+
+    #[test]
+    fn test_cleanup_obsolete_electron_in_dir_preserves_tauri_files() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("mychalsmp_electron_clean_{}", nanos));
+        fs::create_dir_all(dir.join("locales")).unwrap();
+        fs::create_dir_all(dir.join("mychalsmp-launcher-1.0.0/resources")).unwrap();
+        fs::create_dir_all(dir.join("resources/assets")).unwrap();
+        fs::create_dir_all(dir.join("assets/indexes")).unwrap();
+        fs::create_dir_all(dir.join("mods")).unwrap();
+
+        // Active Tauri files (must remain)
+        fs::write(dir.join("mychalsmp-launcher"), b"tauri-bin").unwrap();
+        fs::write(dir.join("SMPClient"), b"tauri-bin").unwrap();
+        fs::write(dir.join("resources/logo.png"), b"png").unwrap();
+        fs::write(dir.join("assets/indexes/26.3.json"), b"{}").unwrap();
+        fs::write(dir.join("mods/selfnametag-1.0.0.jar"), b"jar").unwrap();
+
+        // Obsolete Electron files (must be deleted)
+        fs::write(dir.join("icudtl.dat"), vec![1u8; 64]).unwrap();
+        fs::write(dir.join("libGLESv2.so"), vec![2u8; 64]).unwrap();
+        fs::write(dir.join("chrome_crashpad_handler"), vec![3u8; 32]).unwrap();
+        fs::write(dir.join("resources/app.asar"), vec![4u8; 128]).unwrap();
+        fs::write(dir.join("resources/app.asar.bak"), vec![5u8; 128]).unwrap();
+        fs::write(dir.join("resources/app-update.yml"), b"old").unwrap();
+        fs::write(dir.join("resources/assets/old.txt"), b"old").unwrap();
+        fs::write(dir.join("locales/en-US.pak"), vec![6u8; 48]).unwrap();
+        fs::write(dir.join("mychalsmp-launcher-1.0.0/resources/app.asar"), vec![7u8; 96]).unwrap();
+
+        let (deleted_files, freed_bytes) = cleanup_obsolete_electron_in_dir(&dir);
+        assert!(deleted_files >= 9, "expected obsolete Electron files to be removed");
+        assert!(freed_bytes >= 550);
+
+        assert!(dir.join("mychalsmp-launcher").exists());
+        assert!(dir.join("SMPClient").exists());
+        assert!(dir.join("resources/logo.png").exists());
+        assert!(dir.join("assets/indexes/26.3.json").exists());
+        assert!(dir.join("mods/selfnametag-1.0.0.jar").exists());
+
+        assert!(!dir.join("icudtl.dat").exists());
+        assert!(!dir.join("libGLESv2.so").exists());
+        assert!(!dir.join("locales").exists());
+        assert!(!dir.join("mychalsmp-launcher-1.0.0").exists());
+        assert!(!dir.join("resources/app.asar").exists());
+        assert!(!dir.join("resources/app-update.yml").exists());
+        assert!(!dir.join("resources/assets").exists());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
 

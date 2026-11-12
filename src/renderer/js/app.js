@@ -19,9 +19,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Měřič reálné snímkové frekvence (FPS / Obnovovací frekvence) ─────────────
     let fpsFrames = 0;
     let lastFpsTime = performance.now();
-    function startFpsMonitor() {
+    let fpsRafId = null;
+    let isFpsMonitorEnabled = false;
+    function setFpsMonitorEnabled(enabled) {
+        const shouldRun = Boolean(enabled);
+        isFpsMonitorEnabled = shouldRun;
         const badge = document.getElementById('launcherFpsBadge');
+        if (!shouldRun) {
+            if (fpsRafId !== null) {
+                window.cancelAnimationFrame(fpsRafId);
+                fpsRafId = null;
+            }
+            if (badge) badge.style.display = 'none';
+            return;
+        }
+        if (badge) badge.style.display = 'inline-flex';
+        if (fpsRafId !== null) return;
+        fpsFrames = 0;
+        lastFpsTime = performance.now();
         function tick(now) {
+            if (!isFpsMonitorEnabled) {
+                fpsRafId = null;
+                return;
+            }
             fpsFrames++;
             if (now - lastFpsTime >= 500) {
                 const fps = Math.round((fpsFrames * 1000) / (now - lastFpsTime));
@@ -32,11 +52,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     badge.style.color = fps >= 120 ? '#21DE00' : (fps >= 55 ? '#0a67e5' : '#f51515');
                 }
             }
-            window.requestAnimationFrame(tick);
+            fpsRafId = window.requestAnimationFrame(tick);
         }
-        window.requestAnimationFrame(tick);
+        fpsRafId = window.requestAnimationFrame(tick);
     }
-    startFpsMonitor();
+    setFpsMonitorEnabled(false);
 
     // ── Element References ──────────────────────────────────────────────────
     // Window Controls
@@ -227,8 +247,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (progressContainer) {
             progressContainer.style.display = 'flex';
-            if (progressBar) progressBar.style.width = `${percent}%`;
-            if (progressPercent) progressPercent.textContent = `${percent}%`;
+            if (progressBar) {
+                progressBar.style.width = `${percent}%`;
+                progressBar.classList.toggle('is-running', isRunning && percent >= 98);
+            }
+            if (progressPercent) {
+                progressPercent.textContent = `${percent}%`;
+                progressPercent.classList.toggle('is-complete', percent >= 98);
+            }
             if (progressText) {
                 progressText.textContent = friendlyStatus;
                 progressText.title = rawStatusText;
@@ -237,7 +263,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (globalDownloadChip) {
             globalDownloadChip.style.display = 'inline-flex';
-            if (globalDownloadBar) globalDownloadBar.style.width = `${percent}%`;
+            if (globalDownloadBar) {
+                globalDownloadBar.style.width = `${percent}%`;
+                globalDownloadBar.classList.toggle('is-running', isRunning && percent >= 98);
+            }
             if (globalDownloadText) {
                 globalDownloadText.textContent = `${friendlyStatus} (${percent}%)`;
                 globalDownloadText.title = rawStatusText;
@@ -905,6 +934,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const checkScreenshotClipboard = document.getElementById('checkScreenshotClipboard');
             if (checkScreenshotClipboard) checkScreenshotClipboard.checked = currentConfig.screenshotToClipboard !== false;
+
+            const showFpsCounter = currentConfig.showFpsCounter === true;
+            const checkShowFpsCounter = document.getElementById('checkShowFpsCounter');
+            if (checkShowFpsCounter) checkShowFpsCounter.checked = showFpsCounter;
+            setFpsMonitorEnabled(showFpsCounter);
 
             const checkBorderlessFullscreen = document.getElementById('checkBorderlessFullscreen');
             if (checkBorderlessFullscreen) {
@@ -3098,10 +3132,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             renderProfilesList();
                         } else {
                             showToast(res?.error || 'Profil se nepodařilo odebrat.', 'error');
-                            btn.disabled = false;
                         }
                     } catch (err) {
                         showToast('Chyba: ' + err.message, 'error');
+                    } finally {
                         btn.disabled = false;
                     }
                 });
@@ -3597,68 +3631,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const res = await window.api.launchGame(targetPid, actualServerIp);
             if (res && res.success) {
-                isRunning = true;
-                autoRelaunchAttempts = 0;
-                runningProfileId = targetPid;
-                isLaunching = false;
-                launchingProfileId = null;
-                setHeroLaunchCelebration(false);
-
-                try {
-                    installedVersions = await window.api.getInstalledVersions();
-                } catch (e) { }
-
-                // Record real lastPlayed timestamp for profile and set as active profile
-                const launchedProfile = (currentConfig.profiles || []).find(x => x.id === targetPid);
-                if (launchedProfile) {
-                    launchedProfile.lastPlayed = Date.now();
-                    currentConfig.activeProfileId = targetPid;
-                    window.api.saveConfig({ profiles: currentConfig.profiles, activeProfileId: targetPid });
-                }
-
-                renderProfilesList();
-                refreshVersionStatuses();
-
-                if (sidebarPlayBtn) {
-                    sidebarPlayBtn.style.opacity = '1';
-                    sidebarPlayBtn.style.background = '#ef4444';
-                    sidebarPlayBtn.querySelector('span').innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg> Stop';
-                }
-                const activeCard = document.querySelector(`.profile-row-card[data-profile-id="${targetPid}"]`);
-                if (activeCard) {
-                    const btn = activeCard.querySelector('.btn-launch-profile');
-                    if (btn) {
-                        btn.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg> Stop</span>';
-                        btn.classList.remove('mc-btn-green', 'mc-btn-primary');
-                        btn.classList.add('mc-btn-red');
-                    }
-                }
-                if (sideConsoleStatus) sideConsoleStatus.textContent = 'Hra běží.';
-                appendLog('[LAUNCHER] Instance Minecraftu byla spuštěna.');
-
-                // Live running state on progress container
-                if (progressContainer) {
-                    progressContainer.style.display = 'flex';
-                    if (progressBar) {
-                        progressBar.style.width = '100%';
-                        progressBar.classList.add('is-running');
-                    }
-                    if (progressPercent) progressPercent.textContent = 'Spuštěno';
-                    if (progressText) progressText.textContent = 'Hra spuštěna';
-                    if (btnCancelDownload) {
-                        btnCancelDownload.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Ukončit';
-                        btnCancelDownload.classList.add('btn-stop-running');
-                        btnCancelDownload.title = 'Ukončit Minecraft';
-                    }
-                }
-                if (globalDownloadChip) {
-                    globalDownloadChip.style.display = 'inline-flex';
-                    if (globalDownloadBar) {
-                        globalDownloadBar.style.width = '100%';
-                        globalDownloadBar.classList.add('is-running');
-                    }
-                    if (globalDownloadText) globalDownloadText.textContent = 'Minecraft běží';
-                }
+                launchingProfileId = targetPid;
+                appendLog('[LAUNCHER] Příprava herního procesu spuštěna...');
             } else if (res && res.sessionExpired) {
                 appendLog(`[AUTH] ${res.error}`);
                 showToast(res.error || 'Platnost Microsoft účtu vypršela.', 'error');
@@ -3781,8 +3755,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         lastProgressData = null;
         maxRenderedProgress = 0;
         activePreLaunchModUpdate = null;
-        if (progressBar) progressBar.classList.remove('is-running');
-        if (globalDownloadBar) globalDownloadBar.classList.remove('is-running');
+        if (progressBar) {
+            progressBar.classList.remove('is-running');
+            progressBar.style.width = '0%';
+        }
+        if (progressPercent) progressPercent.classList.remove('is-complete');
+        if (globalDownloadBar) {
+            globalDownloadBar.classList.remove('is-running');
+            globalDownloadBar.style.width = '0%';
+        }
         if (btnCancelDownload) {
             btnCancelDownload.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Zrušit';
             btnCancelDownload.classList.remove('btn-stop-running');
@@ -5812,10 +5793,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const origRender = window.skinview3d.SkinViewer.prototype.render;
             window.skinview3d.SkinViewer.prototype.render = function () {
                 if (this._disposed) return;
-                if (this.renderer && this.scene && this.camera) {
-                    this.renderer.render(this.scene, this.camera);
-                    return;
-                }
+                // Keep EffectComposer + FXAA active so Three.js uses its srgb-linear target pass
+                // instead of applying double LinearTosRGB gamma lift onto already-sRGB skin textures.
                 origRender.call(this);
             };
             const origLoadSkin = window.skinview3d.SkinViewer.prototype.loadSkin;
@@ -6367,6 +6346,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     /**
+     * Balances ambient and camera key light so 3D skins retain depth without overexposure.
+     */
+    function configureSkinViewerLighting(viewer) {
+        if (!viewer) return;
+        if (viewer.globalLight) {
+            viewer.globalLight.intensity = 2.55;
+        }
+        if (viewer.cameraLight) {
+            viewer.cameraLight.decay = 0;
+            viewer.cameraLight.intensity = 0.50;
+        }
+    }
+
+    /**
      * Initializes the 3D skin viewer on the main hero dashboard card.
      */
     function initHeroSkinViewer3D(force = false) {
@@ -6394,8 +6387,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 width: 220,
                 height: 280,
                 model: isSlim ? 'slim' : 'default',
-                preserveDrawingBuffer: true
+                preserveDrawingBuffer: false
             });
+            configureSkinViewerLighting(heroSkinViewer);
             heroSkinViewer.renderPaused = false;
 
             heroWaveStartTime = Date.now() + 2000;
@@ -6570,6 +6564,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 height: 235,
                 model: currentConfig.customSkinVariant === 'slim' ? 'slim' : 'default'
             });
+            configureSkinViewerLighting(skinViewer);
             skinViewer.renderPaused = false;
 
             skinViewer.camera.position.set(0, 0, 70);
@@ -7406,6 +7401,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const checkDiscordRpc = document.getElementById('checkDiscordRpc');
         const checkAutoUpdateMods = document.getElementById('checkAutoUpdateMods');
         const checkScreenshotClipboard = document.getElementById('checkScreenshotClipboard');
+        const checkShowFpsCounter = document.getElementById('checkShowFpsCounter');
         const jvmArgsInput = document.getElementById('jvmArgsInput');
         const customEnvVarsInput = document.getElementById('customEnvVarsInput');
 
@@ -7428,6 +7424,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             enableDiscordRpc: checkDiscordRpc ? checkDiscordRpc.checked : true,
             autoUpdateMods: checkAutoUpdateMods ? checkAutoUpdateMods.checked : true,
             screenshotToClipboard: checkScreenshotClipboard ? checkScreenshotClipboard.checked : true,
+            showFpsCounter: checkShowFpsCounter ? checkShowFpsCounter.checked : false,
             borderlessFullscreen: isBorderless,
             customJvmArgs: jvmArgsInput ? jvmArgsInput.value.trim() : null,
             customEnvVars: customEnvVarsInput ? customEnvVarsInput.value.trim() : ''
@@ -7572,6 +7569,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const checkScreenshotClipboardEl = document.getElementById('checkScreenshotClipboard');
     if (checkScreenshotClipboardEl) checkScreenshotClipboardEl.addEventListener('change', () => autoSaveSettings(true));
+
+    const checkShowFpsCounterEl = document.getElementById('checkShowFpsCounter');
+    if (checkShowFpsCounterEl) {
+        checkShowFpsCounterEl.addEventListener('change', () => {
+            setFpsMonitorEnabled(checkShowFpsCounterEl.checked);
+            autoSaveSettings(true);
+        });
+    }
 
     const checkBorderlessFullscreenEl = document.getElementById('checkBorderlessFullscreen');
     if (checkBorderlessFullscreenEl) {
@@ -7769,7 +7774,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.api.onLog((line) => {
         appendLog(line);
         // Živé milníky herního procesu zachycené přímo v rendereru
-        if (isLaunching && !isRunning && typeof line === 'string') {
+        if ((isLaunching || isRunning) && typeof line === 'string') {
             if (line.includes('Loading Minecraft') || line.includes('Fabric Loader')) {
                 updateLaunchProgressUI(Math.max(maxRenderedProgress, 68), 'Zavádění zavaděče Fabric a herního jádra...');
             } else if (line.includes('Loading ') && line.includes('mods')) {
@@ -7866,6 +7871,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }, 400);
             stopClientProgressTicker();
             isRunning = true;
+            autoRelaunchAttempts = 0;
             isLaunching = false;
             launchingProfileId = null;
             if (data && data.profileId) {
@@ -7873,11 +7879,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (!runningProfileId) {
                 runningProfileId = currentConfig.activeProfileId;
             }
+            const activePid = runningProfileId || currentConfig.activeProfileId;
+            const launchedProfile = (currentConfig.profiles || []).find(x => x.id === activePid);
+            if (launchedProfile) {
+                launchedProfile.lastPlayed = Date.now();
+                currentConfig.activeProfileId = activePid;
+                window.api.saveConfig({ profiles: currentConfig.profiles, activeProfileId: activePid });
+            }
+            window.api.getInstalledVersions().then(v => { installedVersions = v; }).catch(() => { });
             setHeroLaunchCelebration(false);
             if (sidebarPlayBtn) {
                 sidebarPlayBtn.style.opacity = '1';
                 sidebarPlayBtn.style.background = '#ef4444';
                 sidebarPlayBtn.querySelector('span').innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg> Stop';
+            }
+            const activeCard = document.querySelector(`.profile-row-card[data-profile-id="${activePid}"]`);
+            if (activeCard) {
+                const btn = activeCard.querySelector('.btn-launch-profile');
+                if (btn) {
+                    btn.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg> Stop</span>';
+                    btn.classList.remove('mc-btn-green', 'mc-btn-primary');
+                    btn.classList.add('mc-btn-red');
+                }
+            }
+            if (sideConsoleStatus) sideConsoleStatus.textContent = 'Hra běží.';
+            if (btnCancelDownload) {
+                btnCancelDownload.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Ukončit';
+                btnCancelDownload.classList.add('btn-stop-running');
+                btnCancelDownload.title = 'Ukončit Minecraft';
             }
             renderProfilesList();
             refreshVersionStatuses();
@@ -10062,6 +10091,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const profileRamSlider = document.getElementById('profileRamSlider');
     const profileRamValueBadge = document.getElementById('profileRamValueBadge');
     const btnDeleteCurrentProfile = document.getElementById('btnDeleteCurrentProfile');
+    const DEFAULT_DELETE_PROFILE_HTML = btnDeleteCurrentProfile ? btnDeleteCurrentProfile.innerHTML : '<span>Smazat</span>';
+
+    function resetDeleteProfileButton() {
+        if (!btnDeleteCurrentProfile) return;
+        btnDeleteCurrentProfile.disabled = false;
+        btnDeleteCurrentProfile.innerHTML = DEFAULT_DELETE_PROFILE_HTML;
+    }
 
     if (profileRamSlider && profileRamValueBadge) {
         profileRamSliderController = setupSmoothSnapSlider(profileRamSlider, profileRamValueBadge);
@@ -10071,6 +10107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const profile = (currentConfig.profiles || []).find(p => p.id === pid) || currentConfig.profiles[0];
         if (!profile) return;
         activeSettingsProfileId = pid;
+        resetDeleteProfileButton();
 
         const isImported = Boolean(
             profile.isImported ||
@@ -10260,6 +10297,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (modalProfileSettings) modalProfileSettings.style.display = 'none';
         const quickOptBanner = document.getElementById('profileQuickOptBanner');
         if (quickOptBanner) quickOptBanner.style.display = 'none';
+        resetDeleteProfileButton();
         activeSettingsProfileId = null;
     }
 
@@ -10411,7 +10449,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!confirm(`Opravdu chceš smazat a odinstalovat profil "${pName}"?\n\nTato akce profil trvale odstraní a odinstaluje soubory verze, které nepoužívá žádný jiný profil.`)) return;
 
             btnDeleteCurrentProfile.disabled = true;
-            const origHtml = btnDeleteCurrentProfile.innerHTML;
             btnDeleteCurrentProfile.innerHTML = '<span>Probíhá mazání...</span>';
 
             try {
@@ -10430,13 +10467,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     renderProfilesList();
                 } else {
                     showToast(res?.error || 'Profil se nepodařilo smazat.', 'error');
-                    btnDeleteCurrentProfile.disabled = false;
-                    btnDeleteCurrentProfile.innerHTML = origHtml;
                 }
             } catch (err) {
                 showToast('Chyba při mazání profilu: ' + err.message, 'error');
-                btnDeleteCurrentProfile.disabled = false;
-                btnDeleteCurrentProfile.innerHTML = origHtml;
+            } finally {
+                resetDeleteProfileButton();
             }
         });
     }
