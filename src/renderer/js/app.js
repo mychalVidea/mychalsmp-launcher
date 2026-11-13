@@ -144,6 +144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Okamžité přerušení nebo ukončení
         if (lower.includes('ruším') || lower.includes('zrušeno')) return 'Ruším stahování...';
         if (lower.includes('ukončuji') || lower.includes('ukončeno')) return 'Ukončuji Minecraft...';
+        if (isGameWindowReady || lower.includes('minecraft běží') || lower.includes('hra běží') || percent >= 100) return 'Minecraft běží';
         if (lower.includes('spouštím minecraft') || lower.includes('hra spuštěna') || percent >= 98) return 'Spouštíme Minecraft!';
 
         // Pokud text již obsahuje specifickou, smysluplnou herní zprávu z našeho launch enginu,
@@ -213,6 +214,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── Klientský plynulý mikro-posun během spouštění (eliminuje jakékoliv vizuální zamrznutí) ──
     let clientProgressTicker = null;
+    let isGameWindowReady = false;
+    let gameWindowReadyFallbackTimer = null;
+
+    function markGameWindowReady() {
+        if (!isLaunching && !isRunning) return;
+        isGameWindowReady = true;
+        if (gameWindowReadyFallbackTimer) {
+            clearTimeout(gameWindowReadyFallbackTimer);
+            gameWindowReadyFallbackTimer = null;
+        }
+        stopClientProgressTicker();
+        updateLaunchProgressUI(100, 'Minecraft běží');
+    }
+
     function startClientProgressTicker() {
         if (clientProgressTicker) clearInterval(clientProgressTicker);
         clientProgressTicker = setInterval(() => {
@@ -240,16 +255,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         const val = Math.min(Math.max(Number(rawPercent) || 0, 0), 100);
+        if (isGameWindowReady && val < 100) {
+            return;
+        }
         maxRenderedProgress = Math.max(maxRenderedProgress, val);
-        const percent = Math.min(99, Math.round(maxRenderedProgress));
-        const rawStatusText = statusText || (lastProgressData ? lastProgressData.text : 'Načítání hry...');
+        const maxCap = (isGameWindowReady || val >= 100) ? 100 : 99;
+        const percent = Math.min(maxCap, Math.round(maxRenderedProgress));
+        const rawStatusText = isGameWindowReady ? 'Minecraft běží' : (statusText || (lastProgressData ? lastProgressData.text : 'Načítání hry...'));
         const friendlyStatus = getHumanFriendlyStatus(rawStatusText, percent);
 
         if (progressContainer) {
             progressContainer.style.display = 'flex';
             if (progressBar) {
                 progressBar.style.width = `${percent}%`;
-                progressBar.classList.toggle('is-running', isRunning && percent >= 98);
+                progressBar.classList.toggle('is-running', isGameWindowReady || (isRunning && percent >= 98));
             }
             if (progressPercent) {
                 progressPercent.textContent = `${percent}%`;
@@ -265,10 +284,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             globalDownloadChip.style.display = 'inline-flex';
             if (globalDownloadBar) {
                 globalDownloadBar.style.width = `${percent}%`;
-                globalDownloadBar.classList.toggle('is-running', isRunning && percent >= 98);
+                globalDownloadBar.classList.toggle('is-running', isGameWindowReady || (isRunning && percent >= 98));
             }
             if (globalDownloadText) {
-                globalDownloadText.textContent = `${friendlyStatus} (${percent}%)`;
+                globalDownloadText.textContent = isGameWindowReady ? 'Minecraft běží' : `${friendlyStatus} (${percent}%)`;
                 globalDownloadText.title = rawStatusText;
             }
         }
@@ -293,9 +312,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         if (vBadge) {
-            vBadge.className = 'v-status-badge downloading';
-            const vLabel = vBadge.querySelector('.v-status-label') || vBadge;
-            vLabel.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Spouštění... ${percent}%</span>`;
+            if (isGameWindowReady) {
+                vBadge.className = 'v-status-badge running';
+                const vLabel = vBadge.querySelector('.v-status-label') || vBadge;
+                vLabel.innerHTML = `<span class="status-dot online"></span> <span>Běží</span>`;
+            } else {
+                vBadge.className = 'v-status-badge downloading';
+                const vLabel = vBadge.querySelector('.v-status-label') || vBadge;
+                vLabel.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Spouštění... ${percent}%</span>`;
+            }
         }
     }
 
@@ -455,8 +480,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (heroSkinViewer) {
                 heroSkinViewer.renderPaused = false;
                 try {
-                    heroSkinViewer.setSize(220, 280);
-                    heroSkinViewer.render();
+                    if (heroSkinNeedsSync && latestViewerSkinState.skinUrl) {
+                        updateHeroSkinViewer3D(latestViewerSkinState.skinUrl, latestViewerSkinState.capeUrl, latestViewerSkinState.isSlim);
+                    } else {
+                        heroSkinViewer.setSize(220, 280);
+                        heroSkinViewer.render();
+                    }
                 } catch (_) {
                     if (typeof initHeroSkinViewer3D === 'function') initHeroSkinViewer3D(true);
                 }
@@ -468,12 +497,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else if (heroSkinViewer) {
             heroSkinViewer.renderPaused = true;
         }
-        if (skinViewer) {
-            skinViewer.renderPaused = (curTab !== 'character');
-            if (curTab === 'character') {
-                skinViewer.setSize(200, 235);
-                try { skinViewer.render(); } catch (_) { }
+        if (curTab === 'character') {
+            if (skinViewer) {
+                skinViewer.renderPaused = false;
+                if (characterSkinNeedsSync) {
+                    updateCharacterTabSkinPreview();
+                } else {
+                    skinViewer.setSize(200, 235);
+                    try { skinViewer.render(); } catch (_) { }
+                }
+            } else {
+                updateCharacterTabSkinPreview();
             }
+        } else if (skinViewer) {
+            skinViewer.renderPaused = true;
         }
 
         // 3. Okamžitě zkontrolovat stav sítě a obnovit 15s interval
@@ -525,6 +562,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
 
+        // Nejprve okamžitě pozastavit neaktivní WebGL viewery ještě před synchronizací viditelného vieweru
+        if (tabId !== 'play') {
+            cancelHeroReturn();
+            if (heroSkinViewer) {
+                heroSkinViewer.renderPaused = true;
+            }
+        }
+        if (tabId !== 'character' && skinViewer) {
+            skinViewer.renderPaused = true;
+        }
+
         if (tabId === 'mods') {
             selectedModsProfileId = currentConfig.activeProfileId || selectedModsProfileId;
             syncModFilterToProfile(selectedModsProfileId);
@@ -542,26 +590,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderProfilesList();
         } else if (tabId === 'servers') {
             renderServersFullTab();
+            pingAllServersLive();
         } else if (tabId === 'character') {
             updateCharacterTabSkinPreview();
         }
 
-        if (heroSkinViewer) {
-            heroSkinViewer.renderPaused = (tabId !== 'play');
-            if (tabId === 'play') {
-                const cvEl = document.querySelector('.content-viewport');
-                if (cvEl && cvEl.scrollTop > 0) cvEl.scrollTop = 0;
-                heroSkinViewer.setSize(220, 280);
-                scheduleHeroReturn();
+        if (tabId === 'play') {
+            const cvEl = document.querySelector('.content-viewport');
+            if (cvEl && cvEl.scrollTop > 0) cvEl.scrollTop = 0;
+            if (!heroSkinViewer) {
+                initHeroSkinViewer3D();
             } else {
-                cancelHeroReturn();
+                heroSkinViewer.renderPaused = false;
+                if (heroSkinNeedsSync && latestViewerSkinState.skinUrl) {
+                    updateHeroSkinViewer3D(latestViewerSkinState.skinUrl, latestViewerSkinState.capeUrl, latestViewerSkinState.isSlim);
+                } else {
+                    heroSkinViewer.setSize(220, 280);
+                    try { heroSkinViewer.render(); } catch (_) { }
+                }
             }
+            scheduleHeroReturn();
         }
-        if (skinViewer) {
-            skinViewer.renderPaused = (tabId !== 'character');
-            if (tabId === 'character') {
-                skinViewer.setSize(200, 235);
-            }
+        if (tabId === 'character' && skinViewer) {
+            skinViewer.renderPaused = false;
+            skinViewer.setSize(200, 235);
+            try { skinViewer.render(); } catch (_) { }
         }
 
         // Pokud právě probíhá stahování / spouštění verze, zajistit zobrazení indikátorů
@@ -656,9 +709,47 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
     // ── Server Status & Telemetry ───────────────────────────────────────────
+    const liveServerTelemetry = new Map();
+
+    function getServerTelemetryKey(server) {
+        const ip = String(server?.ip || '').toLowerCase().trim();
+        const port = Number(server?.port) || 25565;
+        return `${ip}:${port}`;
+    }
+
+    function stripMinecraftFormatting(text) {
+        return String(text || '').replace(/§[0-9a-fk-or]/gi, '').replace(/\s+/g, ' ').trim();
+    }
+
+    function storeServerTelemetry(server, pingRes) {
+        const key = getServerTelemetryKey(server);
+        if (pingRes && pingRes.online) {
+            liveServerTelemetry.set(key, {
+                online: true,
+                playersOnline: Number(pingRes.players?.online ?? 0),
+                playersMax: Number(pingRes.players?.max ?? 0),
+                latency: typeof pingRes.latency === 'number' ? pingRes.latency : null,
+                version: stripMinecraftFormatting(pingRes.version || ''),
+                motd: stripMinecraftFormatting(pingRes.motd || ''),
+                checkedAt: Date.now()
+            });
+        } else {
+            liveServerTelemetry.set(key, {
+                online: false,
+                playersOnline: null,
+                playersMax: null,
+                latency: null,
+                version: '',
+                motd: '',
+                checkedAt: Date.now()
+            });
+        }
+    }
+
     async function updateNetworkStatus() {
         try {
             const status = await window.api.pingServer('mychalsmp.xyz', 25565);
+            storeServerTelemetry({ ip: 'mychalsmp.xyz', port: 25565 }, status);
             if (status && status.online) {
                 if (networkDot) networkDot.classList.remove('offline');
                 if (networkText) networkText.textContent = `mychalsmp.xyz • ${status.players.online} online`;
@@ -667,7 +758,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 markOfflineStatus();
             }
+            if (isTabPaneVisible('servers')) {
+                renderServersFullTab();
+            }
         } catch (err) {
+            storeServerTelemetry({ ip: 'mychalsmp.xyz', port: 25565 }, null);
             markOfflineStatus();
         }
     }
@@ -974,7 +1069,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             refreshVersionStatuses();
             detectAvailableJavas();
             checkWardenProbe();
-            checkLauncherUpdates(true);
+            if (!bootSplashHandledUpdateCheck) {
+                bootSplashHandledUpdateCheck = true;
+                checkLauncherUpdates(true);
+            }
 
             // Check if Minecraft session is active / resumed from previous launch
             try {
@@ -1666,53 +1764,170 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function renderServersFullTab() {
         const fullList = document.getElementById('serversFullList');
+        const summaryBar = document.getElementById('serversSummaryBar');
         if (!fullList) return;
         const servers = getSortedServers();
 
+        let onlineCount = 0;
+        let totalPlayers = 0;
+        let totalPlaytimeSec = 0;
+
+        for (const s of servers) {
+            const tel = liveServerTelemetry.get(getServerTelemetryKey(s));
+            const effectiveOnline = tel ? tel.online : s.online;
+            if (effectiveOnline === true) {
+                onlineCount++;
+                if (typeof tel?.playersOnline === 'number') {
+                    totalPlayers += tel.playersOnline;
+                }
+            }
+            totalPlaytimeSec += Number(s.playtimeSeconds) || 0;
+        }
+
+        if (summaryBar) {
+            const anyOnline = onlineCount > 0;
+            const dotClass = servers.length === 0 ? '' : (anyOnline ? 'online' : (liveServerTelemetry.size > 0 ? 'offline' : ''));
+            summaryBar.innerHTML = `
+                <span class="servers-summary-item">
+                    <span class="status-dot ${dotClass}"></span>
+                    Online serverů: <strong>${onlineCount} / ${servers.length}</strong>
+                </span>
+                <span class="servers-summary-sep"></span>
+                <span class="servers-summary-item">
+                    Hráčů celkem: <strong>${totalPlayers}</strong>
+                </span>
+                <span class="servers-summary-sep"></span>
+                <span class="servers-summary-item">
+                    Celkem odehráno: <strong>${totalPlaytimeSec > 0 ? escapeHtml(formatPlaytime(totalPlaytimeSec)) : '0 min'}</strong>
+                </span>
+            `;
+        }
+
         fullList.innerHTML = servers.map(s => {
-            const isMychal = s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz';
+            const rawIp = String(s.ip || '').trim();
+            const lowerIp = rawIp.toLowerCase();
+            const isMainMychal = s.id === 'mychalsmp' || lowerIp === 'mychalsmp.xyz';
+            const isOfficial = isMainMychal || lowerIp === 'pvp.mychalsmp.xyz';
             const isPinned = !!s.pinned;
-            const port = s.port || 25565;
-            const iconSrc = isMychal ? 'assets/server-icon.png' : (s.icon || 'assets/server-icon.png');
-            const statusHtml = (!isMychal && s.online === false)
-                ? '<span class="server-status-pill offline"><span class="status-dot offline"></span> Offline</span>'
-                : (isMychal
-                    ? '<span class="server-status-pill official">Oficiální síť</span>'
-                    : (s.online ? '<span class="server-status-pill online"><span class="status-dot online"></span> Online</span>' : ''));
+            const port = Number(s.port) || 25565;
+            const displayAddr = (port !== 25565 && !rawIp.includes(':')) ? `${rawIp}:${port}` : rawIp;
+            const iconSrc = isOfficial ? 'assets/server-icon.png' : (s.icon || 'assets/server-icon.png');
+            const tel = liveServerTelemetry.get(getServerTelemetryKey(s));
+            const effectiveOnline = tel ? tel.online : (typeof s.online === 'boolean' ? s.online : null);
+
+            const statusLabel = effectiveOnline === true
+                ? '<span class="server-status-label is-online">Online</span>'
+                : (effectiveOnline === false
+                    ? '<span class="server-status-label is-offline">Offline</span>'
+                    : '<span class="server-status-label is-checking">Ověřuji…</span>');
+            const statusDotClass = effectiveOnline === true ? 'online' : (effectiveOnline === false ? 'offline' : '');
+
+            const specSegments = [
+                `<span class="server-spec-item">${statusLabel}</span>`
+            ];
+
+            if (effectiveOnline === true && typeof tel?.playersOnline === 'number' && typeof tel?.playersMax === 'number') {
+                specSegments.push(`<span class="server-spec-item"><span class="server-metric-num">${tel.playersOnline} / ${tel.playersMax}</span> hráčů</span>`);
+            }
+
+            if (effectiveOnline === true && typeof tel?.latency === 'number' && tel.latency >= 0) {
+                const latClass = tel.latency < 65 ? 'is-good' : (tel.latency >= 130 ? 'is-high' : '');
+                specSegments.push(`<span class="server-spec-item"><span class="server-metric-num ${latClass}">${tel.latency} ms</span></span>`);
+            }
+
+            if (effectiveOnline === true && tel?.version) {
+                const trimmedVer = tel.version.length > 26 ? `${tel.version.slice(0, 24)}…` : tel.version;
+                specSegments.push(`<span class="server-spec-item">${escapeHtml(trimmedVer)}</span>`);
+            }
+
             const playCount = Number(s.playCount) || 0;
             const playSec = Number(s.playtimeSeconds) || 0;
-            const metaParts = [];
-            if (playCount > 0) {
-                metaParts.push(`${playCount}× hráno`);
-                metaParts.push(`${formatPlaytime(playSec)} odehráno`);
-            } else {
-                metaParts.push('Zatím nehráno');
-            }
-            const playMeta = `<span class="server-play-meta">• ${metaParts.join(' • ')}</span>`;
+            specSegments.push(
+                playCount > 0
+                    ? `<span class="server-spec-item">${playCount}× · ${escapeHtml(formatPlaytime(playSec))}</span>`
+                    : '<span class="server-spec-item">Zatím nehráno</span>'
+            );
+
+            const motdHtml = (effectiveOnline === true && tel?.motd)
+                ? `<div class="server-motd-line" title="${escapeHtml(tel.motd)}">${escapeHtml(tel.motd)}</div>`
+                : '';
 
             return `
-                <div class="server-full-card">
-                    <div style="position: relative; flex-shrink: 0;">
-                        <img src="${escapeHtml(iconSrc)}" class="server-full-icon" onerror="this.src='assets/server-icon.png'">
-                        ${(!isMychal && s.online === false) ? '<span class="server-offline-cross-badge"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span>' : ''}
+                <article class="server-arch-card ${isOfficial ? 'server-arch-card--official' : ''}">
+                    <div class="server-arch-icon-wrap">
+                        <img src="${escapeHtml(iconSrc)}" class="server-full-icon" onerror="this.src='assets/server-icon.png'" alt="${escapeHtml(s.name)}">
+                        <span class="server-arch-status-anchor"><span class="status-dot ${statusDotClass}"></span></span>
                     </div>
-                    <div class="server-full-info">
-                        <div class="server-full-name-row">
+                    <div class="server-arch-info">
+                        <div class="server-arch-head">
                             <span class="server-full-name">${escapeHtml(s.name)}</span>
-                            ${statusHtml}
-                            ${!isMychal ? `<button class="btn-del-server btn-del-server--inline" data-server-id="${escapeHtml(s.id)}" title="Odstranit server"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
+                            ${isOfficial ? '<span class="server-official-kicker">Oficiální síť</span>' : ''}
+                            ${isPinned ? '<span class="server-pinned-indicator" title="Připnutý server"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg> Připnuto</span>' : ''}
                         </div>
-                        <div class="server-full-ip">${escapeHtml(s.ip)} ${playMeta}</div>
+                        <div class="server-spec-bar">
+                            <button type="button" class="server-ip-copy-btn" data-copy-ip="${escapeHtml(displayAddr)}" title="Kliknutím zkopíruješ IP adresu">
+                                <span>${escapeHtml(displayAddr)}</span>
+                                <svg class="ui-icon-svg ui-icon-svg--xs copy-ip-icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
+                            <span class="server-spec-sep"></span>
+                            ${specSegments.join('<span class="server-spec-sep"></span>')}
+                        </div>
+                        ${motdHtml}
                     </div>
-                    <div class="server-full-actions">
-                        <button class="btn-quick-join btn-quick-join--lg" data-server="${escapeHtml(s.ip)}" title="Připojit se na server">
-                            <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <div class="server-arch-actions">
+                        <button type="button" class="server-icon-btn btn-pin-server ${isPinned ? 'is-pinned' : ''}" data-server-id="${escapeHtml(s.id)}" title="${isPinned ? 'Odepnout server' : 'Připnout server nahoru'}">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg>
+                        </button>
+                        ${!isMainMychal ? `<button type="button" class="server-icon-btn is-danger btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Odstranit server"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button>` : ''}
+                        <button type="button" class="mc-btn mc-btn-green btn-quick-join btn-server-join" data-server="${escapeHtml(displayAddr)}" title="Spustit hru a připojit se">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                             <span>Hrát</span>
                         </button>
                     </div>
-                </div>
+                </article>
             `;
         }).join('');
+
+        // Inline IP Copy feedback
+        fullList.querySelectorAll('.server-ip-copy-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const ipVal = btn.dataset.copyIp;
+                if (!ipVal) return;
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(ipVal);
+                    } else {
+                        throw new Error('clipboard unavailable');
+                    }
+                } catch (_) {
+                    const ta = document.createElement('textarea');
+                    ta.value = ipVal;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try { document.execCommand('copy'); } catch (_) { }
+                    document.body.removeChild(ta);
+                }
+                if (btn._copyResetTimer) clearTimeout(btn._copyResetTimer);
+                btn.classList.add('is-copied');
+                btn.innerHTML = '<span>Zkopírováno</span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                btn._copyResetTimer = setTimeout(() => {
+                    btn.classList.remove('is-copied');
+                    btn.innerHTML = `<span>${escapeHtml(ipVal)}</span><svg class="ui-icon-svg ui-icon-svg--xs copy-ip-icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+                }, 1800);
+            });
+        });
+
+        // Pin toggles
+        fullList.querySelectorAll('.btn-pin-server').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                togglePinServer(btn.dataset.serverId);
+            });
+        });
 
         // Bind quick join buttons
         fullList.querySelectorAll('.btn-quick-join').forEach(btn => {
@@ -1743,37 +1958,56 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    async function pingCustomServersInBackground() {
-        const servers = currentConfig.servers || [];
-        let hasChanges = false;
-        for (const s of servers) {
-            if (s.id === 'mychalsmp' || s.ip === 'mychalsmp.xyz') continue;
-            try {
-                const res = await window.api.pingServer(s.ip, s.port || 25565);
-                if (res && res.online) {
-                    if (s.online !== true || (res.favicon && s.icon !== res.favicon)) {
-                        s.online = true;
-                        if (res.favicon) s.icon = res.favicon;
-                        hasChanges = true;
+    let serversPingInFlight = null;
+    async function pingAllServersLive() {
+        if (serversPingInFlight) return serversPingInFlight;
+        const refreshBtn = document.getElementById('btnRefreshServersStatus');
+        if (refreshBtn) refreshBtn.classList.add('is-refreshing');
+
+        serversPingInFlight = (async () => {
+            const servers = currentConfig.servers || [];
+            let hasConfigChanges = false;
+
+            await Promise.allSettled(servers.map(async (s) => {
+                try {
+                    const res = await window.api.pingServer(s.ip, s.port || 25565);
+                    storeServerTelemetry(s, res);
+                    if (res && res.online) {
+                        if (s.online !== true || (res.favicon && s.icon !== res.favicon)) {
+                            s.online = true;
+                            if (res.favicon) s.icon = res.favicon;
+                            hasConfigChanges = true;
+                        }
+                    } else if (s.online !== false) {
+                        s.online = false;
+                        hasConfigChanges = true;
                     }
-                } else {
+                } catch (_) {
+                    storeServerTelemetry(s, null);
                     if (s.online !== false) {
                         s.online = false;
-                        hasChanges = true;
+                        hasConfigChanges = true;
                     }
                 }
-            } catch (e) {
-                if (s.online !== false) {
-                    s.online = false;
-                    hasChanges = true;
-                }
-            }
-        }
-        if (hasChanges) {
+            }));
+
             renderServerTracker();
-            renderServersFullTab();
-            try { await window.api.saveConfig({ servers: currentConfig.servers }); } catch (e) { }
-        }
+            if (isTabPaneVisible('servers')) {
+                renderServersFullTab();
+            }
+            if (hasConfigChanges) {
+                try { await window.api.saveConfig({ servers: currentConfig.servers }); } catch (_) { }
+            }
+        })().finally(() => {
+            serversPingInFlight = null;
+            if (refreshBtn) refreshBtn.classList.remove('is-refreshing');
+        });
+
+        return serversPingInFlight;
+    }
+
+    function pingCustomServersInBackground() {
+        return pingAllServersLive();
     }
 
     async function togglePinServer(serverId) {
@@ -1811,6 +2045,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const newServerIpInput = document.getElementById('newServerIpInput');
     const newServerPinnedCheck = document.getElementById('newServerPinnedCheck');
     const btnOpenAddServerTab = document.getElementById('btnOpenAddServerTab');
+    const btnRefreshServersStatus = document.getElementById('btnRefreshServersStatus');
+    if (btnRefreshServersStatus) {
+        btnRefreshServersStatus.addEventListener('click', () => {
+            pingAllServersLive();
+        });
+    }
 
     const newServerPreviewIcon = document.getElementById('newServerPreviewIcon');
     const newServerOfflineCross = document.getElementById('newServerOfflineCross');
@@ -3746,6 +3986,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function resetPlayState() {
         stopClientProgressTicker();
+        if (gameWindowReadyFallbackTimer) {
+            clearTimeout(gameWindowReadyFallbackTimer);
+            gameWindowReadyFallbackTimer = null;
+        }
+        isGameWindowReady = false;
         document.body.classList.remove('launch-handoff');
         isRunning = false;
         runningProfileId = null;
@@ -5483,6 +5728,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     let isAutoRotateActive = false;
     let lastLoadedSkinUrl = null;
     let lastLoadedCapeUrl = null;
+    let heroSkinNeedsSync = false;
+    let characterSkinNeedsSync = false;
+    const latestViewerSkinState = { skinUrl: null, capeUrl: undefined, isSlim: false };
+
+    function isTabPaneVisible(tabId) {
+        const pane = document.getElementById(`tab-${tabId}`);
+        return !!(pane && pane.classList.contains('active'));
+    }
 
     // Smooth return physics & drag controls for hero card
     let heroManualRotY = 0;
@@ -5773,16 +6026,43 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 return trimmed;
             };
-            const preloadSkinImage = (src) => new Promise((resolve, reject) => {
-                const img = document.createElement('img');
-                if (/^https?:/i.test(src)) img.crossOrigin = 'anonymous';
-                img.onload = () => resolve(img);
-                img.onerror = (err) => reject(err || new Error(`Failed to load texture: ${src}`));
-                img.src = src;
-            });
+            const decodedSkinImageCache = new Map();
+            window._clearSkinTextureCache = () => decodedSkinImageCache.clear();
+            const preloadSkinImage = (src) => {
+                const canCache = !src.startsWith('file://');
+                if (canCache && decodedSkinImageCache.has(src)) {
+                    const cachedImg = decodedSkinImageCache.get(src);
+                    if (cachedImg && cachedImg.complete && cachedImg.naturalWidth > 0) {
+                        return Promise.resolve(cachedImg);
+                    }
+                    decodedSkinImageCache.delete(src);
+                }
+                return new Promise((resolve, reject) => {
+                    const img = document.createElement('img');
+                    if (/^https?:/i.test(src)) img.crossOrigin = 'anonymous';
+                    img.onload = () => {
+                        if (canCache && img.naturalWidth > 0) {
+                            if (decodedSkinImageCache.size >= 24) {
+                                const firstKey = decodedSkinImageCache.keys().next().value;
+                                if (firstKey !== undefined) decodedSkinImageCache.delete(firstKey);
+                            }
+                            decodedSkinImageCache.set(src, img);
+                        }
+                        resolve(img);
+                    };
+                    img.onerror = (err) => {
+                        decodedSkinImageCache.delete(src);
+                        reject(err || new Error(`Failed to load texture: ${src}`));
+                    };
+                    img.src = src;
+                });
+            };
             const origDraw = window.skinview3d.SkinViewer.prototype.draw;
             window.skinview3d.SkinViewer.prototype.draw = function () {
                 if (this._disposed || this._renderPaused) return;
+                if (document.body.classList.contains('app-in-tray-paused')) return;
+                const pane = this.canvas ? this.canvas.closest('.tab-pane') : null;
+                if (pane && !pane.classList.contains('active')) return;
 
                 if (this.animationID !== null) {
                     window.cancelAnimationFrame(this.animationID);
@@ -5792,9 +6072,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
             const origRender = window.skinview3d.SkinViewer.prototype.render;
             window.skinview3d.SkinViewer.prototype.render = function () {
-                if (this._disposed) return;
-                // Keep EffectComposer + FXAA active so Three.js uses its srgb-linear target pass
-                // instead of applying double LinearTosRGB gamma lift onto already-sRGB skin textures.
+                if (this._disposed || this._renderPaused) return;
+                if (document.body.classList.contains('app-in-tray-paused')) return;
+                const pane = this.canvas ? this.canvas.closest('.tab-pane') : null;
+                if (pane && !pane.classList.contains('active')) return;
+                // Direct default-framebuffer render with srgb-linear bypasses EffectComposer offscreen FBO/DepthTexture corruption on WebKitGTK
+                // while preventing double LinearTosRGB gamma lift on already-sRGB skin textures.
+                if (this.renderer && this.scene && this.camera) {
+                    if (this.renderer.outputColorSpace !== 'srgb-linear') {
+                        this.renderer.outputColorSpace = 'srgb-linear';
+                    }
+                    this.renderer.render(this.scene, this.camera);
+                    return;
+                }
                 origRender.call(this);
             };
             const origLoadSkin = window.skinview3d.SkinViewer.prototype.loadSkin;
@@ -6350,6 +6640,9 @@ document.addEventListener('DOMContentLoaded', async () => {
      */
     function configureSkinViewerLighting(viewer) {
         if (!viewer) return;
+        if (viewer.renderer) {
+            viewer.renderer.outputColorSpace = 'srgb-linear';
+        }
         if (viewer.globalLight) {
             viewer.globalLight.intensity = 2.55;
         }
@@ -6365,9 +6658,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     function initHeroSkinViewer3D(force = false) {
         const canvas = document.getElementById('heroSkinCanvas3D');
         if (!canvas || !window.skinview3d) return;
+        if (!isTabPaneVisible('play')) {
+            heroSkinNeedsSync = true;
+            if (heroSkinViewer) heroSkinViewer.renderPaused = true;
+            return;
+        }
         if (heroSkinViewer && !force) {
             document.body.classList.remove('app-in-tray-paused');
-            heroSkinViewer.renderPaused = false;
+            heroSkinViewer.renderPaused = isLauncherSuspendedInTray;
             heroSkinViewer.setSize(220, 280);
             try { heroSkinViewer.render(); } catch (_) { }
             return;
@@ -6387,10 +6685,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 width: 220,
                 height: 280,
                 model: isSlim ? 'slim' : 'default',
-                preserveDrawingBuffer: false
+                preserveDrawingBuffer: false,
+                renderPaused: true
             });
             configureSkinViewerLighting(heroSkinViewer);
-            heroSkinViewer.renderPaused = false;
+            heroSkinViewer.renderPaused = isLauncherSuspendedInTray || !isTabPaneVisible('play');
 
             heroWaveStartTime = Date.now() + 2000;
             lastHeroWaveTime = Date.now() + 2000;
@@ -6512,14 +6811,25 @@ document.addEventListener('DOMContentLoaded', async () => {
      * Updates the 3D model, skin, and cape in the hero dashboard viewer.
      */
     function updateHeroSkinViewer3D(skinUrl, capeUrl, isSlim = false) {
+        if (skinUrl) latestViewerSkinState.skinUrl = skinUrl;
+        if (capeUrl !== undefined) latestViewerSkinState.capeUrl = capeUrl;
+        latestViewerSkinState.isSlim = !!isSlim;
+
+        if (!isTabPaneVisible('play')) {
+            heroSkinNeedsSync = true;
+            if (heroSkinViewer) heroSkinViewer.renderPaused = true;
+            return;
+        }
+
         if (!heroSkinViewer) {
             initHeroSkinViewer3D();
         }
         if (!heroSkinViewer) return;
 
         try {
+            heroSkinNeedsSync = false;
             document.body.classList.remove('app-in-tray-paused');
-            heroSkinViewer.renderPaused = false;
+            heroSkinViewer.renderPaused = isLauncherSuspendedInTray;
             heroSkinViewer.setSize(220, 280);
             if (skinUrl) {
                 const pSkin = heroSkinViewer.loadSkin(skinUrl, { model: isSlim ? 'slim' : 'default' });
@@ -6551,6 +6861,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     function initSkinViewer3D() {
         const canvas3D = document.getElementById('skinCanvas3D');
         if (!canvas3D || !window.skinview3d) return;
+        if (!isTabPaneVisible('character')) {
+            characterSkinNeedsSync = true;
+            if (skinViewer) skinViewer.renderPaused = true;
+            return;
+        }
 
         try {
             if (skinViewer) {
@@ -6562,10 +6877,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 canvas: canvas3D,
                 width: 200,
                 height: 235,
-                model: currentConfig.customSkinVariant === 'slim' ? 'slim' : 'default'
+                model: currentConfig.customSkinVariant === 'slim' ? 'slim' : 'default',
+                renderPaused: true
             });
             configureSkinViewerLighting(skinViewer);
-            skinViewer.renderPaused = false;
+            skinViewer.renderPaused = isLauncherSuspendedInTray || !isTabPaneVisible('character');
 
             skinViewer.camera.position.set(0, 0, 70);
             skinViewer.zoom = 0.88;
@@ -6626,14 +6942,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function updateSkinViewer3D(skinUrl, capeUrl, isSlim = false) {
+        if (skinUrl) {
+            lastLoadedSkinUrl = skinUrl;
+            latestViewerSkinState.skinUrl = skinUrl;
+        }
+        if (capeUrl !== undefined) {
+            lastLoadedCapeUrl = capeUrl || null;
+            latestViewerSkinState.capeUrl = capeUrl;
+        }
+        latestViewerSkinState.isSlim = !!isSlim;
+
+        if (!isTabPaneVisible('character')) {
+            characterSkinNeedsSync = true;
+            if (skinViewer) skinViewer.renderPaused = true;
+            return;
+        }
+
         if (!skinViewer) {
             initSkinViewer3D();
         }
         if (!skinViewer) return;
 
         try {
+            characterSkinNeedsSync = false;
+            skinViewer.renderPaused = isLauncherSuspendedInTray;
             if (skinUrl) {
-                lastLoadedSkinUrl = skinUrl;
                 const pSkin = skinViewer.loadSkin(skinUrl, { model: isSlim ? 'slim' : 'default' });
                 if (pSkin && typeof pSkin.catch === 'function') {
                     pSkin.catch(err => console.warn('[3D VIEWER] loadSkin failed:', err));
@@ -6641,25 +6974,27 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (capeUrl) {
-                lastLoadedCapeUrl = capeUrl;
                 const pCape = skinViewer.loadCape(capeUrl, { backEquipment: isBackEquipmentElytra ? 'elytra' : 'cape' });
                 if (pCape && typeof pCape.catch === 'function') {
                     pCape.catch(err => console.warn('[3D VIEWER] loadCape failed:', err));
                 }
             } else if (capeUrl === null) {
-                lastLoadedCapeUrl = null;
                 skinViewer.loadCape(null);
             }
+            try { skinViewer.render(); } catch (_) { }
         } catch (e) {
             console.warn('[3D VIEWER] Chyba aktualizace skinu/pláště v 3D:', e);
         }
     }
 
     function updateCharacterTabSkinPreview() {
-        if (!skinViewer) {
-            initSkinViewer3D();
-        } else {
-            skinViewer.setSize(200, 235);
+        if (isTabPaneVisible('character')) {
+            if (!skinViewer) {
+                initSkinViewer3D();
+            } else {
+                skinViewer.renderPaused = isLauncherSuspendedInTray;
+                skinViewer.setSize(200, 235);
+            }
         }
         const isMicrosoft = currentConfig.authType === 'microsoft';
         const effectiveSkin = currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
@@ -7024,11 +7359,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const res = await window.api.uploadMojangSkin(filePath, variant);
                 if (res && res.success) {
+                    if (window._clearSkinTextureCache) window._clearSkinTextureCache();
                     showToast('Skin nahrán na Mojang účet.', 'success');
                     appendLog('[MOJANG] Skin aktualizován na serverech Mojang.');
                     if (res.skin && res.skin.url) {
                         currentConfig.customSkinPath = filePath;
                         drawSkinToCanvas(res.skin.url, variant === 'slim');
+                        updateHeroSkinViewer3D(res.skin.url, getEffectiveCape(), variant === 'slim');
                     }
                 } else {
                     showToast('Chyba při nahrávání na Mojang: ' + (res.error || 'Neznámá chyba'), 'error');
@@ -7049,6 +7386,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!confirm('Opravdu chceš resetovat svůj oficiální skin na výchozí Steve/Alex?')) return;
             const res = await window.api.resetMojangSkin();
             if (res && res.success) {
+                if (window._clearSkinTextureCache) window._clearSkinTextureCache();
                 showToast('Skin byl resetován na výchozí.', 'success');
                 const isSlim = currentConfig.customSkinVariant === 'slim';
                 const defaultSkin = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
@@ -7210,7 +7548,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Note: customSkinPath is kept!
                 updateUserUI(nick, 'offline', currentConfig.customSkinPath);
                 temporaryButtonText(btnSaveCharacter, '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span>Uloženo</span>');
-                showToast(`Postava "${nick}" uložena.`, 'success');
+                showToast(`Účet "${nick}" uložen.`, 'success');
             }
         });
     }
@@ -7768,14 +8106,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.api.onProgress((data) => {
         lastProgressData = data;
         const rawPercent = Math.min(Math.max(data.percent || 0, 0), 100);
+        if (rawPercent >= 100 || String(data.text || '').toLowerCase().includes('minecraft běží')) {
+            markGameWindowReady();
+            return;
+        }
+        if (isGameWindowReady) return;
         updateLaunchProgressUI(rawPercent, data.text);
     });
 
     window.api.onLog((line) => {
         appendLog(line);
         // Živé milníky herního procesu zachycené přímo v rendereru
-        if ((isLaunching || isRunning) && typeof line === 'string') {
-            if (line.includes('Loading Minecraft') || line.includes('Fabric Loader')) {
+        if ((isLaunching || isRunning) && !isGameWindowReady && typeof line === 'string') {
+            if (line.includes('OpenAL initialized') || line.includes('Sound engine started') || (line.includes('Created:') && line.includes('textures-atlas'))) {
+                markGameWindowReady();
+            } else if (line.includes('Loading Minecraft') || line.includes('Fabric Loader')) {
                 updateLaunchProgressUI(Math.max(maxRenderedProgress, 68), 'Zavádění zavaděče Fabric a herního jádra...');
             } else if (line.includes('Loading ') && line.includes('mods')) {
                 const modMatch = line.match(/Loading\s+(\d+)\s+mods/i);
@@ -7862,6 +8207,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Zero-overhead during gameplay & background pause (Tray restore)
+    if (window.api && window.api.onGameWindowReady) {
+        window.api.onGameWindowReady(() => {
+            markGameWindowReady();
+        });
+    }
+
     if (window.api && window.api.onGameStarted) {
         window.api.onGameStarted((data) => {
             appendLog('[VÝKON] Hra spuštěna – plynulý přechod (Launch Handoff) do herního okna, launcher minimalizován do Tray lišty.');
@@ -7874,6 +8225,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             autoRelaunchAttempts = 0;
             isLaunching = false;
             launchingProfileId = null;
+            if (gameWindowReadyFallbackTimer) clearTimeout(gameWindowReadyFallbackTimer);
+            gameWindowReadyFallbackTimer = setTimeout(() => {
+                if (isRunning && !isGameWindowReady) {
+                    markGameWindowReady();
+                }
+            }, 8000);
             if (data && data.profileId) {
                 runningProfileId = data.profileId;
             } else if (!runningProfileId) {
@@ -10598,14 +10955,271 @@ document.addEventListener('DOMContentLoaded', async () => {
             .replace(/'/g, '&#039;');
     }
 
-    // Initialize
-    await loadConfiguration();
+    let bootSplashHandledUpdateCheck = true;
 
-    // Ujistíme se, že okno, 3D model i stav sítě jsou po startu v aktivním stavu
-    setTimeout(() => {
-        resumeLauncherBackgroundActivity();
-        if (typeof updateAllSegmentedIndicators === 'function') {
-            updateAllSegmentedIndicators();
+    function normalizeLauncherVersion(ver) {
+        return String(ver || '').trim().replace(/^v/i, '');
+    }
+
+    function formatUpdateSizeMb(bytes) {
+        return `${(Math.max(0, Number(bytes) || 0) / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    async function runDiscordStyleBootUpdater() {
+        const splash = document.getElementById('bootSplash');
+        const fillEl = document.getElementById('bootSplashFill');
+        const statusEl = document.getElementById('bootSplashStatus');
+        const metaEl = document.getElementById('bootSplashMeta');
+        const versionEl = document.getElementById('bootSplashVersion');
+        const skipBtn = document.getElementById('bootSplashSkip');
+        const minBtn = document.getElementById('bootSplashMin');
+        const closeBtn = document.getElementById('bootSplashClose');
+
+        if (minBtn) minBtn.addEventListener('click', () => window.api?.minimizeWindow?.());
+        if (closeBtn) closeBtn.addEventListener('click', () => window.api?.closeWindow?.());
+
+        // Start loading configuration/UI behind the splash immediately
+        const configPromise = loadConfiguration().catch((e) => {
+            console.error('Chyba při načítání konfigurace:', e);
+        });
+
+        if (!splash) {
+            await configPromise;
+            bootSplashHandledUpdateCheck = false;
+            return;
         }
-    }, 150);
+
+        const bootStartedAt = Date.now();
+        let bootSkipped = false;
+        let isBootAutoUpdating = false;
+        let splashDismissed = false;
+        let activeTargetVersion = '';
+
+        const setSplashState = (mode) => {
+            splash.classList.remove('is-complete', 'is-error');
+            if (fillEl) fillEl.classList.remove('is-complete', 'is-error');
+            if (mode === 'complete') {
+                splash.classList.add('is-complete');
+                if (fillEl) fillEl.classList.add('is-complete');
+            } else if (mode === 'error') {
+                splash.classList.add('is-error');
+                if (fillEl) fillEl.classList.add('is-error');
+            }
+        };
+
+        const setSplashProgress = (percent, indeterminate = false) => {
+            if (!fillEl) return;
+            if (indeterminate) {
+                fillEl.classList.add('is-indeterminate');
+            } else {
+                fillEl.classList.remove('is-indeterminate');
+                const clamped = Math.max(0, Math.min(100, Number(percent) || 0));
+                fillEl.style.width = `${clamped}%`;
+            }
+        };
+
+        const dismissBootSplash = async (delayMs = 0) => {
+            if (splashDismissed) return;
+            splashDismissed = true;
+            clearTimeout(skipRevealTimer);
+            if (skipBtn) skipBtn.style.display = 'none';
+
+            await configPromise;
+
+            if (delayMs > 0) {
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+            } else {
+                const elapsed = Date.now() - bootStartedAt;
+                const minVisualMs = 340;
+                if (elapsed < minVisualMs) {
+                    await new Promise((resolve) => setTimeout(resolve, minVisualMs - elapsed));
+                }
+            }
+
+            splash.classList.add('is-exiting');
+            setTimeout(() => {
+                splash.style.display = 'none';
+                resumeLauncherBackgroundActivity();
+                if (typeof updateAllSegmentedIndicators === 'function') {
+                    updateAllSegmentedIndicators();
+                }
+            }, 280);
+        };
+
+        const skipRevealTimer = setTimeout(() => {
+            if (!isBootAutoUpdating && !splashDismissed && skipBtn) {
+                skipBtn.style.display = 'inline-flex';
+            }
+        }, 3500);
+
+        if (skipBtn) {
+            skipBtn.addEventListener('click', () => {
+                if (isBootAutoUpdating || splashDismissed) return;
+                bootSkipped = true;
+                if (statusEl) statusEl.textContent = 'Spouštím SMPClient...';
+                if (metaEl) metaEl.textContent = '';
+                setSplashProgress(100, false);
+                dismissBootSplash();
+            });
+        }
+
+        // Listen for live Tauri update-progress events while applying startup update
+        if (window.api && window.api.onUpdateProgress) {
+            window.api.onUpdateProgress((data) => {
+                if (!isBootAutoUpdating || splashDismissed || !data) return;
+                const pct = Math.max(0, Math.min(100, Math.round(Number(data.percent) || 0)));
+
+                if (data.status === 'downloading') {
+                    setSplashProgress(Math.max(4, pct), false);
+                    if (statusEl) {
+                        statusEl.textContent = activeTargetVersion
+                            ? `Stahuji aktualizaci v${activeTargetVersion}...`
+                            : 'Stahuji aktualizaci...';
+                    }
+                    if (metaEl) {
+                        const cur = formatUpdateSizeMb(data.current);
+                        if (Number(data.total) > 1) {
+                            metaEl.textContent = `${cur} / ${formatUpdateSizeMb(data.total)} · ${pct}%`;
+                        } else {
+                            metaEl.textContent = cur;
+                        }
+                    }
+                } else if (data.status === 'extracting') {
+                    setSplashProgress(94, false);
+                    if (statusEl) statusEl.textContent = 'Rozbaluji a instaluji aktualizaci...';
+                    if (metaEl) metaEl.textContent = '94%';
+                } else if (data.status === 'installing') {
+                    setSplashState('complete');
+                    setSplashProgress(100, false);
+                    if (statusEl) statusEl.textContent = 'Aktualizace je připravena! Restartuji...';
+                    if (metaEl) metaEl.textContent = activeTargetVersion ? `v${activeTargetVersion}` : '100%';
+                }
+            });
+        }
+
+        let bootFlags = null;
+        try {
+            if (window.api && window.api.getBootFlags) {
+                bootFlags = await window.api.getBootFlags();
+                if (bootFlags && bootFlags.version && versionEl) {
+                    versionEl.textContent = `v${normalizeLauncherVersion(bootFlags.version)}`;
+                }
+            }
+        } catch (_) { }
+
+        let update = null;
+        if (window.api && window.api.checkForUpdates) {
+            try {
+                update = await Promise.race([
+                    window.api.checkForUpdates().catch(() => null),
+                    new Promise((resolve) => setTimeout(() => resolve(null), 7500)),
+                ]);
+            } catch (_) {
+                update = null;
+            }
+        }
+
+        if (bootSkipped || splashDismissed) return;
+
+        // Sync topbar update chip state smoothly with boot check result
+        const chip = document.getElementById('updateChip');
+        const latestVer = normalizeLauncherVersion(update?.latestVersion);
+        const currentVer = normalizeLauncherVersion(update?.currentVersion || bootFlags?.version);
+        if (versionEl && currentVer && !update?.hasUpdate) {
+            versionEl.textContent = `v${currentVer}`;
+        }
+
+        if (update && update.hasUpdate) {
+            pendingUpdateData = update;
+            if (chip) chip.style.display = 'flex';
+            const versionStatus = document.getElementById('launcherVersionStatus');
+            if (versionStatus) {
+                versionStatus.innerHTML = `Nainstalovaná verze: <strong>v${escapeHtml(currentVer)}</strong> • <span style="color:#60a5fa;">Dostupná v${escapeHtml(latestVer)}</span>`;
+            }
+        } else {
+            if (chip) chip.style.display = 'none';
+        }
+
+        const postUpdateTag = normalizeLauncherVersion(bootFlags?.postUpdateTag);
+        const blockedByPostUpdateGuard = Boolean(
+            bootFlags?.isPostUpdate && (!postUpdateTag || !latestVer || postUpdateTag === latestVer)
+        );
+        const canAutoUpdate = Boolean(
+            update &&
+            update.hasUpdate &&
+            update.downloadUrl &&
+            !blockedByPostUpdateGuard
+        );
+
+        if (canAutoUpdate) {
+            isBootAutoUpdating = true;
+            isUpdatingCurrently = true;
+            activeTargetVersion = latestVer;
+            clearTimeout(skipRevealTimer);
+            if (skipBtn) skipBtn.style.display = 'none';
+
+            if (versionEl && currentVer && latestVer) {
+                versionEl.innerHTML = `
+                    <span>v${escapeHtml(currentVer)}</span>
+                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" aria-hidden="true" style="stroke:#0a67e5;">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                    <span class="smp-boot-version-new">v${escapeHtml(latestVer)}</span>
+                `;
+            }
+            if (statusEl) statusEl.textContent = `Nalezena aktualizace v${latestVer}...`;
+            if (metaEl) metaEl.textContent = 'Připravuji stahování...';
+            setSplashProgress(4, false);
+
+            try {
+                const res = await window.api.applyUpdate(update.downloadUrl);
+                if (res && res.applied) {
+                    setSplashState('complete');
+                    setSplashProgress(100, false);
+                    if (statusEl) statusEl.textContent = 'Aktualizace nainstalována! Restartuji SMPClient...';
+                    if (metaEl) metaEl.textContent = `v${latestVer}`;
+
+                    await new Promise((resolve) => setTimeout(resolve, 480));
+                    await window.api.restartLauncher(latestVer);
+                    return;
+                }
+
+                const errMsg = res?.error || 'Instalaci aktualizace se nepodařilo dokončit.';
+                setSplashState('error');
+                setSplashProgress(100, false);
+                if (statusEl) statusEl.textContent = 'Aktualizaci se nepodařilo nainstalovat';
+                if (metaEl) metaEl.textContent = 'Spouštím aktuální verzi...';
+                isUpdatingCurrently = false;
+                isBootAutoUpdating = false;
+                await dismissBootSplash(1100);
+                showToast(`Automatická aktualizace selhala: ${errMsg}`, 'error');
+                return;
+            } catch (err) {
+                setSplashState('error');
+                setSplashProgress(100, false);
+                if (statusEl) statusEl.textContent = 'Chyba při aktualizaci';
+                if (metaEl) metaEl.textContent = 'Spouštím aktuální verzi...';
+                isUpdatingCurrently = false;
+                isBootAutoUpdating = false;
+                await dismissBootSplash(1100);
+                showToast(`Chyba aktualizace: ${err?.message || err}`, 'error');
+                return;
+            }
+        }
+
+        // No update / offline / post-update pass-through
+        setSplashState('complete');
+        setSplashProgress(100, false);
+        if (statusEl) {
+            statusEl.textContent = update?.offline
+                ? 'Offline režim — spouštím SMPClient...'
+                : 'Klient je připraven';
+        }
+        if (metaEl) metaEl.textContent = '';
+
+        await dismissBootSplash(0);
+    }
+
+    // Initialize with Discord-style startup auto-update splash
+    await runDiscordStyleBootUpdater();
 });

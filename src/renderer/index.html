@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
         rel="stylesheet" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/style.css?v=1.5.7">
+    <link rel="stylesheet" href="css/style.css?v=1.5.9">
 </head>
 
 <body>
@@ -79,6 +79,53 @@
         </div>
     </header>
 
+    <!-- Discord-Style Startup Auto-Update Splash -->
+    <div id="bootSplash" class="smp-boot-splash titlebar-drag" role="dialog" aria-modal="true" aria-label="Spouštění SMPClient">
+        <div class="smp-boot-win-controls">
+            <button type="button" class="win-btn win-min" id="bootSplashMin" title="Minimalizovat">
+                <svg width="10" height="1" viewBox="0 0 10 1">
+                    <rect width="10" height="1" fill="currentColor" />
+                </svg>
+            </button>
+            <button type="button" class="win-btn win-close" id="bootSplashClose" title="Zavřít">
+                <svg width="10" height="10" viewBox="0 0 10 10">
+                    <path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" stroke-width="1.2" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="smp-boot-stage">
+            <div class="smp-boot-emblem-wrap" id="bootSplashEmblem">
+                <svg class="smp-boot-ring" viewBox="0 0 96 96" aria-hidden="true">
+                    <circle class="smp-boot-ring-track" cx="48" cy="48" r="44"></circle>
+                    <circle class="smp-boot-ring-arc" cx="48" cy="48" r="44"></circle>
+                </svg>
+                <div class="smp-boot-icon-tile">
+                    <img src="assets/logo.png" alt="SMPClient" class="smp-boot-logo" draggable="false">
+                </div>
+            </div>
+
+            <div class="smp-boot-brand">
+                <span class="brand-blue">SMP</span><span class="brand-white">Client</span>
+            </div>
+            <div class="smp-boot-version" id="bootSplashVersion">Připravuji spuštění</div>
+
+            <div class="smp-boot-progress-box">
+                <div class="smp-boot-progress-track">
+                    <div class="smp-boot-progress-fill is-indeterminate" id="bootSplashFill"></div>
+                </div>
+                <div class="smp-boot-status-row">
+                    <span class="smp-boot-status-text" id="bootSplashStatus">Kontroluji aktualizace...</span>
+                    <span class="smp-boot-meta-text" id="bootSplashMeta"></span>
+                </div>
+            </div>
+
+            <button type="button" class="smp-boot-skip-btn" id="bootSplashSkip" style="display: none;">
+                Spustit bez kontroly
+            </button>
+        </div>
+    </div>
+
     <!-- Main Compact Shell -->
     <div class="app-layout">
         <!-- Compact Vertical Icon Sidebar (Inspired by Dawn Client) -->
@@ -90,13 +137,6 @@
                         <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     </svg>
                 </button>
-                <button class="nav-icon-btn" data-tab="profiles" title="Profily">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                        <polyline points="2 17 12 22 22 17"></polyline>
-                        <polyline points="2 12 12 17 22 12"></polyline>
-                    </svg>
-                </button>
                 <button class="nav-icon-btn" data-tab="mods" title="Módy">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path
@@ -104,10 +144,17 @@
                         </path>
                     </svg>
                 </button>
-                <button class="nav-icon-btn" data-tab="character" title="Postava">
+                <button class="nav-icon-btn" data-tab="character" title="Účet">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                         <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                </button>
+                <button class="nav-icon-btn" data-tab="profiles" title="Verze">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
                     </svg>
                 </button>
                 <button class="nav-icon-btn" data-tab="servers" title="Servery">
@@ -543,7 +590,7 @@
             <section class="tab-pane" id="tab-profiles">
                 <div class="pane-header pane-header--with-actions">
                     <div class="pane-header-title">
-                        <h2>Profily</h2>
+                        <h2>Verze</h2>
                         <p>Správa instalací, verzí Minecraftu, modpacků a paměti RAM.</p>
                     </div>
                     <div class="pane-header-actions">
@@ -892,8 +939,8 @@
             ══════════════════════════════════════════════════════════════════ -->
             <section class="tab-pane" id="tab-character">
                 <div class="pane-header">
-                    <h2>Postava</h2>
-                    <p>Úprava skinu, pláště a herní přezdívky.</p>
+                    <h2>Účet</h2>
+                    <p>Správa účtu, přezdívky, skinu a oficiálního pláště.</p>
                 </div>
 
                 <div class="character-grid">
@@ -1153,21 +1200,31 @@
                  TAB 5: SERVERS & QUICK PLAY TRACKER
             ══════════════════════════════════════════════════════════════════ -->
             <section class="tab-pane" id="tab-servers">
-                <div class="pane-header"
-                    style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
-                    <div>
+                <div class="pane-header pane-header--with-actions servers-pane-header">
+                    <div class="pane-header-title">
                         <h2>Servery</h2>
-                        <p>Uložené herní servery a rychlé připojení.</p>
+                        <p>Živá odezva sítě, připojení na jeden klik a vlastní servery.</p>
                     </div>
-                    <button class="mc-btn mc-btn-green" id="btnOpenAddServerTab">
-                        <span>
-                            <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                    <div class="pane-header-actions">
+                        <button type="button" class="mc-btn mc-btn-secondary btn-compact servers-refresh-btn" id="btnRefreshServersStatus" title="Znovu ověřit dostupnost a ping všech serverů">
+                            <svg class="ui-icon-svg ui-icon-svg--xs server-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                            </svg>
+                            <span>Obnovit stav</span>
+                        </button>
+                        <button type="button" class="mc-btn mc-btn-primary btn-compact" id="btnOpenAddServerTab">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
                             </svg>
-                            Přidat server
-                        </span>
-                    </button>
+                            <span>Přidat server</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="servers-summary-bar" id="serversSummaryBar">
+                    <!-- Inline typographic summary populated via JS -->
                 </div>
 
                 <div class="servers-full-list" id="serversFullList">
@@ -3060,9 +3117,9 @@
             </div>
             <div class="modal-footer">
                 <button class="mc-btn mc-btn-secondary" id="btnCancelAddServer">Zrušit</button>
-                <button class="mc-btn mc-btn-green" id="btnConfirmAddServer">
+                <button class="mc-btn mc-btn-primary" id="btnConfirmAddServer">
                     <span>
-                        <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24">
+                        <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                         Přidat server
@@ -3362,7 +3419,7 @@
 
     <script src="js/lib/skinview3d.bundle.js"></script>
     <script src="js/tauri-bridge.js?v=1.5.4"></script>
-    <script src="js/app.js?v=1.5.7"></script>
+    <script src="js/app.js?v=1.5.9"></script>
 </body>
 
 </html>

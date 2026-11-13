@@ -2429,6 +2429,35 @@ pub fn construct_launch_spec(
 // 8. Process Execution, Kinetic Progress & Life Cycle Streaming
 // ─────────────────────────────────────────────────────────────────────────────
 
+fn hide_main_window_to_tray_once<R: Runtime>(app: &AppHandle<R>, tray_hidden: &AtomicBool) {
+    if !tray_hidden.swap(true, Ordering::SeqCst) {
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.hide();
+            let _ = app.emit("window-hidden-to-tray", ());
+        }
+    }
+}
+
+fn signal_game_window_ready<R: Runtime>(
+    app: &AppHandle<R>,
+    profile_id: &str,
+    window_ready: &AtomicBool,
+    finished: &AtomicBool,
+    target_progress: &std::sync::atomic::AtomicU32,
+    current_progress: &std::sync::atomic::AtomicU32,
+) {
+    if !window_ready.swap(true, Ordering::SeqCst) {
+        finished.store(true, Ordering::SeqCst);
+        target_progress.store(100, Ordering::SeqCst);
+        current_progress.store(100, Ordering::SeqCst);
+        let _ = app.emit(
+            "launch-progress",
+            json!({ "percent": 100, "text": "Minecraft běží" }),
+        );
+        let _ = app.emit("game-window-ready", json!({ "profileId": profile_id }));
+    }
+}
+
 pub async fn spawn_game_process<R: Runtime>(
     app: &AppHandle<R>,
     spec: LaunchSpec,
@@ -2475,17 +2504,25 @@ pub async fn spawn_game_process<R: Runtime>(
     let target_progress = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(20));
     let current_progress = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(12));
     let finished_flag = std::sync::Arc::new(AtomicBool::new(false));
+    let window_ready_flag = std::sync::Arc::new(AtomicBool::new(false));
 
-    // 80ms Kinetic progress background task
+    // 80ms Kinetic progress background task (stops automatically once game window is ready or exited)
     let app_handle = app.clone();
     let tp = target_progress.clone();
     let cp = current_progress.clone();
     let ff = finished_flag.clone();
+    let wr = window_ready_flag.clone();
 
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(80));
-        while !ff.load(Ordering::SeqCst) && !IS_CANCELLED.load(Ordering::SeqCst) {
+        while !ff.load(Ordering::SeqCst)
+            && !wr.load(Ordering::SeqCst)
+            && !IS_CANCELLED.load(Ordering::SeqCst)
+        {
             interval.tick().await;
+            if ff.load(Ordering::SeqCst) || wr.load(Ordering::SeqCst) || IS_CANCELLED.load(Ordering::SeqCst) {
+                break;
+            }
 
             let cur = cp.load(Ordering::SeqCst) as f64;
             let tgt = tp.load(Ordering::SeqCst) as f64;
@@ -2519,6 +2556,10 @@ pub async fn spawn_game_process<R: Runtime>(
 
     let app_out = app.clone();
     let tp_out = target_progress.clone();
+    let cp_out = current_progress.clone();
+    let ff_out = finished_flag.clone();
+    let wr_out = window_ready_flag.clone();
+    let pid_out = profile_id.clone();
     let logs_out = combined_logs.clone();
     let tray_hidden = std::sync::Arc::new(AtomicBool::new(false));
     let tray_hidden_out = tray_hidden.clone();
@@ -2548,20 +2589,16 @@ pub async fn spawn_game_process<R: Runtime>(
                     tp_out.store(87, Ordering::SeqCst);
                 } else if line.contains("Backend library: LWJGL") || line.contains("Setting user:") {
                     tp_out.store(95, Ordering::SeqCst);
-                    if !tray_hidden_out.swap(true, Ordering::SeqCst) {
-                        if let Some(win) = app_out.get_webview_window("main") {
-                            let _ = win.hide();
-                            let _ = app_out.emit("window-hidden-to-tray", ());
-                        }
-                    }
-                } else if line.contains("Using graphics backend") || line.contains("GL_") || line.contains("OpenAL initialized") {
+                    hide_main_window_to_tray_once(&app_out, &tray_hidden_out);
+                } else if line.contains("Using graphics backend") || line.contains("GL_") {
                     tp_out.store(98, Ordering::SeqCst);
-                    if !tray_hidden_out.swap(true, Ordering::SeqCst) {
-                        if let Some(win) = app_out.get_webview_window("main") {
-                            let _ = win.hide();
-                            let _ = app_out.emit("window-hidden-to-tray", ());
-                        }
-                    }
+                    hide_main_window_to_tray_once(&app_out, &tray_hidden_out);
+                } else if line.contains("OpenAL initialized")
+                    || line.contains("Sound engine started")
+                    || (line.contains("Created:") && line.contains("textures-atlas"))
+                {
+                    signal_game_window_ready(&app_out, &pid_out, &wr_out, &ff_out, &tp_out, &cp_out);
+                    hide_main_window_to_tray_once(&app_out, &tray_hidden_out);
                 }
             }
         });
@@ -2586,17 +2623,19 @@ pub async fn spawn_game_process<R: Runtime>(
         });
     }
 
-    // Fallback timer: if game stays alive for 8 seconds (even if log format varies), hide launcher to tray
+    // Fallback timer: if game stays alive for 8 seconds (even if log format varies), mark window ready & hide launcher to tray
     let app_tray_timer = app.clone();
     let ff_tray = finished_flag.clone();
+    let wr_timer = window_ready_flag.clone();
+    let tp_timer = target_progress.clone();
+    let cp_timer = current_progress.clone();
+    let pid_timer = profile_id.clone();
     let th_timer = tray_hidden.clone();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(8)).await;
-        if !ff_tray.load(Ordering::SeqCst) && !th_timer.swap(true, Ordering::SeqCst) {
-            if let Some(win) = app_tray_timer.get_webview_window("main") {
-                let _ = win.hide();
-                let _ = app_tray_timer.emit("window-hidden-to-tray", ());
-            }
+        if !ff_tray.load(Ordering::SeqCst) {
+            signal_game_window_ready(&app_tray_timer, &pid_timer, &wr_timer, &ff_tray, &tp_timer, &cp_timer);
+            hide_main_window_to_tray_once(&app_tray_timer, &th_timer);
         }
     });
 

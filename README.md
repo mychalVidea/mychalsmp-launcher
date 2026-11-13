@@ -86,11 +86,9 @@ Automaticky rozpozná tvůj systém (`pacman`, `dnf`, `apt`, `zypper`), zkontrol
 curl -sSfL https://raw.githubusercontent.com/mychalVidea/mychalsmp-launcher/main/install.sh | bash
 ```
 
-#### 2. Nativní distribuční balíčky (GitHub Releases)
+#### 2. Manuální instalace & archivy (GitHub Releases)
 * **CachyOS / Arch Linux:** `./install-cachyos.sh` nebo sestavení přes přiložený `PKGBUILD` (`makepkg -si`).
-* **Fedora / Nobara / RHEL / openSUSE:** `sudo dnf install ./mychalsmp-launcher.rpm`
-* **Ubuntu / Debian / Mint / Pop!_OS:** `sudo apt install ./mychalsmp-launcher.deb`
-* **Univerzální archiv / AppImage:** `mychalsmp-launcher.tar.gz` nebo `mychalsmp-launcher.AppImage`
+* **Univerzální Linux archiv:** `mychalsmp-launcher.tar.gz`
 
 ---
 
@@ -117,7 +115,7 @@ npm install
 # Spuštění ve vývojovém režimu s hot-reloadem
 npm start
 
-# Sestavení Linux balíčků (.deb, .rpm, .AppImage)
+# Sestavení Linux binárky (pro .tar.gz)
 npm run build:linux
 
 # Sestavení Windows NSIS instalátoru (.exe)

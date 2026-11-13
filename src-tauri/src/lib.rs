@@ -896,26 +896,117 @@ async fn apply_update(app: AppHandle, asset_url: String) -> Value {
     crate::services::apply_update(Some(&app), &asset_url).await
 }
 
+fn parse_post_update_arg<I, S>(args: I) -> Option<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    args.into_iter().find_map(|arg| {
+        let s = arg.as_ref();
+        s.strip_prefix("--post-update=")
+            .map(|v| v.trim().trim_start_matches('v').to_string())
+            .filter(|v| !v.is_empty())
+    })
+}
+
 #[tauri::command]
-fn restart_launcher(app: AppHandle) {
+fn get_boot_flags() -> Value {
+    let post_update_tag = parse_post_update_arg(std::env::args());
+    json!({
+        "version": crate::config::APP_VERSION,
+        "postUpdateTag": post_update_tag,
+        "isPostUpdate": post_update_tag.is_some()
+    })
+}
+
+#[tauri::command]
+fn restart_launcher(app: AppHandle, target_version: Option<String>) {
+    let post_update_arg = target_version
+        .as_deref()
+        .map(|v| v.trim().trim_start_matches('v'))
+        .filter(|v| !v.is_empty())
+        .map(|v| format!("--post-update={}", v));
+
     #[cfg(target_os = "windows")]
     {
         let installer = crate::config::get_default_game_dir()
             .join("temp")
             .join("mychalsmp-launcher-setup.exe");
         if installer.is_file() {
-            let _ = std::process::Command::new(&installer).spawn();
-            std::process::exit(0);
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let ps_res = std::process::Command::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-Command",
+                    "Start-Sleep -Milliseconds 650; Start-Process -FilePath $env:SMP_INSTALLER",
+                ])
+                .env("SMP_INSTALLER", &installer)
+                .creation_flags(CREATE_NO_WINDOW)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+            if ps_res.is_ok() || std::process::Command::new(&installer).spawn().is_ok() {
+                std::process::exit(0);
+            }
         }
     }
     #[cfg(target_os = "linux")]
     {
-        if let Some(home) = dirs::home_dir() {
-            let updated_bin = home.join(".local/share/mychalsmp-launcher/mychalsmp-launcher");
-            if updated_bin.is_file() {
-                if std::process::Command::new(&updated_bin).spawn().is_ok() {
-                    std::process::exit(0);
-                }
+        let updated_bin = dirs::home_dir()
+            .map(|h| h.join(".local/share/mychalsmp-launcher/mychalsmp-launcher"))
+            .filter(|p| p.is_file());
+
+        let clean_current_exe = std::env::current_exe().ok().and_then(|p| {
+            let s = p.to_string_lossy();
+            let trimmed = s.strip_suffix(" (deleted)").unwrap_or(&s);
+            let pb = std::path::PathBuf::from(trimmed);
+            if pb.is_file()
+                && !trimmed.contains("/tmp/.mount_")
+                && !trimmed.starts_with("/usr/")
+                && !trimmed.starts_with("/opt/")
+            {
+                Some(pb)
+            } else {
+                None
+            }
+        });
+
+        let target_bin = match (clean_current_exe, updated_bin) {
+            (Some(curr), Some(local)) => {
+                let same_len = match (std::fs::metadata(&curr), std::fs::metadata(&local)) {
+                    (Ok(a), Ok(b)) => a.len() == b.len(),
+                    _ => false,
+                };
+                if same_len { Some(curr) } else { Some(local) }
+            }
+            (None, Some(local)) => Some(local),
+            (Some(curr), None) => Some(curr),
+            (None, None) => None,
+        };
+
+        if let Some(bin) = target_bin {
+            use std::os::unix::process::CommandExt;
+            let parent_pid = std::process::id();
+            let script = "p=\"$1\"; t=\"$2\"; shift 2; i=0; while [ $i -lt 40 ] && kill -0 \"$p\" 2>/dev/null; do i=$((i + 1)); sleep 0.05; done; exec \"$t\" \"$@\"";
+            let mut cmd = std::process::Command::new("sh");
+            cmd.arg("-c")
+                .arg(script)
+                .arg("_")
+                .arg(parent_pid.to_string())
+                .arg(&bin);
+            if let Some(ref arg) = post_update_arg {
+                cmd.arg(arg);
+            }
+            cmd.stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .process_group(0);
+            if cmd.spawn().is_ok() {
+                std::process::exit(0);
             }
         }
     }
@@ -1203,6 +1294,7 @@ pub fn run() {
             clean_launcher_cache,
             check_for_updates,
             apply_update,
+            get_boot_flags,
             restart_launcher,
             check_audio_dlc,
             download_audio_dlc,
@@ -1330,4 +1422,23 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_post_update_arg;
+
+    #[test]
+    fn test_parse_post_update_arg() {
+        assert_eq!(
+            parse_post_update_arg(["app", "--post-update=v1.7.14"]),
+            Some("1.7.14".to_string())
+        );
+        assert_eq!(
+            parse_post_update_arg(["app", "--post-update=1.7.14"]),
+            Some("1.7.14".to_string())
+        );
+        assert_eq!(parse_post_update_arg(["app", "--post-update="]), None);
+        assert_eq!(parse_post_update_arg(["app", "--foo"]), None);
+    }
 }

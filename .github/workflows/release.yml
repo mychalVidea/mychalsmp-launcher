@@ -93,37 +93,21 @@ jobs:
             fs.writeFileSync('./src-tauri/Cargo.toml', cargo);
           "
 
-      - name: Build Tauri Application
-        run: npm run tauri:build
+      - name: Build Tauri Application (Linux binary for .tar.gz)
+        if: matrix.os == 'linux'
+        run: npm run build:linux
 
-      - name: Package Linux Artifacts (.deb, .rpm, .AppImage, .tar.gz)
+      - name: Build Tauri Application (Windows NSIS)
+        if: matrix.os == 'windows'
+        run: npm run build:win
+
+      - name: Package Linux Artifacts (.tar.gz)
         if: matrix.os == 'linux'
         shell: bash
         run: |
           mkdir -p artifacts/linux
 
-          # 1. Collect .deb bundle (Ubuntu / Debian / Mint / Pop!_OS)
-          DEB_FILE=$(find src-tauri/target/release/bundle/deb -name "*.deb" -type f 2>/dev/null | head -n 1)
-          if [ -n "$DEB_FILE" ]; then
-            cp "$DEB_FILE" artifacts/linux/
-            cp "$DEB_FILE" artifacts/linux/mychalsmp-launcher.deb
-          fi
-
-          # 2. Collect .rpm bundle (Fedora / Nobara / RHEL / openSUSE)
-          RPM_FILE=$(find src-tauri/target/release/bundle/rpm -name "*.rpm" -type f 2>/dev/null | head -n 1)
-          if [ -n "$RPM_FILE" ]; then
-            cp "$RPM_FILE" artifacts/linux/
-            cp "$RPM_FILE" artifacts/linux/mychalsmp-launcher.rpm
-          fi
-
-          # 3. Collect .AppImage bundle (Univerzální pro CachyOS / Arch / Fedora / Ubuntu)
-          APPIMAGE_FILE=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" -type f 2>/dev/null | head -n 1)
-          if [ -n "$APPIMAGE_FILE" ]; then
-            cp "$APPIMAGE_FILE" artifacts/linux/
-            cp "$APPIMAGE_FILE" artifacts/linux/mychalsmp-launcher.AppImage
-          fi
-
-          # 4. Create .tar.gz archive for install.sh (CachyOS / Arch / Fedora / Ubuntu)
+          # Create .tar.gz archive for Linux / install.sh
           BIN_PATH=""
           if [ -f "src-tauri/target/release/SMPClient" ]; then
             BIN_PATH="src-tauri/target/release/SMPClient"
@@ -233,9 +217,6 @@ jobs:
           generate_release_notes: false
           files: |
             release-assets/*.exe
-            release-assets/*.deb
-            release-assets/*.rpm
-            release-assets/*.AppImage
             release-assets/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

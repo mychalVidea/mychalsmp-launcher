@@ -399,18 +399,29 @@ pub fn cleanup_obsolete_electron_in_dir(install_dir: &Path) -> (u64, u64) {
         }
     }
 
-    // Remove leftover *.update_new staging files from previous interrupted atomic updates
+    // Remove leftover staging/backup files and versioned update directories from previous updates
     if let Ok(entries) = fs::read_dir(install_dir) {
         for entry in entries.flatten() {
             let fname = entry.file_name().to_string_lossy().to_string();
-            if fname.ends_with(".update_new") {
-                let p = entry.path();
-                if p.is_file() {
-                    let sz = fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
-                    if fs::remove_file(&p).is_ok() {
-                        deleted_files += 1;
-                        freed_bytes += sz;
-                    }
+            let p = entry.path();
+            if p.is_dir()
+                && (fname.starts_with("mychalsmp-launcher-") || fname.starts_with("SMPClient-"))
+            {
+                let (cnt, sz) = dir_size_and_file_count(&p);
+                if fs::remove_dir_all(&p).is_ok() {
+                    deleted_files += cnt;
+                    freed_bytes += sz;
+                }
+            } else if p.is_file()
+                && (fname.ends_with(".update_new")
+                    || fname.ends_with(".bak")
+                    || fname.ends_with(".old")
+                    || fname == "mychalsmp-launcher (deleted)")
+            {
+                let sz = fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+                if fs::remove_file(&p).is_ok() {
+                    deleted_files += 1;
+                    freed_bytes += sz;
                 }
             }
         }
@@ -503,6 +514,25 @@ pub fn cleanup_obsolete_electron_files() -> Value {
         let (cnt, sz) = cleanup_obsolete_electron_in_dir(&dir);
         total_deleted += cnt;
         total_freed += sz;
+    }
+
+    // Remove leftover updater staging artifacts from previous interrupted updates in ~/.mychalsmp/temp
+    let temp_dir = get_default_game_dir().join("temp");
+    let stale_extract = temp_dir.join("update_extracted");
+    if stale_extract.is_dir() {
+        let (cnt, sz) = dir_size_and_file_count(&stale_extract);
+        if fs::remove_dir_all(&stale_extract).is_ok() {
+            total_deleted += cnt;
+            total_freed += sz;
+        }
+    }
+    let stale_tar = temp_dir.join("mychalsmp-launcher-update.tar.gz");
+    if stale_tar.is_file() {
+        let sz = fs::metadata(&stale_tar).map(|m| m.len()).unwrap_or(0);
+        if fs::remove_file(&stale_tar).is_ok() {
+            total_deleted += 1;
+            total_freed += sz;
+        }
     }
 
     json!({
@@ -1319,48 +1349,50 @@ async fn discord_rpc_worker(mut rx: mpsc::UnboundedReceiver<Option<Value>>) {
 // 6. Update Checker & Updater
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub async fn check_for_updates() -> Value {
-    let repo = "mychalVidea/mychalsmp-launcher";
-    let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+fn select_release_asset(assets: &[Value], is_linux: bool, is_windows: bool) -> (Option<String>, Option<u64>) {
+    let mut download_url = None;
+    let mut download_size = None;
 
-    let client = reqwest::Client::builder()
-        .user_agent("mychalsmp-launcher-updater")
-        .build()
-        .unwrap_or_default();
-
-    let resp = match client.get(&url).send().await {
-        Ok(r) => r,
-        Err(e) => {
-            return json!({
-                "hasUpdate": false,
-                "updateAvailable": false,
-                "currentVersion": APP_VERSION,
-                "error": e.to_string()
-            })
+    if is_linux {
+        // Prioritize .tar.gz for seamless in-place Linux self-update
+        for a in assets {
+            let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if name == "mychalsmp-launcher.tar.gz" || name.ends_with(".tar.gz") {
+                download_url = a.get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
+                download_size = a.get("size").and_then(|v| v.as_u64());
+                break;
+            }
         }
-    };
-
-    if !resp.status().is_success() {
-        return json!({
-            "hasUpdate": false,
-            "updateAvailable": false,
-            "currentVersion": APP_VERSION,
-            "message": "Žádné novější vydání nebylo nalezeno."
-        });
+        if download_url.is_none() {
+            for a in assets {
+                let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                if name.ends_with(".AppImage") || name.ends_with(".deb") || name.ends_with(".rpm") {
+                    download_url = a.get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
+                    download_size = a.get("size").and_then(|v| v.as_u64());
+                    break;
+                }
+            }
+        }
+    } else if is_windows {
+        for a in assets {
+            let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if (name == "mychalsmp-launcher-setup.exe" || name.ends_with(".exe")) && !name.contains("blockmap") {
+                download_url = a.get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
+                download_size = a.get("size").and_then(|v| v.as_u64());
+                break;
+            }
+        }
     }
 
-    let release: Value = match resp.json().await {
-        Ok(v) => v,
-        Err(e) => {
-            return json!({
-                "hasUpdate": false,
-                "updateAvailable": false,
-                "currentVersion": APP_VERSION,
-                "error": e.to_string()
-            })
-        }
-    };
+    if download_url.is_none() && !assets.is_empty() {
+        download_url = assets[0].get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
+        download_size = assets[0].get("size").and_then(|v| v.as_u64());
+    }
 
+    (download_url, download_size)
+}
+
+fn parse_release_update_payload(release: &Value, current_version: &str, is_linux: bool, is_windows: bool) -> Value {
     let latest_tag = release
         .get("tag_name")
         .and_then(|v| v.as_str())
@@ -1368,7 +1400,7 @@ pub async fn check_for_updates() -> Value {
         .trim_start_matches('v')
         .trim();
 
-    let has_update = is_newer_version(latest_tag, APP_VERSION);
+    let has_update = is_newer_version(latest_tag, current_version);
 
     let raw_assets: Vec<Value> = release
         .get("assets")
@@ -1388,48 +1420,7 @@ pub async fn check_for_updates() -> Value {
         })
         .collect();
 
-    let mut download_url = None;
-    let mut download_size = None;
-
-    #[cfg(target_os = "linux")]
-    {
-        // Prioritize .tar.gz for seamless in-place Linux self-update
-        for a in &assets {
-            let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            if name == "mychalsmp-launcher.tar.gz" || name.ends_with(".tar.gz") {
-                download_url = a.get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
-                download_size = a.get("size").and_then(|v| v.as_u64());
-                break;
-            }
-        }
-        if download_url.is_none() {
-            for a in &assets {
-                let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                if name.ends_with(".AppImage") || name.ends_with(".deb") || name.ends_with(".rpm") {
-                    download_url = a.get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
-                    download_size = a.get("size").and_then(|v| v.as_u64());
-                    break;
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        for a in &assets {
-            let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            if (name == "mychalsmp-launcher-setup.exe" || name.ends_with(".exe")) && !name.contains("blockmap") {
-                download_url = a.get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
-                download_size = a.get("size").and_then(|v| v.as_u64());
-                break;
-            }
-        }
-    }
-
-    if download_url.is_none() && !assets.is_empty() {
-        download_url = assets[0].get("browser_download_url").and_then(|v| v.as_str()).map(String::from);
-        download_size = assets[0].get("size").and_then(|v| v.as_u64());
-    }
+    let (download_url, download_size) = select_release_asset(&assets, is_linux, is_windows);
 
     let release_notes = release
         .get("body")
@@ -1440,7 +1431,7 @@ pub async fn check_for_updates() -> Value {
     json!({
         "hasUpdate": has_update,
         "updateAvailable": has_update,
-        "currentVersion": APP_VERSION,
+        "currentVersion": current_version,
         "latestVersion": latest_tag,
         "releaseName": release.get("name").and_then(|v| v.as_str()).unwrap_or(latest_tag),
         "releaseUrl": release.get("html_url"),
@@ -1452,6 +1443,55 @@ pub async fn check_for_updates() -> Value {
     })
 }
 
+pub async fn check_for_updates() -> Value {
+    let repo = "mychalVidea/mychalsmp-launcher";
+    let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+
+    let client = reqwest::Client::builder()
+        .user_agent("mychalsmp-launcher-updater")
+        .connect_timeout(std::time::Duration::from_secs(4))
+        .timeout(std::time::Duration::from_secs(6))
+        .build()
+        .unwrap_or_default();
+
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            return json!({
+                "hasUpdate": false,
+                "updateAvailable": false,
+                "currentVersion": APP_VERSION,
+                "offline": e.is_connect() || e.is_timeout(),
+                "error": e.to_string()
+            })
+        }
+    };
+
+    if !resp.status().is_success() {
+        return json!({
+            "hasUpdate": false,
+            "updateAvailable": false,
+            "currentVersion": APP_VERSION,
+            "httpStatus": resp.status().as_u16(),
+            "message": "Žádné novější vydání nebylo nalezeno."
+        });
+    }
+
+    let release: Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            return json!({
+                "hasUpdate": false,
+                "updateAvailable": false,
+                "currentVersion": APP_VERSION,
+                "error": e.to_string()
+            })
+        }
+    };
+
+    parse_release_update_payload(&release, APP_VERSION, cfg!(target_os = "linux"), cfg!(target_os = "windows"))
+}
+
 pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
     if asset_url.trim().is_empty() {
         return json!({ "success": false, "applied": false, "error": "Chybí URL adresa aktualizace." });
@@ -1459,6 +1499,8 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
 
     let client = reqwest::Client::builder()
         .user_agent("mychalsmp-launcher-updater")
+        .connect_timeout(std::time::Duration::from_secs(8))
+        .read_timeout(std::time::Duration::from_secs(25))
         .build()
         .unwrap_or_default();
 
@@ -1475,7 +1517,8 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
         });
     }
 
-    let total_bytes = resp.content_length().unwrap_or(1).max(1);
+    let expected_bytes = resp.content_length();
+    let total_bytes = expected_bytes.unwrap_or(1).max(1);
     let temp_dir = get_default_game_dir().join("temp");
     let _ = fs::create_dir_all(&temp_dir);
 
@@ -1493,28 +1536,55 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
     };
 
     let mut downloaded = 0u64;
-    while let Ok(Some(chunk)) = resp.chunk().await {
-        if file.write_all(&chunk).is_err() {
-            return json!({ "success": false, "applied": false, "error": "Chyba při zápisu souboru aktualizace." });
-        }
-        downloaded += chunk.len() as u64;
-        let percent = (downloaded * 90 / total_bytes).min(90);
+    loop {
+        match resp.chunk().await {
+            Ok(Some(chunk)) => {
+                if file.write_all(&chunk).is_err() {
+                    drop(file);
+                    let _ = fs::remove_file(&temp_path);
+                    return json!({ "success": false, "applied": false, "error": "Chyba při zápisu souboru aktualizace." });
+                }
+                downloaded += chunk.len() as u64;
+                let percent = (downloaded * 90 / total_bytes).min(90);
 
-        if let Some(a) = app {
-            let _ = a.emit(
-                "update-progress",
-                json!({
-                    "status": "downloading",
-                    "percent": percent,
-                    "current": downloaded,
-                    "total": total_bytes,
-                    "step": "Stahuji aktualizaci..."
-                }),
-            );
+                if let Some(a) = app {
+                    let _ = a.emit(
+                        "update-progress",
+                        json!({
+                            "status": "downloading",
+                            "percent": percent,
+                            "current": downloaded,
+                            "total": total_bytes,
+                            "step": "Stahuji aktualizaci..."
+                        }),
+                    );
+                }
+            }
+            Ok(None) => break,
+            Err(e) => {
+                drop(file);
+                let _ = fs::remove_file(&temp_path);
+                return json!({
+                    "success": false,
+                    "applied": false,
+                    "error": format!("Stahování aktualizace bylo přerušeno: {}", e)
+                });
+            }
         }
     }
     let _ = file.flush();
     drop(file);
+
+    if let Some(expected) = expected_bytes {
+        if expected > 0 && downloaded < expected {
+            let _ = fs::remove_file(&temp_path);
+            return json!({
+                "success": false,
+                "applied": false,
+                "error": "Stažený soubor aktualizace je neúplný."
+            });
+        }
+    }
 
     #[cfg(target_os = "linux")]
     {
@@ -1599,9 +1669,14 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
             Ok(())
         };
 
+        // Capture current_exe before replacing local_install_dir so Linux doesn't report "(deleted)" first
+        let current_exe_before = std::env::current_exe().ok();
+
         // 1. Update ~/.local/share/mychalsmp-launcher/{mychalsmp-launcher, SMPClient}
-        let _ = replace_binary_atomically(&local_install_dir.join("mychalsmp-launcher"));
-        let _ = replace_binary_atomically(&local_install_dir.join("SMPClient"));
+        let local_main_target = local_install_dir.join("mychalsmp-launcher");
+        let local_alias_target = local_install_dir.join("SMPClient");
+        let local_main_res = replace_binary_atomically(&local_main_target);
+        let _ = replace_binary_atomically(&local_alias_target);
 
         // Copy assets & resources if present in archive
         for folder_name in ["assets", "resources"] {
@@ -1612,11 +1687,29 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
             }
         }
 
-        // 2. Also atomically replace current_exe() if writable (e.g. launched from custom folder or /opt)
-        if let Ok(exe_path) = std::env::current_exe() {
-            if !exe_path.to_string_lossy().contains("/tmp/.mount_") {
-                let _ = replace_binary_atomically(&exe_path);
+        // 2. Also atomically replace current_exe() if distinct and writable (e.g. custom folder)
+        let mut current_exe_res: Result<(), String> = Err("skipped".to_string());
+        if let Some(exe_path) = current_exe_before {
+            let exe_str = exe_path.to_string_lossy();
+            if !exe_str.contains("/tmp/.mount_")
+                && exe_path != local_main_target
+                && exe_path != local_alias_target
+            {
+                current_exe_res = replace_binary_atomically(&exe_path);
             }
+        }
+
+        if local_main_res.is_err() && current_exe_res.is_err() {
+            let _ = fs::remove_file(&temp_path);
+            let _ = fs::remove_dir_all(&extract_dir);
+            return json!({
+                "success": false,
+                "applied": false,
+                "error": format!(
+                    "Nepodařilo se zapsat novou verzi launcheru: {}",
+                    local_main_res.err().unwrap_or_else(|| "neznámá chyba zápisu".to_string())
+                )
+            });
         }
 
         // Ensure ~/.local/bin/mychalsmp-launcher wrapper and .desktop entry are clean
@@ -1761,10 +1854,12 @@ mod tests {
         fs::write(dir.join("resources/assets/old.txt"), b"old").unwrap();
         fs::write(dir.join("locales/en-US.pak"), vec![6u8; 48]).unwrap();
         fs::write(dir.join("mychalsmp-launcher-1.0.0/resources/app.asar"), vec![7u8; 96]).unwrap();
+        fs::write(dir.join("mychalsmp-launcher (deleted)"), vec![8u8; 64]).unwrap();
+        fs::write(dir.join("mychalsmp-launcher.update_new"), vec![9u8; 32]).unwrap();
 
         let (deleted_files, freed_bytes) = cleanup_obsolete_electron_in_dir(&dir);
-        assert!(deleted_files >= 9, "expected obsolete Electron files to be removed");
-        assert!(freed_bytes >= 550);
+        assert!(deleted_files >= 11, "expected obsolete Electron and update files to be removed");
+        assert!(freed_bytes >= 640);
 
         assert!(dir.join("mychalsmp-launcher").exists());
         assert!(dir.join("SMPClient").exists());
@@ -1776,11 +1871,77 @@ mod tests {
         assert!(!dir.join("libGLESv2.so").exists());
         assert!(!dir.join("locales").exists());
         assert!(!dir.join("mychalsmp-launcher-1.0.0").exists());
+        assert!(!dir.join("mychalsmp-launcher (deleted)").exists());
+        assert!(!dir.join("mychalsmp-launcher.update_new").exists());
         assert!(!dir.join("resources/app.asar").exists());
         assert!(!dir.join("resources/app-update.yml").exists());
         assert!(!dir.join("resources/assets").exists());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_newer_version_cases() {
+        assert!(is_newer_version("1.7.14", "1.7.13"));
+        assert!(is_newer_version("v1.8.0", "1.7.99"));
+        assert!(is_newer_version("2.0.0", "1.99.99"));
+        assert!(!is_newer_version("1.7.13", "1.7.13"));
+        assert!(!is_newer_version("1.7.12", "1.7.13"));
+        assert!(!is_newer_version("", "1.7.13"));
+    }
+
+    #[test]
+    fn test_parse_release_update_payload_prefers_platform_asset() {
+        let release = json!({
+            "tag_name": "v1.7.14",
+            "name": "SMPClient 1.7.14",
+            "body": "Discord splash auto-update",
+            "html_url": "https://github.com/mychalVidea/mychalsmp-launcher/releases/tag/v1.7.14",
+            "published_at": "2026-11-13T00:00:00Z",
+            "assets": [
+                {
+                    "name": "mychalsmp-launcher-setup.exe.blockmap",
+                    "browser_download_url": "https://example.com/setup.exe.blockmap",
+                    "size": 100
+                },
+                {
+                    "name": "mychalsmp-launcher-setup.exe",
+                    "browser_download_url": "https://example.com/setup.exe",
+                    "size": 25000000
+                },
+                {
+                    "name": "mychalsmp-launcher.tar.gz",
+                    "browser_download_url": "https://example.com/linux.tar.gz",
+                    "size": 15000000
+                }
+            ]
+        });
+
+        let linux_res = parse_release_update_payload(&release, "1.7.13", true, false);
+        assert_eq!(linux_res.get("hasUpdate").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(linux_res.get("latestVersion").and_then(|v| v.as_str()), Some("1.7.14"));
+        assert_eq!(
+            linux_res.get("downloadUrl").and_then(|v| v.as_str()),
+            Some("https://example.com/linux.tar.gz")
+        );
+
+        let win_res = parse_release_update_payload(&release, "1.7.13", false, true);
+        assert_eq!(win_res.get("hasUpdate").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            win_res.get("downloadUrl").and_then(|v| v.as_str()),
+            Some("https://example.com/setup.exe")
+        );
+    }
+
+    #[test]
+    fn test_parse_release_update_payload_handles_up_to_date() {
+        let release = json!({
+            "tag_name": "v1.7.13",
+            "assets": []
+        });
+        let res = parse_release_update_payload(&release, "1.7.13", true, false);
+        assert_eq!(res.get("hasUpdate").and_then(|v| v.as_bool()), Some(false));
+        assert!(res.get("downloadUrl").map(|v| v.is_null()).unwrap_or(true));
     }
 }
 
