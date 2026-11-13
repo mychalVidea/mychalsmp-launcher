@@ -1,6 +1,6 @@
 {
   "name": "mychalsmp-launcher",
-  "version": "1.7.17",
+  "version": "1.7.18",
   "description": "Oficiální multiplatformní launcher pro síť MYCHAL SMP s optimalizovaným klientem pro Windows 11 a Linux",
   "scripts": {
     "start": "tauri dev",

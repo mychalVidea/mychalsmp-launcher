@@ -543,7 +543,155 @@ pub fn cleanup_obsolete_electron_files() -> Value {
     })
 }
 
-/// Ensures ~/.local/bin/mychalsmp-launcher does not force legacy WEBKIT_DISABLE_DMABUF_RENDERER=1.
+#[cfg(target_os = "linux")]
+const SMPCLIENT_ICON_512: &[u8] = include_bytes!("../icons/icon.png");
+#[cfg(target_os = "linux")]
+const SMPCLIENT_ICON_256: &[u8] = include_bytes!("../icons/128x128@2x.png");
+#[cfg(target_os = "linux")]
+const SMPCLIENT_ICON_128: &[u8] = include_bytes!("../icons/128x128.png");
+#[cfg(target_os = "linux")]
+const SMPCLIENT_ICON_64: &[u8] = include_bytes!("../icons/64x64.png");
+#[cfg(target_os = "linux")]
+const SMPCLIENT_ICON_32: &[u8] = include_bytes!("../icons/32x32.png");
+
+/// Syncs official SMPClient PNG icons into ~/.local/share/icons/hicolor and rewrites
+/// ~/.local/share/applications/mychalsmp-launcher.desktop so taskbars never show legacy logos.
+#[cfg(target_os = "linux")]
+pub fn sync_linux_desktop_icons_and_entry_at(
+    home_dir: &std::path::Path,
+    preferred_exec: Option<&std::path::Path>,
+) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut changed = false;
+    let hicolor_dir = home_dir.join(".local/share/icons/hicolor");
+    let icon_stems = ["mychalsmp-launcher", "SMPClient", "xyz.mychalsmp.launcher"];
+
+    // Remove stale icon files in alternate sizes/paths that could hold legacy branding.
+    let stale_sizes = [
+        "16x16", "22x22", "24x24", "36x36", "48x48", "72x72", "96x96", "192x192", "scalable",
+    ];
+    for size in stale_sizes {
+        let apps_dir = hicolor_dir.join(size).join("apps");
+        for stem in icon_stems {
+            for ext in ["png", "svg", "xpm"] {
+                let candidate = apps_dir.join(format!("{}.{}", stem, ext));
+                if candidate.exists() && fs::remove_file(&candidate).is_ok() {
+                    changed = true;
+                }
+            }
+        }
+    }
+    let legacy_icons_dir = home_dir.join(".icons");
+    for stem in icon_stems {
+        for ext in ["png", "svg", "xpm"] {
+            let candidate = legacy_icons_dir.join(format!("{}.{}", stem, ext));
+            if candidate.exists() && fs::remove_file(&candidate).is_ok() {
+                changed = true;
+            }
+        }
+    }
+
+    let icon_sizes: [(&str, &[u8]); 5] = [
+        ("512x512", SMPCLIENT_ICON_512),
+        ("256x256", SMPCLIENT_ICON_256),
+        ("128x128", SMPCLIENT_ICON_128),
+        ("64x64", SMPCLIENT_ICON_64),
+        ("32x32", SMPCLIENT_ICON_32),
+    ];
+    for (size, bytes) in icon_sizes {
+        let apps_dir = hicolor_dir.join(size).join("apps");
+        if fs::create_dir_all(&apps_dir).is_ok() {
+            for stem in icon_stems {
+                let dest = apps_dir.join(format!("{}.png", stem));
+                let up_to_date = fs::read(&dest).ok().as_deref() == Some(bytes);
+                if !up_to_date && fs::write(&dest, bytes).is_ok() {
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    let install_dir = home_dir.join(".local/share/mychalsmp-launcher");
+    if install_dir.is_dir() {
+        let res_logo = install_dir.join("resources/logo.png");
+        if let Some(parent) = res_logo.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let up_to_date = fs::read(&res_logo).ok().as_deref() == Some(SMPCLIENT_ICON_512);
+        if !up_to_date && fs::write(&res_logo, SMPCLIENT_ICON_512).is_ok() {
+            changed = true;
+        }
+    }
+
+    let apps_dir = home_dir.join(".local/share/applications");
+    let _ = fs::create_dir_all(&apps_dir);
+    for obsolete in ["appimagekit-mychalsmp-launcher.desktop", "SMPClient.desktop"] {
+        let obs_path = apps_dir.join(obsolete);
+        if obs_path.exists() && fs::remove_file(&obs_path).is_ok() {
+            changed = true;
+        }
+    }
+
+    let wrapper_path = home_dir.join(".local/bin/mychalsmp-launcher");
+    let bin_path = install_dir.join("mychalsmp-launcher");
+    let exec_target = preferred_exec
+        .map(|p| p.to_path_buf())
+        .or_else(|| {
+            if wrapper_path.exists() {
+                Some(wrapper_path)
+            } else if bin_path.is_file() {
+                Some(bin_path)
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| home_dir.join(".local/bin/mychalsmp-launcher"));
+
+    let primary_icon = hicolor_dir.join("512x512/apps/mychalsmp-launcher.png");
+    let desktop_path = apps_dir.join("mychalsmp-launcher.desktop");
+    let desktop_content = format!(
+        "[Desktop Entry]\nName=SMPClient\nComment=Oficiální Minecraft klient sítě MYCHAL SMP\nExec=\"{}\" %U\nIcon={}\nTerminal=false\nType=Application\nCategories=Game;ActionGame;AdventureGame;\nStartupWMClass=xyz.mychalsmp.launcher\n",
+        exec_target.to_string_lossy(),
+        primary_icon.to_string_lossy()
+    );
+    let desktop_up_to_date =
+        fs::read_to_string(&desktop_path).ok().as_deref() == Some(desktop_content.as_str());
+    if !desktop_up_to_date && fs::write(&desktop_path, &desktop_content).is_ok() {
+        let _ = fs::set_permissions(&desktop_path, fs::Permissions::from_mode(0o755));
+        changed = true;
+    }
+
+    changed
+}
+
+#[cfg(target_os = "linux")]
+pub fn sync_linux_desktop_icons_and_entry(preferred_exec: Option<&std::path::Path>) {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+    if sync_linux_desktop_icons_and_entry_at(&home, preferred_exec) {
+        let _ = fs::remove_file(home.join(".cache/icon-cache.kcache"));
+        let hicolor = home.join(".local/share/icons/hicolor");
+        let apps = home.join(".local/share/applications");
+        let _ = std::process::Command::new("gtk-update-icon-cache")
+            .args(["-q", "-f", "-t"])
+            .arg(&hicolor)
+            .status();
+        let _ = std::process::Command::new("update-desktop-database")
+            .arg(&apps)
+            .status();
+        let _ = std::process::Command::new("kbuildsycoca6")
+            .arg("--noincremental")
+            .status();
+        let _ = std::process::Command::new("kbuildsycoca5")
+            .arg("--noincremental")
+            .status();
+    }
+}
+
+/// Ensures ~/.local/bin/mychalsmp-launcher does not force legacy WEBKIT_DISABLE_DMABUF_RENDERER=1
+/// and keeps desktop launcher icons synced to the SMPClient brand icon.
 pub fn repair_linux_launcher_wrapper() {
     #[cfg(target_os = "linux")]
     if let Some(home) = dirs::home_dir() {
@@ -563,6 +711,69 @@ pub fn repair_linux_launcher_wrapper() {
                 }
             }
         }
+        let preferred = if wrapper_path.exists() {
+            Some(wrapper_path.as_path())
+        } else if bin_path.is_file() {
+            Some(bin_path.as_path())
+        } else {
+            None
+        };
+        sync_linux_desktop_icons_and_entry(preferred);
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_desktop_icon_tests {
+    use super::sync_linux_desktop_icons_and_entry_at;
+    use std::fs;
+
+    #[test]
+    fn syncs_smpclient_icons_purges_stale_and_writes_desktop() {
+        let tmp_home = std::env::temp_dir().join(format!(
+            "smpclient_icon_test_{}_{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let stale_48 = tmp_home.join(".local/share/icons/hicolor/48x48/apps/mychalsmp-launcher.png");
+        fs::create_dir_all(stale_48.parent().unwrap()).unwrap();
+        fs::write(&stale_48, b"legacy-mychalsmp-icon").unwrap();
+
+        let install_res = tmp_home.join(".local/share/mychalsmp-launcher/resources");
+        fs::create_dir_all(&install_res).unwrap();
+        fs::write(install_res.join("logo.png"), b"old-logo").unwrap();
+
+        let wrapper = tmp_home.join(".local/bin/mychalsmp-launcher");
+        fs::create_dir_all(wrapper.parent().unwrap()).unwrap();
+        fs::write(&wrapper, b"#!/bin/sh\n").unwrap();
+
+        let changed_first = sync_linux_desktop_icons_and_entry_at(&tmp_home, Some(&wrapper));
+        assert!(changed_first);
+        assert!(!stale_48.exists(), "stale 48x48 icon should be purged");
+
+        let icon_512 = tmp_home.join(".local/share/icons/hicolor/512x512/apps/mychalsmp-launcher.png");
+        assert!(icon_512.is_file());
+        assert_eq!(fs::read(&icon_512).unwrap(), include_bytes!("../icons/icon.png"));
+        assert_eq!(
+            fs::read(tmp_home.join(".local/share/icons/hicolor/64x64/apps/SMPClient.png")).unwrap(),
+            include_bytes!("../icons/64x64.png")
+        );
+        assert_eq!(
+            fs::read(install_res.join("logo.png")).unwrap(),
+            include_bytes!("../icons/icon.png")
+        );
+
+        let desktop = fs::read_to_string(
+            tmp_home.join(".local/share/applications/mychalsmp-launcher.desktop"),
+        )
+        .unwrap();
+        assert!(desktop.contains("Name=SMPClient"));
+        assert!(desktop.contains(&format!("Icon={}", icon_512.to_string_lossy())));
+
+        // Second invocation is idempotent and reports no changes.
+        let changed_second = sync_linux_desktop_icons_and_entry_at(&tmp_home, Some(&wrapper));
+        assert!(!changed_second);
+
+        let _ = fs::remove_dir_all(&tmp_home);
     }
 }
 
@@ -1771,17 +1982,7 @@ pub async fn apply_update(app: Option<&AppHandle>, asset_url: &str) -> Value {
                 let _ = fs::set_permissions(&wrapper_path, fs::Permissions::from_mode(0o755));
             }
 
-            let desktop_path = home_dir.join(".local/share/applications/mychalsmp-launcher.desktop");
-            let desktop_content = format!(
-                "[Desktop Entry]\nName=SMPClient\nComment=Oficiální Minecraft klient sítě MYCHAL SMP\nExec={} %U\nIcon=mychalsmp-launcher\nTerminal=false\nType=Application\nCategories=Game;ActionGame;AdventureGame;\nStartupWMClass=xyz.mychalsmp.launcher\n",
-                wrapper_path.to_string_lossy()
-            );
-            if let Some(parent) = desktop_path.parent() {
-                let _ = fs::create_dir_all(parent);
-            }
-            if fs::write(&desktop_path, desktop_content).is_ok() {
-                let _ = fs::set_permissions(&desktop_path, fs::Permissions::from_mode(0o755));
-            }
+            sync_linux_desktop_icons_and_entry(Some(&wrapper_path));
         }
 
         let _ = fs::remove_file(&temp_path);
