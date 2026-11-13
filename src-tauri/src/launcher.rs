@@ -20,8 +20,8 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::io::{AsyncBufReadExt, BufReader as TokioBufReader};
 
@@ -2438,6 +2438,268 @@ fn hide_main_window_to_tray_once<R: Runtime>(app: &AppHandle<R>, tray_hidden: &A
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GamePresenceMode {
+    Starting,
+    MainMenu,
+    Singleplayer,
+    Multiplayer(String),
+}
+
+#[derive(Debug)]
+struct GamePresenceTracker {
+    mode: GamePresenceMode,
+    version_label: String,
+    expected_server_port: Option<u16>,
+    server_socket_seen: bool,
+    socket_missing_streak: u8,
+    connected_at: Option<Instant>,
+    active: bool,
+}
+
+impl GamePresenceTracker {
+    fn new(mc_version: &str, loader_type: &str) -> Self {
+        Self {
+            mode: GamePresenceMode::Starting,
+            version_label: crate::services::format_version_label(mc_version, loader_type),
+            expected_server_port: None,
+            server_socket_seen: false,
+            socket_missing_streak: 0,
+            connected_at: None,
+            active: true,
+        }
+    }
+
+    fn current_presence(&self) -> (String, String) {
+        let details = match &self.mode {
+            GamePresenceMode::Starting => "Spouští Minecraft".to_string(),
+            GamePresenceMode::MainMenu => "V menu hry".to_string(),
+            GamePresenceMode::Singleplayer => "Hraje Singleplayer".to_string(),
+            GamePresenceMode::Multiplayer(host) => format!("Hraje na {}", host),
+        };
+        (details, self.version_label.clone())
+    }
+
+    fn emit(&self) {
+        if !self.active {
+            return;
+        }
+        let (details, state) = self.current_presence();
+        crate::services::set_discord_activity(
+            &details,
+            &state,
+            Some(chrono::Utc::now().timestamp()),
+        );
+    }
+
+    fn transition_to(&mut self, next_mode: GamePresenceMode) -> bool {
+        if !self.active || self.mode == next_mode {
+            return false;
+        }
+        if !matches!(next_mode, GamePresenceMode::Multiplayer(_)) {
+            self.expected_server_port = None;
+            self.server_socket_seen = false;
+            self.socket_missing_streak = 0;
+            self.connected_at = None;
+        }
+        self.mode = next_mode;
+        self.emit();
+        true
+    }
+
+    fn on_window_ready(&mut self) -> bool {
+        // QuickPlay logs `Connecting to ...` before OpenAL/Sound engine; never regress from a game world to MainMenu.
+        if matches!(self.mode, GamePresenceMode::Starting) {
+            return self.transition_to(GamePresenceMode::MainMenu);
+        }
+        false
+    }
+
+    fn on_log_line(&mut self, line: &str) -> bool {
+        if !self.active || line.contains("[CHAT]") {
+            return false;
+        }
+
+        if let Some((display_host, port)) = parse_connecting_server(line) {
+            self.expected_server_port = Some(port);
+            self.server_socket_seen = false;
+            self.socket_missing_streak = 0;
+            self.connected_at = Some(Instant::now());
+            return self.transition_to(GamePresenceMode::Multiplayer(display_host));
+        }
+
+        let msg = extract_log_message(line);
+
+        if msg.contains("Starting integrated minecraft server") {
+            return self.transition_to(GamePresenceMode::Singleplayer);
+        }
+
+        if matches!(self.mode, GamePresenceMode::Singleplayer)
+            && (msg.contains("Stopping server") || msg.contains("Saving worlds"))
+        {
+            return self.transition_to(GamePresenceMode::MainMenu);
+        }
+
+        if matches!(self.mode, GamePresenceMode::Multiplayer(_))
+            && is_multiplayer_disconnect_line(msg)
+        {
+            return self.transition_to(GamePresenceMode::MainMenu);
+        }
+
+        false
+    }
+
+    fn on_socket_poll(&mut self, socket_alive: Option<bool>) -> bool {
+        if !self.active || !matches!(self.mode, GamePresenceMode::Multiplayer(_)) {
+            return false;
+        }
+        match socket_alive {
+            Some(true) => {
+                self.server_socket_seen = true;
+                self.socket_missing_streak = 0;
+                false
+            }
+            Some(false) => {
+                if self.server_socket_seen {
+                    self.socket_missing_streak = self.socket_missing_streak.saturating_add(1);
+                    if self.socket_missing_streak >= 2 {
+                        return self.transition_to(GamePresenceMode::MainMenu);
+                    }
+                } else if let Some(since) = self.connected_at {
+                    if since.elapsed() >= Duration::from_secs(15) {
+                        return self.transition_to(GamePresenceMode::MainMenu);
+                    }
+                }
+                false
+            }
+            None => false,
+        }
+    }
+
+    fn deactivate(&mut self) {
+        self.active = false;
+    }
+}
+
+fn extract_log_message(line: &str) -> &str {
+    if let Some((_, rest)) = line.split_once("): ") {
+        rest.trim()
+    } else if let Some((_, rest)) = line.split_once("]: ") {
+        rest.trim()
+    } else {
+        line.trim()
+    }
+}
+
+fn parse_connecting_server(line: &str) -> Option<(String, u16)> {
+    if line.contains("[CHAT]") {
+        return None;
+    }
+    let msg = extract_log_message(line);
+    let rest = msg.strip_prefix("Connecting to ")?;
+    let (raw_host, raw_port) = rest.rsplit_once(',')?;
+    let port: u16 = raw_port.trim().parse().ok()?;
+    let host = raw_host.trim().trim_end_matches('.');
+    if host.is_empty() || host.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let display = if port == 25565 {
+        host.to_string()
+    } else if host.contains(':') && !host.starts_with('[') {
+        format!("[{}]:{}", host, port)
+    } else {
+        format!("{}:{}", host, port)
+    };
+    Some((display, port))
+}
+
+fn is_multiplayer_disconnect_line(msg: &str) -> bool {
+    msg.contains("Couldn't connect to server")
+        || msg.contains("Client disconnected with reason:")
+        || msg.contains("Authentication failed:")
+        || msg.contains("Failed to connect to the server")
+        || msg.contains("Disconnected from server")
+        || msg.contains("Connection lost")
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_proc_net_tcp_established_ports(
+    proc_net_tcp: &str,
+    process_inodes: &std::collections::HashSet<String>,
+) -> Vec<u16> {
+    let mut ports = Vec::new();
+    for line in proc_net_tcp.lines().skip(1) {
+        let mut cols = line.split_whitespace();
+        let _sl = cols.next();
+        let _local = cols.next();
+        let Some(rem_addr) = cols.next() else { continue };
+        let Some(state) = cols.next() else { continue };
+        if state != "01" {
+            continue;
+        }
+        // Columns 4..=8: tx_queue:rx_queue, tr:tm->when, retrnsmt, uid, timeout; column 9 is inode
+        let Some(inode) = cols.nth(5) else { continue };
+        if !process_inodes.contains(inode) {
+            continue;
+        }
+        if let Some((_, port_hex)) = rem_addr.rsplit_once(':') {
+            if let Ok(port) = u16::from_str_radix(port_hex, 16) {
+                ports.push(port);
+            }
+        }
+    }
+    ports
+}
+
+#[cfg(target_os = "linux")]
+fn has_established_game_tcp_socket(pid: u32, expected_port: Option<u16>) -> Option<bool> {
+    let fd_dir = format!("/proc/{}/fd", pid);
+    let Ok(entries) = std::fs::read_dir(&fd_dir) else {
+        return None;
+    };
+    let mut inodes = std::collections::HashSet::new();
+    for entry in entries.flatten() {
+        if let Ok(target) = std::fs::read_link(entry.path()) {
+            if let Some(target_str) = target.to_str() {
+                if let Some(inode) = target_str
+                    .strip_prefix("socket:[")
+                    .and_then(|s| s.strip_suffix(']'))
+                {
+                    inodes.insert(inode.to_string());
+                }
+            }
+        }
+    }
+
+    let mut read_any_table = false;
+    for path in [
+        format!("/proc/{}/net/tcp", pid),
+        format!("/proc/{}/net/tcp6", pid),
+    ] {
+        if let Ok(contents) = std::fs::read_to_string(&path) {
+            read_any_table = true;
+            for port in parse_proc_net_tcp_established_ports(&contents, &inodes) {
+                if expected_port == Some(port)
+                    || (port != 0 && port != 80 && port != 443 && port != 53)
+                {
+                    return Some(true);
+                }
+            }
+        }
+    }
+
+    if read_any_table {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn has_established_game_tcp_socket(_pid: u32, _expected_port: Option<u16>) -> Option<bool> {
+    None
+}
+
 fn signal_game_window_ready<R: Runtime>(
     app: &AppHandle<R>,
     profile_id: &str,
@@ -2445,6 +2707,7 @@ fn signal_game_window_ready<R: Runtime>(
     finished: &AtomicBool,
     target_progress: &std::sync::atomic::AtomicU32,
     current_progress: &std::sync::atomic::AtomicU32,
+    presence: &Arc<Mutex<GamePresenceTracker>>,
 ) {
     if !window_ready.swap(true, Ordering::SeqCst) {
         finished.store(true, Ordering::SeqCst);
@@ -2455,6 +2718,9 @@ fn signal_game_window_ready<R: Runtime>(
             json!({ "percent": 100, "text": "Minecraft běží" }),
         );
         let _ = app.emit("game-window-ready", json!({ "profileId": profile_id }));
+        if let Ok(mut tracker) = presence.lock() {
+            tracker.on_window_ready();
+        }
     }
 }
 
@@ -2463,6 +2729,8 @@ pub async fn spawn_game_process<R: Runtime>(
     spec: LaunchSpec,
     profile_id: String,
     game_instance_dir: PathBuf,
+    mc_version: String,
+    loader_type: String,
 ) -> Result<(), LaunchError> {
     IS_LAUNCHING.store(true, Ordering::SeqCst);
     IS_CANCELLED.store(false, Ordering::SeqCst);
@@ -2488,17 +2756,16 @@ pub async fn spawn_game_process<R: Runtime>(
         *session = Some(ActiveSessionData {
             running: true,
             profile_id: Some(profile_id.clone()),
-            version: None,
+            version: Some(mc_version.clone()),
             pid,
         });
     }
 
     let _ = app.emit("game-started", json!({ "profileId": profile_id, "pid": pid }));
-    crate::services::set_discord_activity(
-        &format!("Hraje {}", profile_id),
-        "mychalsmp.xyz",
-        Some(chrono::Utc::now().timestamp()),
-    );
+    let presence = Arc::new(Mutex::new(GamePresenceTracker::new(&mc_version, &loader_type)));
+    if let Ok(tracker) = presence.lock() {
+        tracker.emit();
+    }
 
     // Kinetic progress engine state
     let target_progress = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(20));
@@ -2553,6 +2820,7 @@ pub async fn spawn_game_process<R: Runtime>(
     let stderr = child.stderr.take();
 
     let combined_logs = std::sync::Arc::new(Mutex::new(Vec::<String>::new()));
+    let process_exited = Arc::new(AtomicBool::new(false));
 
     let app_out = app.clone();
     let tp_out = target_progress.clone();
@@ -2561,6 +2829,7 @@ pub async fn spawn_game_process<R: Runtime>(
     let wr_out = window_ready_flag.clone();
     let pid_out = profile_id.clone();
     let logs_out = combined_logs.clone();
+    let presence_out = presence.clone();
     let tray_hidden = std::sync::Arc::new(AtomicBool::new(false));
     let tray_hidden_out = tray_hidden.clone();
 
@@ -2577,6 +2846,9 @@ pub async fn spawn_game_process<R: Runtime>(
                     l.push(line.clone());
                 }
 
+                if let Ok(mut tracker) = presence_out.lock() {
+                    tracker.on_log_line(&line);
+                }
                 let _ = app_out.emit("launch-log", line.clone());
 
                 if line.contains("Loading Minecraft") || line.contains("KnotClient") || line.contains("Fabric Loader") {
@@ -2597,7 +2869,15 @@ pub async fn spawn_game_process<R: Runtime>(
                     || line.contains("Sound engine started")
                     || (line.contains("Created:") && line.contains("textures-atlas"))
                 {
-                    signal_game_window_ready(&app_out, &pid_out, &wr_out, &ff_out, &tp_out, &cp_out);
+                    signal_game_window_ready(
+                        &app_out,
+                        &pid_out,
+                        &wr_out,
+                        &ff_out,
+                        &tp_out,
+                        &cp_out,
+                        &presence_out,
+                    );
                     hide_main_window_to_tray_once(&app_out, &tray_hidden_out);
                 }
             }
@@ -2606,6 +2886,7 @@ pub async fn spawn_game_process<R: Runtime>(
 
     let app_err = app.clone();
     let logs_err = combined_logs.clone();
+    let presence_err = presence.clone();
     if let Some(err) = stderr {
         tokio::spawn(async move {
             let reader = TokioBufReader::new(err);
@@ -2617,6 +2898,9 @@ pub async fn spawn_game_process<R: Runtime>(
                         l.remove(0);
                     }
                     l.push(line.clone());
+                }
+                if let Ok(mut tracker) = presence_err.lock() {
+                    tracker.on_log_line(&line);
                 }
                 let _ = app_err.emit("launch-log", line);
             }
@@ -2631,15 +2915,57 @@ pub async fn spawn_game_process<R: Runtime>(
     let cp_timer = current_progress.clone();
     let pid_timer = profile_id.clone();
     let th_timer = tray_hidden.clone();
+    let presence_timer = presence.clone();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(8)).await;
         if !ff_tray.load(Ordering::SeqCst) {
-            signal_game_window_ready(&app_tray_timer, &pid_timer, &wr_timer, &ff_tray, &tp_timer, &cp_timer);
+            signal_game_window_ready(
+                &app_tray_timer,
+                &pid_timer,
+                &wr_timer,
+                &ff_tray,
+                &tp_timer,
+                &cp_timer,
+                &presence_timer,
+            );
             hide_main_window_to_tray_once(&app_tray_timer, &th_timer);
         }
     });
 
-    let status = child.wait().await?;
+    if cfg!(target_os = "linux") {
+        if let Some(game_pid) = pid {
+            let presence_watch = presence.clone();
+            let exited_watch = process_exited.clone();
+            tokio::spawn(async move {
+                while !exited_watch.load(Ordering::SeqCst) {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    if exited_watch.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    let expected_port = {
+                        let Ok(tracker) = presence_watch.lock() else {
+                            continue;
+                        };
+                        if !matches!(tracker.mode, GamePresenceMode::Multiplayer(_)) {
+                            continue;
+                        }
+                        tracker.expected_server_port
+                    };
+                    let alive = has_established_game_tcp_socket(game_pid, expected_port);
+                    if let Ok(mut tracker) = presence_watch.lock() {
+                        tracker.on_socket_poll(alive);
+                    }
+                }
+            });
+        }
+    }
+
+    let wait_res = child.wait().await;
+    process_exited.store(true, Ordering::SeqCst);
+    if let Ok(mut tracker) = presence.lock() {
+        tracker.deactivate();
+    }
+    let status = wait_res?;
     finished_flag.store(true, Ordering::SeqCst);
     IS_LAUNCHING.store(false, Ordering::SeqCst);
 
@@ -2658,7 +2984,7 @@ pub async fn spawn_game_process<R: Runtime>(
     }
 
     let _ = app.emit("game-stopped", ());
-    crate::services::set_discord_activity("V launcheru", "mychalsmp.xyz", Some(chrono::Utc::now().timestamp()));
+    crate::services::set_launcher_discord_activity(None, true);
     let _ = app.emit(
         "launch-exit",
         json!({ "exitCode": exit_code, "profileId": profile_id }),
@@ -2919,6 +3245,138 @@ mod tests {
             assert!(!classifier_matches_os("natives-windows-arm64", TargetOs::Windows));
             assert!(!classifier_matches_os("natives-linux-aarch64", TargetOs::Linux));
         }
+    }
+
+    #[test]
+    fn test_parse_connecting_server_variants() {
+        assert_eq!(
+            parse_connecting_server("[12:34:56] [Render thread/INFO]: Connecting to mychalsmp.xyz, 25565"),
+            Some(("mychalsmp.xyz".to_string(), 25565))
+        );
+        assert_eq!(
+            parse_connecting_server(
+                "[12:34:56] [Render thread/INFO] (Minecraft): Connecting to mychalsmp.xyz., 25565"
+            ),
+            Some(("mychalsmp.xyz".to_string(), 25565))
+        );
+        assert_eq!(
+            parse_connecting_server(
+                "[12:34:56] [Render thread/INFO]: Connecting to pvp.mychalsmp.xyz., 25566"
+            ),
+            Some(("pvp.mychalsmp.xyz:25566".to_string(), 25566))
+        );
+        assert_eq!(
+            parse_connecting_server("Connecting to ::1, 25570"),
+            Some(("[::1]:25570".to_string(), 25570))
+        );
+        assert_eq!(
+            parse_connecting_server(
+                "[12:34:56] [Render thread/INFO]: [System] [CHAT] <Troll> Connecting to evil.example, 25565"
+            ),
+            None
+        );
+        assert_eq!(parse_connecting_server("Sound engine started"), None);
+    }
+
+    #[test]
+    fn test_game_presence_tracker_transitions() {
+        let mut tracker = GamePresenceTracker::new("26.3", "fabric");
+        assert_eq!(
+            tracker.current_presence(),
+            (
+                "Spouští Minecraft".to_string(),
+                "Verze 26.3 (Fabric)".to_string()
+            )
+        );
+
+        assert!(tracker.on_window_ready());
+        assert!(!tracker.on_window_ready());
+        assert_eq!(
+            tracker.current_presence(),
+            ("V menu hry".to_string(), "Verze 26.3 (Fabric)".to_string())
+        );
+
+        assert!(tracker.on_log_line(
+            "[12:00:01] [Server thread/INFO]: Starting integrated minecraft server version 26.3"
+        ));
+        assert_eq!(
+            tracker.current_presence(),
+            (
+                "Hraje Singleplayer".to_string(),
+                "Verze 26.3 (Fabric)".to_string()
+            )
+        );
+
+        assert!(tracker.on_log_line("[12:00:10] [Server thread/INFO]: Stopping server"));
+        assert_eq!(tracker.mode, GamePresenceMode::MainMenu);
+
+        // Chat spoofing must be ignored
+        assert!(!tracker.on_log_line(
+            "[12:00:12] [Render thread/INFO]: [System] [CHAT] Starting integrated minecraft server"
+        ));
+        assert_eq!(tracker.mode, GamePresenceMode::MainMenu);
+
+        assert!(tracker.on_log_line(
+            "[12:01:00] [Render thread/INFO]: Connecting to mychalsmp.xyz., 25565"
+        ));
+        assert_eq!(
+            tracker.current_presence(),
+            (
+                "Hraje na mychalsmp.xyz".to_string(),
+                "Verze 26.3 (Fabric)".to_string()
+            )
+        );
+
+        // Silent disconnect detected after socket seen then closed across 2 polls
+        assert!(!tracker.on_socket_poll(Some(true)));
+        assert!(!tracker.on_socket_poll(Some(false)));
+        assert!(tracker.on_socket_poll(Some(false)));
+        assert_eq!(tracker.mode, GamePresenceMode::MainMenu);
+
+        // Reconnect and explicit disconnect log
+        assert!(tracker.on_log_line(
+            "[12:05:00] [Render thread/INFO]: Connecting to pvp.mychalsmp.xyz, 25566"
+        ));
+        assert_eq!(
+            tracker.current_presence().0,
+            "Hraje na pvp.mychalsmp.xyz:25566"
+        );
+        assert!(tracker.on_log_line(
+            "[12:06:00] [Render thread/INFO]: Client disconnected with reason: Timed out"
+        ));
+        assert_eq!(tracker.mode, GamePresenceMode::MainMenu);
+
+        // QuickPlay order: Connecting arrives before OpenAL/Sound engine ready
+        let mut qp = GamePresenceTracker::new("26.3", "vanilla");
+        assert!(qp.on_log_line("[12:10:00] [Render thread/INFO]: Connecting to donutsmp.net, 25565"));
+        assert!(!qp.on_window_ready());
+        assert_eq!(
+            qp.current_presence(),
+            (
+                "Hraje na donutsmp.net".to_string(),
+                "Verze 26.3".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn test_parse_proc_net_tcp_established_ports() {
+        let sample = "\
+  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 0100007F:B16B 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 50652118 2
+   1: C0A80110:9A12 823D5925:63DD 01 00000000:00000000 00:00000000 00000000  1000        0 777001 1
+   2: C0A80110:9A14 01010101:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 777002 1
+   3: C0A80110:9A15 823D5925:63DD 06 00000000:00000000 00:00000000 00000000  1000        0 777003 1
+   4: C0A80110:9A16 823D5925:63DE 01 00000000:00000000 00:00000000 00000000  1000        0 999999 1
+";
+        let inodes = std::collections::HashSet::from([
+            "50652118".to_string(),
+            "777001".to_string(),
+            "777002".to_string(),
+            "777003".to_string(),
+        ]);
+        let ports = parse_proc_net_tcp_established_ports(sample, &inodes);
+        assert_eq!(ports, vec![25565, 443]);
     }
 }
 

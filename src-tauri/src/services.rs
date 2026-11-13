@@ -1115,7 +1115,7 @@ pub fn copy_to_clipboard(_text: &str) -> bool {
 const DISCORD_CLIENT_ID: &str = "1557874962956550154";
 
 use once_cell::sync::Lazy;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 
 pub static DISCORD_TX: Lazy<mpsc::UnboundedSender<Option<Value>>> = Lazy::new(|| {
@@ -1124,13 +1124,102 @@ pub static DISCORD_TX: Lazy<mpsc::UnboundedSender<Option<Value>>> = Lazy::new(||
     tx
 });
 
+static LAUNCHER_RPC_START_TS: Lazy<Mutex<i64>> = Lazy::new(|| Mutex::new(chrono::Utc::now().timestamp()));
+
+/// Returns whether Discord Rich Presence is enabled in configuration.
+pub fn is_discord_rpc_enabled(cfg: &Value) -> bool {
+    cfg.get("enableDiscordRpc")
+        .or_else(|| cfg.get("discordRpc"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+}
+
+/// Formats a clean human-readable Minecraft version + loader label for RPC.
+pub fn format_version_label(mc_version: &str, loader_type: &str) -> String {
+    let ver = mc_version.trim();
+    if ver.is_empty() {
+        return "Minecraft".to_string();
+    }
+    let ldr = loader_type.trim();
+    if ldr.is_empty() || ldr.eq_ignore_ascii_case("vanilla") {
+        return format!("Verze {}", ver);
+    }
+    let mut chars = ldr.chars();
+    let loader_pretty = match chars.next() {
+        Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str().to_lowercase()),
+        None => String::new(),
+    };
+    format!("Verze {} ({})", ver, loader_pretty)
+}
+
+/// Builds the idle RPC state line from the currently selected profile version.
+pub fn resolve_launcher_idle_state(cfg: &Value) -> String {
+    let active_id = cfg
+        .get("activeProfileId")
+        .or_else(|| cfg.get("selectedProfile"))
+        .and_then(|v| v.as_str());
+
+    if let Some(profiles) = cfg.get("profiles").and_then(|v| v.as_array()) {
+        let profile = active_id
+            .and_then(|id| {
+                profiles
+                    .iter()
+                    .find(|p| p.get("id").and_then(|v| v.as_str()) == Some(id))
+            })
+            .or_else(|| profiles.first());
+
+        if let Some(p) = profile {
+            let ver = p.get("version").and_then(|v| v.as_str()).unwrap_or("");
+            let loader = p.get("loader").and_then(|v| v.as_str()).unwrap_or("");
+            if !ver.trim().is_empty() {
+                return format!("Připraven • {}", format_version_label(ver, loader));
+            }
+        }
+    }
+    "Připraven ke hře".to_string()
+}
+
+/// Sets or clears launcher-idle Discord Rich Presence based on active config.
+pub fn set_launcher_discord_activity(cfg_opt: Option<&Value>, reset_timer: bool) {
+    let loaded;
+    let cfg = match cfg_opt {
+        Some(c) => c,
+        None => {
+            loaded = crate::config::load_config();
+            &loaded
+        }
+    };
+
+    if !is_discord_rpc_enabled(cfg) {
+        clear_discord_activity();
+        return;
+    }
+
+    let start_ts = {
+        let mut guard = LAUNCHER_RPC_START_TS.lock().unwrap();
+        if reset_timer {
+            *guard = chrono::Utc::now().timestamp();
+        }
+        *guard
+    };
+
+    let state = resolve_launcher_idle_state(cfg);
+    set_discord_activity("V launcheru", &state, Some(start_ts));
+}
+
 pub fn set_discord_activity(details: &str, state: &str, start_time: Option<i64>) {
+    let cfg = crate::config::load_config();
+    if !is_discord_rpc_enabled(&cfg) {
+        clear_discord_activity();
+        return;
+    }
+
     let mut act = json!({
         "details": details,
         "state": state,
         "assets": {
             "large_image": "logo",
-            "large_text": "MYCHAL SMP (mychalsmp.xyz)"
+            "large_text": "SMPClient • mychalsmp.xyz"
         }
     });
     if let Some(ts) = start_time {
@@ -1150,6 +1239,73 @@ fn encode_ipc_packet(opcode: u32, payload: &Value) -> Vec<u8> {
     packet.extend_from_slice(&(json_bytes.len() as u32).to_le_bytes());
     packet.extend_from_slice(&json_bytes);
     packet
+}
+
+fn build_set_activity_packet(activity: Option<&Value>) -> Vec<u8> {
+    let mut args = json!({ "pid": std::process::id() });
+    if let Some(act) = activity {
+        args["activity"] = act.clone();
+    } else {
+        args["activity"] = Value::Null;
+    }
+    let frame = json!({
+        "cmd": "SET_ACTIVITY",
+        "args": args,
+        "nonce": uuid::Uuid::new_v4().to_string()
+    });
+    encode_ipc_packet(1, &frame)
+}
+
+async fn run_discord_ipc_stream<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut S,
+    rx: &mut mpsc::UnboundedReceiver<Option<Value>>,
+    current_activity: &mut Option<Value>,
+) -> bool {
+    let handshake = json!({ "v": 1, "client_id": DISCORD_CLIENT_ID });
+    let h_pkt = encode_ipc_packet(0, &handshake);
+    if stream.write_all(&h_pkt).await.is_err() {
+        return true;
+    }
+
+    let mut hdr = [0u8; 8];
+    if stream.read_exact(&mut hdr).await.is_err() {
+        return true;
+    }
+    let len = u32::from_le_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]) as usize;
+    let mut body = vec![0u8; len.min(65536)];
+    let _ = stream.read_exact(&mut body).await;
+
+    let initial_pkt = build_set_activity_packet(current_activity.as_ref());
+    if stream.write_all(&initial_pkt).await.is_err() {
+        return true;
+    }
+
+    let mut read_buf = [0u8; 1024];
+    loop {
+        tokio::select! {
+            msg = rx.recv() => {
+                match msg {
+                    Some(new_act) => {
+                        *current_activity = new_act.clone();
+                        let pkt = build_set_activity_packet(current_activity.as_ref());
+                        if stream.write_all(&pkt).await.is_err() {
+                            return true;
+                        }
+                        if new_act.is_none() {
+                            return true;
+                        }
+                    }
+                    None => return false,
+                }
+            }
+            read_res = stream.read(&mut read_buf) => {
+                match read_res {
+                    Ok(0) | Err(_) => return true,
+                    Ok(_) => {}
+                }
+            }
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -1180,84 +1336,33 @@ async fn discord_rpc_worker(mut rx: mpsc::UnboundedReceiver<Option<Value>>) {
     loop {
         // 1. Zjistit, zda je povolen Discord RPC v konfiguraci
         let cfg = crate::config::load_config();
-        let enabled = cfg.get("enableDiscordRpc").and_then(|v| v.as_bool()).unwrap_or(true);
-        if !enabled {
-            tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
+        if !is_discord_rpc_enabled(&cfg) {
+            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
             while let Ok(msg) = rx.try_recv() {
                 current_activity = msg;
             }
             continue;
         }
 
+        if current_activity.is_none() {
+            let start_ts = *LAUNCHER_RPC_START_TS.lock().unwrap();
+            current_activity = Some(json!({
+                "details": "V launcheru",
+                "state": resolve_launcher_idle_state(&cfg),
+                "timestamps": { "start": start_ts * 1000 },
+                "assets": {
+                    "large_image": "logo",
+                    "large_text": "SMPClient • mychalsmp.xyz"
+                }
+            }));
+        }
+
         // 2. Připojení na Linuxu (Unix domain socket)
         #[cfg(unix)]
-        {
-            if let Some(sock_path) = get_unix_discord_socket() {
-                if let Ok(mut stream) = tokio::net::UnixStream::connect(&sock_path).await {
-                    let handshake = json!({
-                        "v": 1,
-                        "client_id": DISCORD_CLIENT_ID
-                    });
-                    let h_pkt = encode_ipc_packet(0, &handshake);
-                    if stream.write_all(&h_pkt).await.is_ok() {
-                        let mut hdr = [0u8; 8];
-                        if stream.read_exact(&mut hdr).await.is_ok() {
-                            let len = u32::from_le_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]) as usize;
-                            let mut body = vec![0u8; len];
-                            let _ = stream.read_exact(&mut body).await;
-
-                            let act_val = current_activity.clone().unwrap_or_else(|| json!({
-                                "details": "V launcheru",
-                                "state": "mychalsmp.xyz",
-                                "assets": {
-                                    "large_image": "logo",
-                                    "large_text": "MYCHAL SMP (mychalsmp.xyz)"
-                                }
-                            }));
-                            let frame = json!({
-                                "cmd": "SET_ACTIVITY",
-                                "args": {
-                                    "pid": std::process::id(),
-                                    "activity": act_val
-                                },
-                                "nonce": uuid::Uuid::new_v4().to_string()
-                            });
-                            let f_pkt = encode_ipc_packet(1, &frame);
-                            let _ = stream.write_all(&f_pkt).await;
-
-                            let mut read_buf = [0u8; 1024];
-                            loop {
-                                tokio::select! {
-                                    msg = rx.recv() => {
-                                        match msg {
-                                            Some(new_act) => {
-                                                current_activity = new_act.clone();
-                                                let frame_obj = json!({
-                                                    "cmd": "SET_ACTIVITY",
-                                                    "args": {
-                                                        "pid": std::process::id(),
-                                                        "activity": new_act
-                                                    },
-                                                    "nonce": uuid::Uuid::new_v4().to_string()
-                                                });
-                                                let pkt = encode_ipc_packet(1, &frame_obj);
-                                                if stream.write_all(&pkt).await.is_err() {
-                                                    break;
-                                                }
-                                            }
-                                            None => return,
-                                        }
-                                    }
-                                    read_res = stream.read(&mut read_buf) => {
-                                        match read_res {
-                                            Ok(0) | Err(_) => break,
-                                            Ok(_) => {}
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+        if let Some(sock_path) = get_unix_discord_socket() {
+            if let Ok(mut stream) = tokio::net::UnixStream::connect(&sock_path).await {
+                if !run_discord_ipc_stream(&mut stream, &mut rx, &mut current_activity).await {
+                    return;
                 }
             }
         }
@@ -1265,75 +1370,13 @@ async fn discord_rpc_worker(mut rx: mpsc::UnboundedReceiver<Option<Value>>) {
         // 3. Připojení na Windows (Named Pipe)
         #[cfg(windows)]
         {
-            let mut connected_pipe = None;
             for i in 0..10 {
                 let pipe_name = format!(r"\\.\pipe\discord-ipc-{}", i);
-                if let Ok(client) = tokio::net::windows::named_pipe::ClientOptions::new().open(&pipe_name) {
-                    connected_pipe = Some(client);
-                    break;
-                }
-            }
-            if let Some(mut pipe) = connected_pipe {
-                let handshake = json!({ "v": 1, "client_id": DISCORD_CLIENT_ID });
-                let h_pkt = encode_ipc_packet(0, &handshake);
-                if pipe.write_all(&h_pkt).await.is_ok() {
-                    let mut hdr = [0u8; 8];
-                    if pipe.read_exact(&mut hdr).await.is_ok() {
-                        let len = u32::from_le_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]) as usize;
-                        let mut body = vec![0u8; len];
-                        let _ = pipe.read_exact(&mut body).await;
-
-                        let act_val = current_activity.clone().unwrap_or_else(|| json!({
-                            "details": "V launcheru",
-                            "state": "mychalsmp.xyz",
-                            "assets": {
-                                "large_image": "logo",
-                                "large_text": "MYCHAL SMP (mychalsmp.xyz)"
-                            }
-                        }));
-                        let frame = json!({
-                            "cmd": "SET_ACTIVITY",
-                            "args": {
-                                "pid": std::process::id(),
-                                "activity": act_val
-                            },
-                            "nonce": uuid::Uuid::new_v4().to_string()
-                        });
-                        let f_pkt = encode_ipc_packet(1, &frame);
-                        let _ = pipe.write_all(&f_pkt).await;
-
-                        let mut read_buf = [0u8; 1024];
-                        loop {
-                            tokio::select! {
-                                msg = rx.recv() => {
-                                    match msg {
-                                        Some(new_act) => {
-                                            current_activity = new_act.clone();
-                                            let frame_obj = json!({
-                                                "cmd": "SET_ACTIVITY",
-                                                "args": {
-                                                    "pid": std::process::id(),
-                                                    "activity": new_act
-                                                },
-                                                "nonce": uuid::Uuid::new_v4().to_string()
-                                            });
-                                            let pkt = encode_ipc_packet(1, &frame_obj);
-                                            if pipe.write_all(&pkt).await.is_err() {
-                                                break;
-                                            }
-                                        }
-                                        None => return,
-                                    }
-                                }
-                                read_res = pipe.read(&mut read_buf) => {
-                                    match read_res {
-                                        Ok(0) | Err(_) => break,
-                                        Ok(_) => {}
-                                    }
-                                }
-                            }
-                        }
+                if let Ok(mut pipe) = tokio::net::windows::named_pipe::ClientOptions::new().open(&pipe_name) {
+                    if !run_discord_ipc_stream(&mut pipe, &mut rx, &mut current_activity).await {
+                        return;
                     }
+                    break;
                 }
             }
         }
@@ -1942,6 +1985,24 @@ mod tests {
         let res = parse_release_update_payload(&release, "1.7.13", true, false);
         assert_eq!(res.get("hasUpdate").and_then(|v| v.as_bool()), Some(false));
         assert!(res.get("downloadUrl").map(|v| v.is_null()).unwrap_or(true));
+    }
+
+    #[test]
+    fn test_format_version_label_and_idle_state() {
+        assert_eq!(format_version_label("26.3", "fabric"), "Verze 26.3 (Fabric)");
+        assert_eq!(format_version_label("26.3", "vanilla"), "Verze 26.3");
+        assert_eq!(format_version_label("1.21.11", ""), "Verze 1.21.11");
+
+        let cfg = json!({
+            "activeProfileId": "vanilla-26-3",
+            "profiles": [
+                { "id": "mychalsmp-fabric", "version": "26.3", "loader": "fabric" },
+                { "id": "vanilla-26-3", "version": "26.3", "loader": "vanilla" }
+            ]
+        });
+        assert_eq!(resolve_launcher_idle_state(&cfg), "Připraven • Verze 26.3");
+        assert!(!is_discord_rpc_enabled(&json!({ "enableDiscordRpc": false })));
+        assert!(is_discord_rpc_enabled(&json!({ "discordRpc": true })));
     }
 }
 

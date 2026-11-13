@@ -26,7 +26,13 @@ fn get_config() -> Value {
 
 #[tauri::command]
 fn save_config(cfg: Value) -> Value {
-    crate::config::save_config(&cfg)
+    let saved = crate::config::save_config(&cfg);
+    if !crate::services::is_discord_rpc_enabled(&saved) {
+        crate::services::clear_discord_activity();
+    } else if !crate::launcher::is_game_running() {
+        crate::services::set_launcher_discord_activity(Some(&saved), false);
+    }
+    saved
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,8 +367,15 @@ async fn launch_game(
             "launch-progress",
             json!({ "percent": 90, "text": "Spouštění herního procesu..." }),
         );
-        if let Err(e) =
-            crate::launcher::spawn_game_process(&app_clone, spec, pid_clone, prof_dir).await
+        if let Err(e) = crate::launcher::spawn_game_process(
+            &app_clone,
+            spec,
+            pid_clone,
+            prof_dir,
+            mc_ver_owned.clone(),
+            loader_type.to_string(),
+        )
+        .await
         {
             let _ = app_clone.emit(
                 "launch-crash",
@@ -1317,8 +1330,8 @@ pub fn run() {
             delete_profile_pack
         ])
         .setup(|app| {
-            let _ = crate::config::load_config();
-            crate::services::set_discord_activity("V launcheru", "mychalsmp.xyz", Some(chrono::Utc::now().timestamp()));
+            let cfg = crate::config::load_config();
+            crate::services::set_launcher_discord_activity(Some(&cfg), true);
             std::thread::spawn(|| {
                 let _ = crate::services::cleanup_obsolete_electron_files();
                 crate::services::repair_linux_launcher_wrapper();
