@@ -3,6 +3,31 @@
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
+    function normalizeTextureUrl(url) {
+        if (!url || typeof url !== 'string') return '';
+        const trimmed = url.trim();
+        if (trimmed.startsWith('http://textures.minecraft.net/')) {
+            return 'https://' + trimmed.slice('http://'.length);
+        }
+        return trimmed;
+    }
+
+    function toAssetSafeUrl(filePath) {
+        if (!filePath || typeof filePath !== 'string') return '';
+        const normalized = normalizeTextureUrl(filePath);
+        if (/^(https?:|data:|blob:|asset:|tauri:|assets\/)/i.test(normalized)) {
+            return normalized;
+        }
+        if (window.api?.toAssetUrl) {
+            return window.api.toAssetUrl(normalized);
+        }
+        const stripped = normalized.replace(/^file:\/\/(?:localhost)?(?:\/(?=[A-Za-z]:))?/i, '');
+        if (window.__TAURI__?.core?.convertFileSrc) {
+            return window.__TAURI__.core.convertFileSrc(stripped);
+        }
+        return normalized.startsWith('file://') ? normalized : `file://${stripped}`;
+    }
+
     // ── Zákaz nechtěného výběru textu a přetahování prvků (Desktop UI chování) ──
     window.addEventListener('selectstart', (e) => {
         if (!e.target.closest('input, textarea, [contenteditable="true"], .selectable-text, .log-content, .crash-log-body, pre, code')) {
@@ -433,13 +458,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (isLauncherSuspendedInTray) return;
         isLauncherSuspendedInTray = true;
 
-        // 1. Okamžitě zmrazit 3D WebGL renderování v skinview3d (bez 1x1 resize, které by rozbilo FBO/viewport)
-        if (heroSkinViewer) {
-            heroSkinViewer.renderPaused = true;
-        }
-        if (skinViewer) {
-            skinViewer.renderPaused = true;
-        }
+        // 1. Bezpečně uvolnit oba WebGL kontexty při skrytí do traye (prevence korupce shaderů po obnovení)
+        disposeSkinViewerSafely('hero');
+        disposeSkinViewerSafely('character');
 
         // 2. Vynulovat interakce a sledování kurzoru hero modelu
         if (typeof cancelHeroReturn === 'function') cancelHeroReturn();
@@ -562,15 +583,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
 
-        // Nejprve okamžitě pozastavit neaktivní WebGL viewery ještě před synchronizací viditelného vieweru
+        // Udržet vždy maximálně jeden aktivní WebGL kontext (prevence černých skinů na WebKitGTK/NVIDIA)
         if (tabId !== 'play') {
             cancelHeroReturn();
-            if (heroSkinViewer) {
-                heroSkinViewer.renderPaused = true;
-            }
+            disposeSkinViewerSafely('hero');
         }
-        if (tabId !== 'character' && skinViewer) {
-            skinViewer.renderPaused = true;
+        if (tabId !== 'character') {
+            disposeSkinViewerSafely('character');
         }
 
         if (tabId === 'mods') {
@@ -1504,9 +1523,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         let skinSrc;
         if (effectiveSkin) {
-            skinSrc = (effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://') || effectiveSkin.startsWith('assets/'))
-                ? effectiveSkin
-                : `file://${effectiveSkin}`;
+            skinSrc = toAssetSafeUrl(effectiveSkin);
         } else if (displayName.toLowerCase() === 'steve' || displayName.toLowerCase() === 'alex' || displayName === 'Hráč') {
             skinSrc = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
         } else {
@@ -1762,46 +1779,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    function formatPlayerCountLabel(count) {
+        const n = Math.max(0, Math.floor(Number(count) || 0));
+        const unit = n === 1 ? 'hráč' : (n >= 2 && n <= 4 ? 'hráči' : 'hráčů');
+        return `<span class="server-metric-num">${n.toLocaleString('cs-CZ')}</span> ${unit}`;
+    }
+
     function renderServersFullTab() {
         const fullList = document.getElementById('serversFullList');
-        const summaryBar = document.getElementById('serversSummaryBar');
         if (!fullList) return;
         const servers = getSortedServers();
-
-        let onlineCount = 0;
-        let totalPlayers = 0;
-        let totalPlaytimeSec = 0;
-
-        for (const s of servers) {
-            const tel = liveServerTelemetry.get(getServerTelemetryKey(s));
-            const effectiveOnline = tel ? tel.online : s.online;
-            if (effectiveOnline === true) {
-                onlineCount++;
-                if (typeof tel?.playersOnline === 'number') {
-                    totalPlayers += tel.playersOnline;
-                }
-            }
-            totalPlaytimeSec += Number(s.playtimeSeconds) || 0;
-        }
-
-        if (summaryBar) {
-            const anyOnline = onlineCount > 0;
-            const dotClass = servers.length === 0 ? '' : (anyOnline ? 'online' : (liveServerTelemetry.size > 0 ? 'offline' : ''));
-            summaryBar.innerHTML = `
-                <span class="servers-summary-item">
-                    <span class="status-dot ${dotClass}"></span>
-                    Online serverů: <strong>${onlineCount} / ${servers.length}</strong>
-                </span>
-                <span class="servers-summary-sep"></span>
-                <span class="servers-summary-item">
-                    Hráčů celkem: <strong>${totalPlayers}</strong>
-                </span>
-                <span class="servers-summary-sep"></span>
-                <span class="servers-summary-item">
-                    Celkem odehráno: <strong>${totalPlaytimeSec > 0 ? escapeHtml(formatPlaytime(totalPlaytimeSec)) : '0 min'}</strong>
-                </span>
-            `;
-        }
 
         fullList.innerHTML = servers.map(s => {
             const rawIp = String(s.ip || '').trim();
@@ -1826,31 +1813,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 `<span class="server-spec-item">${statusLabel}</span>`
             ];
 
-            if (effectiveOnline === true && typeof tel?.playersOnline === 'number' && typeof tel?.playersMax === 'number') {
-                specSegments.push(`<span class="server-spec-item"><span class="server-metric-num">${tel.playersOnline} / ${tel.playersMax}</span> hráčů</span>`);
+            if (effectiveOnline === true && typeof tel?.playersOnline === 'number') {
+                specSegments.push(`<span class="server-spec-item">${formatPlayerCountLabel(tel.playersOnline)}</span>`);
             }
-
-            if (effectiveOnline === true && typeof tel?.latency === 'number' && tel.latency >= 0) {
-                const latClass = tel.latency < 65 ? 'is-good' : (tel.latency >= 130 ? 'is-high' : '');
-                specSegments.push(`<span class="server-spec-item"><span class="server-metric-num ${latClass}">${tel.latency} ms</span></span>`);
-            }
-
-            if (effectiveOnline === true && tel?.version) {
-                const trimmedVer = tel.version.length > 26 ? `${tel.version.slice(0, 24)}…` : tel.version;
-                specSegments.push(`<span class="server-spec-item">${escapeHtml(trimmedVer)}</span>`);
-            }
-
-            const playCount = Number(s.playCount) || 0;
-            const playSec = Number(s.playtimeSeconds) || 0;
-            specSegments.push(
-                playCount > 0
-                    ? `<span class="server-spec-item">${playCount}× · ${escapeHtml(formatPlaytime(playSec))}</span>`
-                    : '<span class="server-spec-item">Zatím nehráno</span>'
-            );
-
-            const motdHtml = (effectiveOnline === true && tel?.motd)
-                ? `<div class="server-motd-line" title="${escapeHtml(tel.motd)}">${escapeHtml(tel.motd)}</div>`
-                : '';
 
             return `
                 <article class="server-arch-card ${isOfficial ? 'server-arch-card--official' : ''}">
@@ -1861,25 +1826,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="server-arch-info">
                         <div class="server-arch-head">
                             <span class="server-full-name">${escapeHtml(s.name)}</span>
-                            ${isOfficial ? '<span class="server-official-kicker">Oficiální síť</span>' : ''}
-                            ${isPinned ? '<span class="server-pinned-indicator" title="Připnutý server"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--gold" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg> Připnuto</span>' : ''}
+                            ${isOfficial ? '<span class="server-official-kicker">Oficiální</span>' : ''}
                         </div>
                         <div class="server-spec-bar">
-                            <button type="button" class="server-ip-copy-btn" data-copy-ip="${escapeHtml(displayAddr)}" title="Kliknutím zkopíruješ IP adresu">
+                            <button type="button" class="server-ip-copy-btn" data-copy-ip="${escapeHtml(displayAddr)}" title="Zkopírovat adresu serveru">
                                 <span>${escapeHtml(displayAddr)}</span>
                                 <svg class="ui-icon-svg ui-icon-svg--xs copy-ip-icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                             </button>
                             <span class="server-spec-sep"></span>
                             ${specSegments.join('<span class="server-spec-sep"></span>')}
                         </div>
-                        ${motdHtml}
                     </div>
                     <div class="server-arch-actions">
                         <button type="button" class="server-icon-btn btn-pin-server ${isPinned ? 'is-pinned' : ''}" data-server-id="${escapeHtml(s.id)}" title="${isPinned ? 'Odepnout server' : 'Připnout server nahoru'}">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24V17z"></path></svg>
                         </button>
                         ${!isMainMychal ? `<button type="button" class="server-icon-btn is-danger btn-del-server" data-server-id="${escapeHtml(s.id)}" title="Odstranit server"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button>` : ''}
-                        <button type="button" class="mc-btn mc-btn-green btn-quick-join btn-server-join" data-server="${escapeHtml(displayAddr)}" title="Spustit hru a připojit se">
+                        <button type="button" class="mc-btn mc-btn-green btn-quick-join btn-server-join" data-server="${escapeHtml(displayAddr)}">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                             <span>Hrát</span>
                         </button>
@@ -6017,19 +5980,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     function ensureSkinViewerLoopGuarded() {
         if (window.skinview3d && window.skinview3d.SkinViewer && !window.skinview3d.SkinViewer._loopGuarded) {
             window.skinview3d.SkinViewer._loopGuarded = true;
-            const normalizeTextureUrl = (src) => {
-                if (typeof src !== 'string') return src;
-                const trimmed = src.trim();
-                if (!trimmed) return '';
-                if (trimmed.startsWith('http://textures.minecraft.net/')) {
-                    return 'https://textures.minecraft.net/' + trimmed.slice('http://textures.minecraft.net/'.length);
-                }
-                return trimmed;
-            };
             const decodedSkinImageCache = new Map();
             window._clearSkinTextureCache = () => decodedSkinImageCache.clear();
             const preloadSkinImage = (src) => {
-                const canCache = !src.startsWith('file://');
+                const canCache = /^https?:/i.test(src);
                 if (canCache && decodedSkinImageCache.has(src)) {
                     const cachedImg = decodedSkinImageCache.get(src);
                     if (cachedImg && cachedImg.complete && cachedImg.naturalWidth > 0) {
@@ -6094,7 +6048,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return Promise.resolve();
                 }
                 if (typeof source === 'string') {
-                    const url = normalizeTextureUrl(source);
+                    const url = toAssetSafeUrl(source);
                     if (!url) return Promise.resolve();
                     const reqToken = (this._skinReqToken = (this._skinReqToken || 0) + 1);
                     return preloadSkinImage(url).then((img) => {
@@ -6118,7 +6072,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return origLoadCape.call(this, null, options);
                 }
                 if (typeof source === 'string') {
-                    const url = normalizeTextureUrl(source);
+                    const url = toAssetSafeUrl(source);
                     if (!url) {
                         this._capeReqToken = (this._capeReqToken || 0) + 1;
                         return origLoadCape.call(this, null, options);
@@ -6653,14 +6607,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     /**
+     * Disposes a 3D SkinViewer and replaces its canvas to avoid stale WebGL2 contexts.
+     */
+    function disposeSkinViewerSafely(which) {
+        const isHero = which === 'hero';
+        const viewer = isHero ? heroSkinViewer : skinViewer;
+        const canvasId = isHero ? 'heroSkinCanvas3D' : 'skinCanvas3D';
+        if (isHero) {
+            if (typeof cancelHeroReturn === 'function') cancelHeroReturn();
+            heroSkinViewer = null;
+            heroSkinNeedsSync = true;
+        } else {
+            skinViewer = null;
+            characterSkinNeedsSync = true;
+        }
+        if (viewer) {
+            let gl = null;
+            try {
+                gl = viewer.renderer && typeof viewer.renderer.getContext === 'function'
+                    ? viewer.renderer.getContext()
+                    : null;
+            } catch (_) { }
+            try { viewer.renderPaused = true; } catch (_) { }
+            try { viewer.animation = null; } catch (_) { }
+            try {
+                if (viewer.renderer && typeof viewer.renderer.forceContextLoss === 'function') {
+                    viewer.renderer.forceContextLoss();
+                }
+            } catch (_) { }
+            try { viewer.dispose(); } catch (_) { }
+            try {
+                const loseExt = gl && typeof gl.getExtension === 'function'
+                    ? gl.getExtension('WEBGL_lose_context')
+                    : null;
+                if (loseExt) loseExt.loseContext();
+            } catch (_) { }
+        }
+        const canvasEl = document.getElementById(canvasId);
+        if (canvasEl && canvasEl.parentNode) {
+            try {
+                canvasEl.replaceWith(canvasEl.cloneNode(false));
+            } catch (_) { }
+        }
+        return document.getElementById(canvasId);
+    }
+
+    /**
      * Initializes the 3D skin viewer on the main hero dashboard card.
      */
     function initHeroSkinViewer3D(force = false) {
-        const canvas = document.getElementById('heroSkinCanvas3D');
+        let canvas = document.getElementById('heroSkinCanvas3D');
         if (!canvas || !window.skinview3d) return;
         if (!isTabPaneVisible('play')) {
-            heroSkinNeedsSync = true;
-            if (heroSkinViewer) heroSkinViewer.renderPaused = true;
+            disposeSkinViewerSafely('hero');
             return;
         }
         if (heroSkinViewer && !force) {
@@ -6672,14 +6671,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            cancelHeroReturn();
-            if (heroSkinViewer) {
-                try { heroSkinViewer.dispose(); } catch (_) { }
-                heroSkinViewer = null;
-            }
+            disposeSkinViewerSafely('character');
+            canvas = disposeSkinViewerSafely('hero');
+            if (!canvas) return;
 
             document.body.classList.remove('app-in-tray-paused');
-            const isSlim = currentConfig ? (currentConfig.customSkinVariant === 'slim') : false;
+            const isSlim = latestViewerSkinState.skinUrl
+                ? !!latestViewerSkinState.isSlim
+                : (currentConfig ? (currentConfig.customSkinVariant === 'slim') : false);
             heroSkinViewer = new window.skinview3d.SkinViewer({
                 canvas: canvas,
                 width: 220,
@@ -6762,35 +6761,44 @@ document.addEventListener('DOMContentLoaded', async () => {
             canvas.onpointercancel = onPointerEnd;
 
             // Load current skin & cape immediately
-            if (currentConfig) {
-                const isMicrosoft = currentConfig.authType === 'microsoft';
-                const effectiveSkin = currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
-                const msName = currentConfig.microsoftAccount?.name || currentConfig.microsoftAccount?.username;
-                const name = (isMicrosoft ? msName : currentConfig.username) || 'Hráč';
-                let skinSrc;
-                if (effectiveSkin) {
-                    skinSrc = (effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://') || effectiveSkin.startsWith('assets/')) ? effectiveSkin : `file://${effectiveSkin}`;
-                } else if (name.toLowerCase() === 'steve' || name.toLowerCase() === 'alex' || name === 'Hráč') {
-                    skinSrc = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
-                } else {
-                    skinSrc = `https://minotar.net/skin/${encodeURIComponent(name)}`;
+            if (currentConfig || latestViewerSkinState.skinUrl) {
+                let skinSrc = latestViewerSkinState.skinUrl;
+                if (!skinSrc && currentConfig) {
+                    const isMicrosoft = currentConfig.authType === 'microsoft';
+                    const effectiveSkin = currentConfig.customSkinPath || (isMicrosoft && currentConfig.microsoftAccount ? currentConfig.microsoftAccount.skinUrl : null);
+                    const msName = currentConfig.microsoftAccount?.name || currentConfig.microsoftAccount?.username;
+                    const name = (isMicrosoft ? msName : currentConfig.username) || 'Hráč';
+                    if (effectiveSkin) {
+                        skinSrc = toAssetSafeUrl(effectiveSkin);
+                    } else if (name.toLowerCase() === 'steve' || name.toLowerCase() === 'alex' || name === 'Hráč') {
+                        skinSrc = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
+                    } else {
+                        skinSrc = `https://minotar.net/skin/${encodeURIComponent(name)}`;
+                    }
                 }
-                const effectiveCape = getEffectiveCape();
+                const effectiveCape = latestViewerSkinState.capeUrl !== undefined
+                    ? latestViewerSkinState.capeUrl
+                    : (currentConfig ? getEffectiveCape() : null);
 
-                const pSkin = heroSkinViewer.loadSkin(skinSrc, { model: isSlim ? 'slim' : 'default' });
-                if (pSkin && typeof pSkin.then === 'function') {
-                    pSkin.then(() => {
-                        if (heroSkinImg) heroSkinImg.classList.add('is-hidden');
-                        try { heroSkinViewer?.render(); } catch (_) { }
-                    }).catch(err => {
-                        console.warn('[HERO 3D] loadSkin init failed:', err);
-                        if (heroSkinImg) heroSkinImg.classList.remove('is-hidden');
-                    });
+                heroSkinNeedsSync = false;
+                if (skinSrc) {
+                    const pSkin = heroSkinViewer.loadSkin(skinSrc, { model: isSlim ? 'slim' : 'default' });
+                    if (pSkin && typeof pSkin.then === 'function') {
+                        pSkin.then(() => {
+                            if (heroSkinImg) heroSkinImg.classList.add('is-hidden');
+                            try { heroSkinViewer?.render(); } catch (_) { }
+                        }).catch(err => {
+                            console.warn('[HERO 3D] loadSkin init failed:', err);
+                            if (heroSkinImg) heroSkinImg.classList.remove('is-hidden');
+                        });
+                    }
                 }
                 if (effectiveCape) {
                     const pCape = heroSkinViewer.loadCape(effectiveCape, { backEquipment: 'cape' });
-                    if (pCape && typeof pCape.catch === 'function') {
-                        pCape.catch(err => console.warn('[HERO 3D] loadCape init failed:', err));
+                    if (pCape && typeof pCape.then === 'function') {
+                        pCape.then(() => {
+                            try { heroSkinViewer?.render(); } catch (_) { }
+                        }).catch(err => console.warn('[HERO 3D] loadCape init failed:', err));
                     }
                 }
             }
@@ -6859,19 +6867,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function initSkinViewer3D() {
-        const canvas3D = document.getElementById('skinCanvas3D');
+        let canvas3D = document.getElementById('skinCanvas3D');
         if (!canvas3D || !window.skinview3d) return;
         if (!isTabPaneVisible('character')) {
-            characterSkinNeedsSync = true;
-            if (skinViewer) skinViewer.renderPaused = true;
+            disposeSkinViewerSafely('character');
             return;
         }
 
         try {
-            if (skinViewer) {
-                skinViewer.dispose();
-                skinViewer = null;
-            }
+            disposeSkinViewerSafely('hero');
+            canvas3D = disposeSkinViewerSafely('character');
+            if (!canvas3D) return;
 
             skinViewer = new window.skinview3d.SkinViewer({
                 canvas: canvas3D,
@@ -6888,11 +6894,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             skinViewer.fov = 46;
             if (skinViewer.playerObject) {
                 skinViewer.playerObject.position.y = -1;
+                skinViewer.playerObject.backEquipment = isBackEquipmentElytra ? 'elytra' : 'cape';
             }
             skinViewer.controls.enableRotate = true;
             skinViewer.controls.enableZoom = true;
             skinViewer.controls.enablePan = false;
-            skinViewer.animation = createCapeIdleAnimation() || new window.skinview3d.IdleAnimation();
+            skinViewer.autoRotate = isAutoRotateActive;
+            skinViewer.autoRotateSpeed = 1.8;
+            skinViewer.animation = isFlyingAnimationActive
+                ? (createCapeFlyingAnimation() || new window.skinview3d.FlyingAnimation())
+                : (createCapeIdleAnimation() || new window.skinview3d.IdleAnimation());
 
             // 3D Toolbar Buttons: [ 360° ] [ Plášť ] [ Létání ]
             const btnRotate = document.getElementById('btn3DRotateToggle');
@@ -6902,6 +6913,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const labelFlying = document.getElementById('label3DFlying');
 
             if (btnRotate) {
+                btnRotate.classList.toggle('active', isAutoRotateActive);
                 btnRotate.onclick = () => {
                     if (!skinViewer) return;
                     isAutoRotateActive = !isAutoRotateActive;
@@ -6912,6 +6924,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (btnElytra) {
+                if (labelElytra) labelElytra.textContent = isBackEquipmentElytra ? 'Elytra' : 'Plášť';
+                btnElytra.classList.toggle('active', !isBackEquipmentElytra);
                 btnElytra.onclick = () => {
                     if (!skinViewer) return;
                     isBackEquipmentElytra = !isBackEquipmentElytra;
@@ -6922,6 +6936,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (btnFlying) {
+                if (labelFlying) labelFlying.textContent = isFlyingAnimationActive ? 'Postavit' : 'Létání';
+                btnFlying.classList.toggle('active', isFlyingAnimationActive);
                 btnFlying.onclick = () => {
                     if (!skinViewer) return;
                     isFlyingAnimationActive = !isFlyingAnimationActive;
@@ -6968,15 +6984,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             skinViewer.renderPaused = isLauncherSuspendedInTray;
             if (skinUrl) {
                 const pSkin = skinViewer.loadSkin(skinUrl, { model: isSlim ? 'slim' : 'default' });
-                if (pSkin && typeof pSkin.catch === 'function') {
-                    pSkin.catch(err => console.warn('[3D VIEWER] loadSkin failed:', err));
+                if (pSkin && typeof pSkin.then === 'function') {
+                    pSkin.then(() => {
+                        try { skinViewer?.render(); } catch (_) { }
+                    }).catch(err => console.warn('[3D VIEWER] loadSkin failed:', err));
                 }
             }
 
             if (capeUrl) {
                 const pCape = skinViewer.loadCape(capeUrl, { backEquipment: isBackEquipmentElytra ? 'elytra' : 'cape' });
-                if (pCape && typeof pCape.catch === 'function') {
-                    pCape.catch(err => console.warn('[3D VIEWER] loadCape failed:', err));
+                if (pCape && typeof pCape.then === 'function') {
+                    pCape.then(() => {
+                        try { skinViewer?.render(); } catch (_) { }
+                    }).catch(err => console.warn('[3D VIEWER] loadCape failed:', err));
                 }
             } else if (capeUrl === null) {
                 skinViewer.loadCape(null);
@@ -7005,7 +7025,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         let skinSrc;
         if (effectiveSkin) {
-            skinSrc = (effectiveSkin.startsWith('http') || effectiveSkin.startsWith('file://') || effectiveSkin.startsWith('assets/')) ? effectiveSkin : `file://${effectiveSkin}`;
+            skinSrc = toAssetSafeUrl(effectiveSkin);
         } else if (name.toLowerCase() === 'steve' || name.toLowerCase() === 'alex' || name === 'Hráč') {
             skinSrc = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
         } else {
@@ -7030,16 +7050,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     function drawSkinToCanvas(imgSrc, isSlim = false) {
         const canvas = document.getElementById('skinCanvas2D');
         const previewImg = document.getElementById('skinPreviewImg');
-        const canvas3D = document.getElementById('skinCanvas3D');
-
-        // Always update 3D Skin Viewer
-        updateSkinViewer3D(imgSrc, lastLoadedCapeUrl, isSlim);
         if (!canvas) return;
+
+        const resolvedImgSrc = toAssetSafeUrl(imgSrc);
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
 
         const img = new Image();
-        img.crossOrigin = 'anonymous';
+        if (/^https?:/i.test(resolvedImgSrc)) img.crossOrigin = 'anonymous';
         img.onload = () => {
             canvas.width = 128;
             canvas.height = 256;
@@ -7110,10 +7128,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             canvas.style.display = 'none';
             if (previewImg) {
                 previewImg.style.display = 'block';
-                previewImg.src = imgSrc;
+                previewImg.src = resolvedImgSrc;
             }
         };
-        img.src = imgSrc;
+        img.src = resolvedImgSrc;
     }
 
     // ── Cape Thumbnail Renderer (Upright 10:16 Minecraft Model, Razor Sharp) ─────
@@ -7122,8 +7140,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
+        const resolvedImgSrc = toAssetSafeUrl(imgSrc);
         const img = new Image();
-        img.crossOrigin = 'anonymous';
+        if (/^https?:/i.test(resolvedImgSrc)) img.crossOrigin = 'anonymous';
         img.onload = () => {
             // Použijeme přesný 8x celočíselný násobek Minecraft 10x16 poměru (80x128)
             canvas.width = 80;
@@ -7153,7 +7172,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ctx.fillStyle = '#0a67e5';
             ctx.fillRect(0, 0, 80, 128);
         };
-        img.src = imgSrc;
+        img.src = resolvedImgSrc;
     }
 
     // ── Mojang Capes Fetcher & Renderer ─────────────────────────────────────
@@ -7186,6 +7205,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                     lastLoadedSkinUrl = activeSkin.url;
                     drawSkinToCanvas(activeSkin.url, isSlimArm);
+                    updateSkinViewer3D(activeSkin.url, getEffectiveCape(), isSlimArm);
+                    updateHeroSkinViewer3D(activeSkin.url, getEffectiveCape(), isSlimArm);
                 }
 
                 const capes = res.profile.capes || [];
@@ -7364,8 +7385,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     appendLog('[MOJANG] Skin aktualizován na serverech Mojang.');
                     if (res.skin && res.skin.url) {
                         currentConfig.customSkinPath = filePath;
-                        drawSkinToCanvas(res.skin.url, variant === 'slim');
-                        updateHeroSkinViewer3D(res.skin.url, getEffectiveCape(), variant === 'slim');
+                        const isSlim = variant === 'slim';
+                        drawSkinToCanvas(res.skin.url, isSlim);
+                        updateSkinViewer3D(res.skin.url, getEffectiveCape(), isSlim);
+                        updateHeroSkinViewer3D(res.skin.url, getEffectiveCape(), isSlim);
                     }
                 } else {
                     showToast('Chyba při nahrávání na Mojang: ' + (res.error || 'Neznámá chyba'), 'error');
@@ -8319,7 +8342,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             screenshotsGridContainer.innerHTML = items.map(sc => `
                 <div class="screenshot-card" data-path="${escapeHtml(sc.fullPath)}">
                     <div class="screenshot-thumb-box" title="Otevřít">
-                        <img src="${sc.thumbUrl}" alt="${escapeHtml(sc.filename)}" class="screenshot-thumb-img" loading="lazy">
+                        <img src="${escapeHtml(toAssetSafeUrl(sc.fullPath || sc.thumbUrl))}" alt="${escapeHtml(sc.filename)}" class="screenshot-thumb-img" loading="lazy">
                         <div class="screenshot-overlay">
                             <button type="button" class="btn-screenshot-copy" data-path="${escapeHtml(sc.fullPath)}" title="Kopírovat do schránky">
                                 <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">

@@ -12,6 +12,21 @@
   const internals = window.__TAURI_INTERNALS__;
   if (!tauri && !internals) return;
 
+  function toAssetUrl(filePath) {
+    if (!filePath || typeof filePath !== 'string') return '';
+    if (/^(https?:|data:|blob:|asset:|tauri:|assets\/)/i.test(filePath)) return filePath;
+    const cleanPath = filePath.replace(/^file:\/\/(?:localhost)?(?:\/(?=[A-Za-z]:))?/i, '');
+    try {
+      if (tauri?.core?.convertFileSrc) {
+        return tauri.core.convertFileSrc(cleanPath);
+      }
+      if (internals?.convertFileSrc) {
+        return internals.convertFileSrc(cleanPath);
+      }
+    } catch (_) {}
+    return cleanPath.startsWith('/') ? `file://${cleanPath}` : filePath;
+  }
+
   const invoke = (cmd, args = {}) => {
     if (tauri && tauri.core && typeof tauri.core.invoke === 'function') {
       return tauri.core.invoke(cmd, args);
@@ -44,6 +59,7 @@
 
   window.api = {
     platform,
+    toAssetUrl,
 
     // Configuration
     getConfig: () => invoke('get_config'),
@@ -115,7 +131,17 @@
     resetKeybindsDefault: () => invoke('reset_keybinds_default'),
 
     // Key Arts & Version Backgrounds
-    getKeyarts: () => invoke('get_available_keyarts'),
+    getKeyarts: async () => {
+      const res = await invoke('get_available_keyarts');
+      if (res && typeof res === 'object') {
+        const mapped = {};
+        for (const [k, v] of Object.entries(res)) {
+          mapped[k] = typeof v === 'string' ? toAssetUrl(v) : v;
+        }
+        return mapped;
+      }
+      return res;
+    },
     openKeyartsFolder: () => invoke('open_keyarts_folder'),
 
     // Event Listeners
@@ -173,7 +199,16 @@
     onAuthStatus: (callback) => on('auth-status', (data) => callback(typeof data === 'string' ? data : (data?.message || JSON.stringify(data)))),
 
     // Screenshots Gallery
-    getProfileScreenshots: (profileId) => invoke('get_profile_screenshots', { profileId: profileId ?? null }),
+    getProfileScreenshots: async (profileId) => {
+      const res = await invoke('get_profile_screenshots', { profileId: profileId ?? null });
+      if (res && Array.isArray(res.screenshots)) {
+        res.screenshots = res.screenshots.map(sc => ({
+          ...sc,
+          thumbUrl: toAssetUrl(sc.fullPath || sc.thumbUrl)
+        }));
+      }
+      return res;
+    },
     copyScreenshotToClipboard: (fullPath) => invoke('copy_screenshot_to_clipboard', { fullPath }),
     deleteScreenshot: (fullPath) => invoke('delete_screenshot', { fullPath }),
     openFilePath: (fullPath) => invoke('open_file_path', { fullPath }),

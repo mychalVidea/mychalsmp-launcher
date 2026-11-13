@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
         rel="stylesheet" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/style.css?v=1.5.9">
+    <link rel="stylesheet" href="css/style.css?v=1.6.0">
 </head>
 
 <body>
@@ -226,7 +226,7 @@
                                 </div>
                             </div>
                             <div class="stage-character">
-                                <div class="stage-skin-wrapper" id="heroSkinWrapper" title="3D náhled">
+                                <div class="stage-skin-wrapper" id="heroSkinWrapper">
                                     <canvas id="heroSkinCanvas3D" class="hero-3d-canvas" width="220"
                                         height="280"></canvas>
                                     <img src="assets/default_steve.png" alt="Skin" id="heroSkinImg" class="stage-skin">
@@ -965,7 +965,7 @@
 
                         <!-- Clean Segmented 3D Toolbar -->
                         <div class="viewer-3d-toolbar-clean">
-                            <button type="button" class="btn-3d-chip" id="btn3DRotateToggle" title="Rotace">
+                            <button type="button" class="btn-3d-chip" id="btn3DRotateToggle" aria-label="Rotace">
                                 <span>
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <polyline points="23 4 23 10 17 10"></polyline>
@@ -977,7 +977,7 @@
                                 </span>
                             </button>
                             <button type="button" class="btn-3d-chip active" id="btn3DElytraToggle"
-                                title="Plášť / Elytra">
+                                aria-label="Plášť / Elytra">
                                 <span id="label3DElytra">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path>
@@ -987,7 +987,7 @@
                                     Plášť
                                 </span>
                             </button>
-                            <button type="button" class="btn-3d-chip" id="btn3DFlyingToggle" title="Poloha při letu">
+                            <button type="button" class="btn-3d-chip" id="btn3DFlyingToggle" aria-label="Poloha při letu">
                                 <span id="label3DFlying">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <path
@@ -1203,15 +1203,15 @@
                 <div class="pane-header pane-header--with-actions servers-pane-header">
                     <div class="pane-header-title">
                         <h2>Servery</h2>
-                        <p>Živá odezva sítě, připojení na jeden klik a vlastní servery.</p>
+                        <p>Vyber si server a klikni na Hrát.</p>
                     </div>
                     <div class="pane-header-actions">
-                        <button type="button" class="mc-btn mc-btn-secondary btn-compact servers-refresh-btn" id="btnRefreshServersStatus" title="Znovu ověřit dostupnost a ping všech serverů">
+                        <button type="button" class="mc-btn mc-btn-secondary btn-compact servers-refresh-btn" id="btnRefreshServersStatus" title="Znovu zkontrolovat servery">
                             <svg class="ui-icon-svg ui-icon-svg--xs server-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="23 4 23 10 17 10"></polyline>
                                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                             </svg>
-                            <span>Obnovit stav</span>
+                            <span>Obnovit</span>
                         </button>
                         <button type="button" class="mc-btn mc-btn-primary btn-compact" id="btnOpenAddServerTab">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -1221,10 +1221,6 @@
                             <span>Přidat server</span>
                         </button>
                     </div>
-                </div>
-
-                <div class="servers-summary-bar" id="serversSummaryBar">
-                    <!-- Inline typographic summary populated via JS -->
                 </div>
 
                 <div class="servers-full-list" id="serversFullList">
@@ -3418,8 +3414,8 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <script src="js/lib/skinview3d.bundle.js"></script>
-    <script src="js/tauri-bridge.js?v=1.5.4"></script>
-    <script src="js/app.js?v=1.5.9"></script>
+    <script src="js/tauri-bridge.js?v=1.6.0"></script>
+    <script src="js/app.js?v=1.6.0"></script>
 </body>
 
 </html>
