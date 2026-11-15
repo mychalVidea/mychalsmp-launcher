@@ -6688,9 +6688,23 @@ input[type="range"].slider.is-dragging::-webkit-slider-thumb {
     background: var(--surface-hover, #202026);
 }
 
-.perf-toggle-card:has(input[type="checkbox"]:checked) {
+.perf-toggle-card:has(input[type="checkbox"]:checked:not(:disabled)) {
     border-color: rgba(10, 103, 229, 0.45);
     background: rgba(10, 103, 229, 0.08);
+}
+
+.perf-toggle-card.is-unavailable,
+.perf-toggle-card:has(input:disabled) {
+    opacity: 0.52;
+    cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.05);
+    background: rgba(18, 18, 21, 0.72);
+}
+
+.perf-toggle-card.is-unavailable:hover,
+.perf-toggle-card:has(input:disabled):hover {
+    border-color: rgba(255, 255, 255, 0.05);
+    background: rgba(18, 18, 21, 0.72);
 }
 
 .perf-toggle-card input[type="checkbox"] {
@@ -6701,7 +6715,100 @@ input[type="range"].slider.is-dragging::-webkit-slider-thumb {
 .perf-toggle-info {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
+    min-width: 0;
+}
+
+.perf-toggle-reason {
+    font-size: 11px;
+    line-height: 1.35;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+.perf-toggle-card.is-unavailable .perf-toggle-reason {
+    color: #94a3b8;
+}
+
+.perf-toggle-reason--ready {
+    color: #21DE00;
+}
+
+.perf-toggle-warning {
+    font-size: 11px;
+    line-height: 1.35;
+    color: #f59e0b;
+    margin-top: 2px;
+}
+
+.perf-subsection {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.perf-subsection-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.perf-subsection-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #cbd5e1;
+}
+
+.perf-subsection-hint {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.gpu-spec-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    margin-top: 8px;
+    padding: 0 2px;
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+.gpu-spec-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.gpu-spec-key {
+    color: #64748b;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.gpu-spec-val {
+    color: #e2e8f0;
+    font-weight: 500;
+}
+
+.gpu-spec-divider {
+    width: 1px;
+    height: 11px;
+    background: rgba(255, 255, 255, 0.12);
+    flex-shrink: 0;
+}
+
+.radio-label--backend.is-unavailable {
+    opacity: 0.48;
+    cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.05);
 }
 
 /* ── Settings Tools Row (Cache Cleaner & Updater) ─────────────────── */

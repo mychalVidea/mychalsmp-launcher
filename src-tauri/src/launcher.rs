@@ -98,6 +98,743 @@ pub struct LaunchSpec {
     pub game_args: Vec<String>,
     pub env_vars: HashMap<String, String>,
     pub working_dir: PathBuf,
+    #[serde(default)]
+    pub wrapper: Option<PathBuf>,
+    #[serde(default)]
+    pub high_priority: bool,
+}
+
+fn cfg_bool(config: &serde_json::Value, key: &str, default: bool) -> bool {
+    config.get(key).and_then(|v| v.as_bool()).unwrap_or(default)
+}
+
+fn is_valid_env_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+pub fn parse_custom_env_vars(val: &serde_json::Value) -> Vec<(String, String)> {
+    let mut pairs = Vec::new();
+    match val {
+        serde_json::Value::Object(map) => {
+            for (k, v) in map {
+                let key = k.trim();
+                if !is_valid_env_key(key) {
+                    continue;
+                }
+                if let Some(s) = v.as_str() {
+                    pairs.push((key.to_string(), s.to_string()));
+                } else if v.is_number() || v.is_boolean() {
+                    pairs.push((key.to_string(), v.to_string()));
+                }
+            }
+        }
+        serde_json::Value::String(text) => {
+            for raw_line in text.lines() {
+                parse_env_assignment_line(raw_line, &mut pairs);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                if let Some(line) = item.as_str() {
+                    parse_env_assignment_line(line, &mut pairs);
+                }
+            }
+        }
+        _ => {}
+    }
+    pairs
+}
+
+fn parse_env_assignment_line(raw_line: &str, out: &mut Vec<(String, String)>) {
+    let mut line = raw_line.trim();
+    if line.is_empty()
+        || line.starts_with('#')
+        || line.starts_with("//")
+        || line.starts_with(';')
+    {
+        return;
+    }
+    if let Some(rest) = line.strip_prefix("export ") {
+        line = rest.trim_start();
+    }
+    let Some((raw_key, raw_val)) = line.split_once('=') else {
+        return;
+    };
+    let key = raw_key.trim();
+    if !is_valid_env_key(key) {
+        return;
+    }
+    let trimmed_val = raw_val.trim();
+    let unquoted = if trimmed_val.len() >= 2
+        && ((trimmed_val.starts_with('"') && trimmed_val.ends_with('"'))
+            || (trimmed_val.starts_with('\'') && trimmed_val.ends_with('\'')))
+    {
+        &trimmed_val[1..trimmed_val.len() - 1]
+    } else {
+        trimmed_val
+    };
+    out.push((key.to_string(), unquoted.to_string()));
+}
+
+pub fn parse_mc_major_minor(version_id: &str) -> Option<(u32, u32)> {
+    // Handles vanilla ("26.3", "1.21.11") and modded IDs ("fabric-loader-0.18.4-26.3", "26.3-fabric")
+    for token in version_id.split(|c: char| c == '-' || c == '_' || c == '+') {
+        let mut nums = token
+            .split('.')
+            .filter_map(|part| {
+                let digits: String = part.chars().take_while(|c| c.is_ascii_digit()).collect();
+                if digits.is_empty() {
+                    None
+                } else {
+                    digits.parse::<u32>().ok()
+                }
+            });
+        if let (Some(major), Some(minor)) = (nums.next(), nums.next()) {
+            // Skip loader versions like 0.18.4; keep MC versions 1.x or 26+ (2026+ drop-era)
+            if major == 1 || major >= 26 {
+                return Some((major, minor));
+            }
+        }
+    }
+    None
+}
+
+fn jar_has_graphics_backend_class(path: &std::path::Path) -> bool {
+    let Ok(file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let Ok(mut archive) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    let Ok(mut entry) = archive.by_name("net/minecraft/client/main/Main.class") else {
+        return false;
+    };
+    let mut buf = Vec::new();
+    if std::io::Read::read_to_end(&mut entry, &mut buf).is_err() {
+        return false;
+    }
+    crate::services::bytes_contain_subslice(&buf, b"graphicsBackend")
+}
+
+pub fn supports_graphics_backend(version_hint: Option<&str>, classpath_paths: &[PathBuf]) -> bool {
+    if let Some(ver) = version_hint {
+        if let Some((major, minor)) = parse_mc_major_minor(ver) {
+            return (major, minor) >= (26, 2);
+        }
+    }
+    for path in classpath_paths {
+        let s = path.to_string_lossy();
+        let is_version_jar = (s.contains("/versions/") || s.contains("\\versions\\"))
+            && path.extension().and_then(|e| e.to_str()) == Some("jar");
+        if is_version_jar {
+            if let Some(stem) = path.file_stem().and_then(|n| n.to_str()) {
+                if let Some((major, minor)) = parse_mc_major_minor(stem) {
+                    return (major, minor) >= (26, 2);
+                }
+            }
+            if jar_has_graphics_backend_class(path) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn extract_mc_version_from_game_args(game_args: &[String]) -> Option<&str> {
+    let mut iter = game_args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--version" {
+            return iter.next().map(String::as_str);
+        }
+    }
+    None
+}
+
+pub fn is_executable_wrapper(path: &std::path::Path) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !meta.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+pub fn apply_capability_launch_tuning(
+    config: &serde_json::Value,
+    target_os: TargetOs,
+    caps: &crate::services::SystemCapabilities,
+    classpath_paths: &[PathBuf],
+    jvm_args: &mut Vec<String>,
+    game_args: &mut Vec<String>,
+    env_vars: &mut HashMap<String, String>,
+    host_ld_preload: Option<&str>,
+) -> (Option<PathBuf>, bool) {
+    let mut wrapper: Option<PathBuf> = None;
+    let mut high_priority = false;
+
+    // 1. Render API backend (--graphicsBackend on MC 26.2+)
+    let requested_backend = config
+        .get("graphicsBackend")
+        .and_then(|v| v.as_str())
+        .unwrap_or("default")
+        .trim()
+        .to_lowercase();
+    let effective_backend = match requested_backend.as_str() {
+        "vulkan" if caps.has_vulkan => "vulkan",
+        "opengl" => "opengl",
+        _ => "default",
+    };
+    let is_vulkan_backend = effective_backend == "vulkan";
+
+    let version_hint = extract_mc_version_from_game_args(game_args);
+    let already_has_backend_arg = game_args
+        .iter()
+        .any(|a| a == "--graphicsBackend" || a.starts_with("--graphicsBackend="));
+    if (effective_backend == "vulkan" || effective_backend == "opengl")
+        && !already_has_backend_arg
+        && supports_graphics_backend(version_hint, classpath_paths)
+    {
+        game_args.push("--graphicsBackend".to_string());
+        game_args.push(effective_backend.to_string());
+    }
+
+    // 2. OS & Hardware/Session Capability-Gated Performance Tuning
+    if target_os == TargetOs::Linux {
+        let want_wayland = cfg_bool(config, "enableNativeWayland", false);
+        if want_wayland && caps.has_wayland {
+            env_vars.insert("GLFW_PLATFORM".to_string(), "wayland".to_string());
+            env_vars.insert("SDL_VIDEODRIVER".to_string(), "wayland".to_string());
+            env_vars.insert("GDK_BACKEND".to_string(), "wayland,x11".to_string());
+
+            let want_sys_glfw = cfg_bool(config, "preferSystemGlfw", false);
+            let has_user_glfw_override = jvm_args
+                .iter()
+                .any(|a| a.starts_with("-Dorg.lwjgl.glfw.libname="));
+            if want_sys_glfw && caps.system_glfw_wayland && !has_user_glfw_override {
+                if let Some(ref glfw_path) = caps.system_glfw_path {
+                    if !glfw_path.is_empty() {
+                        jvm_args.push(format!("-Dorg.lwjgl.glfw.libname={}", glfw_path));
+                    }
+                }
+            }
+        }
+
+        // Zink translates OpenGL -> Vulkan; skip if native Vulkan Render API is active
+        let use_zink =
+            !is_vulkan_backend && caps.has_vulkan && cfg_bool(config, "enableZink", false);
+
+        // Hybrid GPU PRIME offload (strictly gated on dual-GPU / hybrid systems)
+        if caps.is_hybrid_gpu && cfg_bool(config, "enableDiscreteGpu", true) {
+            if caps.has_nvidia_proprietary {
+                env_vars.insert("__VK_LAYER_NV_optimus".to_string(), "NVIDIA_only".to_string());
+                if !is_vulkan_backend && !use_zink {
+                    env_vars.insert("__NV_PRIME_RENDER_OFFLOAD".to_string(), "1".to_string());
+                    env_vars.insert("__GLX_VENDOR_LIBRARY_NAME".to_string(), "nvidia".to_string());
+                }
+            } else {
+                // Mesa (AMD/Intel or Nouveau) PRIME offload works for both OpenGL and Vulkan
+                env_vars.insert("DRI_PRIME".to_string(), "1".to_string());
+            }
+        }
+
+        // NVIDIA proprietary OpenGL optimizations (only in OpenGL mode, never Nouveau/Zink/Vulkan)
+        if caps.has_nvidia_proprietary && !is_vulkan_backend && !use_zink {
+            if cfg_bool(config, "enableNvidiaThreadedOpt", true) {
+                env_vars.insert("__GL_THREADED_OPTIMIZATIONS".to_string(), "1".to_string());
+            }
+            if caps.cpu_cores >= 4 && cfg_bool(config, "enableNvidiaBusyWait", false) {
+                env_vars.insert("__GL_YIELD".to_string(), "NOTHING".to_string());
+            }
+        }
+
+        // Mesa Zink overrides
+        if use_zink {
+            env_vars.insert("MESA_LOADER_DRIVER_OVERRIDE".to_string(), "zink".to_string());
+            env_vars.insert("GALLIUM_DRIVER".to_string(), "zink".to_string());
+            if caps.has_nvidia_proprietary {
+                env_vars.insert("__GLX_VENDOR_LIBRARY_NAME".to_string(), "mesa".to_string());
+            }
+        }
+
+        // V-Sync disable (OpenGL / Zink only; Vulkan manages present modes internally)
+        if !is_vulkan_backend && cfg_bool(config, "disableVsync", false) {
+            if caps.has_nvidia_proprietary && !use_zink {
+                env_vars.insert("__GL_SYNC_TO_VBLANK".to_string(), "0".to_string());
+            } else {
+                env_vars.insert("vblank_mode".to_string(), "0".to_string());
+            }
+        }
+
+        // GameMode wrapper (prevent double-wrapping when libgamemodeauto is already preloaded)
+        let host_has_gamemode = host_ld_preload
+            .map(|v| v.contains("libgamemodeauto"))
+            .unwrap_or(false);
+        if !host_has_gamemode && cfg_bool(config, "enableGameMode", true) && caps.has_gamemode_run
+        {
+            if let Some(ref gm_path) = caps.gamemode_path {
+                if !gm_path.is_empty() {
+                    wrapper = Some(PathBuf::from(gm_path));
+                }
+            }
+        }
+    } else if target_os == TargetOs::Windows {
+        if cfg_bool(config, "winDedicatedGpu", true)
+            && (caps.is_hybrid_gpu || caps.is_dedicated_gpu)
+        {
+            env_vars.insert("SHIM_MCCOMPAT".to_string(), "0xD4000000".to_string());
+        }
+        high_priority = cfg_bool(config, "winHighPriority", true);
+    }
+
+    // 3. User Custom Env Vars (applied LAST so manual overrides always win)
+    if let Some(custom_val) = config.get("customEnvVars") {
+        for (k, v) in parse_custom_env_vars(custom_val) {
+            env_vars.insert(k, v);
+        }
+    }
+
+    // Re-check LD_PRELOAD after customEnvVars in case user injected libgamemodeauto manually
+    if env_vars
+        .get("LD_PRELOAD")
+        .is_some_and(|v| v.contains("libgamemodeauto"))
+    {
+        wrapper = None;
+    }
+
+    (wrapper, high_priority)
+}
+
+#[cfg(test)]
+mod capability_gating_tests {
+    use super::*;
+    use crate::services::{GpuDeviceInfo, SystemCapabilities};
+
+    fn base_linux_nvidia_wayland_caps() -> SystemCapabilities {
+        SystemCapabilities {
+            platform: "linux".to_string(),
+            arch: "x86_64".to_string(),
+            gpu_name: "NVIDIA GeForce RTX 4070".to_string(),
+            is_dedicated_gpu: true,
+            gpu_vendor: "nvidia".to_string(),
+            is_hybrid_gpu: false,
+            has_nvidia_gpu: true,
+            has_nvidia_proprietary: true,
+            nvidia_driver: Some("nvidia".to_string()),
+            has_amd_gpu: false,
+            has_intel_gpu: false,
+            gpus: vec![GpuDeviceInfo {
+                name: "NVIDIA GeForce RTX 4070".to_string(),
+                vendor: "nvidia".to_string(),
+                is_dedicated: true,
+                driver: Some("nvidia".to_string()),
+                boot_vga: Some(true),
+            }],
+            cpu_cores: 8,
+            has_battery: false,
+            session_type: "wayland".to_string(),
+            has_wayland: true,
+            has_gamemode_run: true,
+            gamemode_path: Some("/usr/games/gamemoderun".to_string()),
+            has_system_glfw: true,
+            system_glfw_path: Some("/usr/lib/libglfw.so".to_string()),
+            system_glfw_wayland: true,
+            has_vulkan: true,
+        }
+    }
+
+    #[test]
+    fn test_nvidia_proprietary_enables_threaded_opt_and_optional_yield() {
+        let caps = base_linux_nvidia_wayland_caps();
+        let cfg = serde_json::json!({
+            "enableNvidiaThreadedOpt": true,
+            "enableNvidiaBusyWait": true,
+            "enableGameMode": true,
+            "enableDiscreteGpu": true,
+            "graphicsBackend": "default"
+        });
+        let mut jvm = Vec::new();
+        let mut game = vec!["--version".into(), "26.3".into()];
+        let mut env = HashMap::new();
+        let (wrapper, hp) = apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env,
+            None,
+        );
+
+        assert!(!hp);
+        assert_eq!(wrapper, Some(PathBuf::from("/usr/games/gamemoderun")));
+        assert_eq!(env.get("__GL_THREADED_OPTIMIZATIONS").map(String::as_str), Some("1"));
+        assert_eq!(env.get("__GL_YIELD").map(String::as_str), Some("NOTHING"));
+        // Single GPU must NOT get PRIME offload vars
+        assert!(!env.contains_key("__NV_PRIME_RENDER_OFFLOAD"));
+        assert!(!env.contains_key("__GLX_VENDOR_LIBRARY_NAME"));
+        assert!(!env.contains_key("GLFW_PLATFORM"));
+    }
+
+    #[test]
+    fn test_nouveau_never_gets_nvidia_proprietary_flags() {
+        let mut caps = base_linux_nvidia_wayland_caps();
+        caps.has_nvidia_proprietary = false;
+        caps.nvidia_driver = Some("nouveau".to_string());
+        caps.is_hybrid_gpu = true;
+
+        let cfg = serde_json::json!({
+            "enableNvidiaThreadedOpt": true,
+            "enableNvidiaBusyWait": true,
+            "enableDiscreteGpu": true,
+            "disableVsync": true
+        });
+        let mut jvm = Vec::new();
+        let mut game = Vec::new();
+        let mut env = HashMap::new();
+        apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env,
+            None,
+        );
+
+        assert!(!env.contains_key("__GL_THREADED_OPTIMIZATIONS"));
+        assert!(!env.contains_key("__GL_YIELD"));
+        assert!(!env.contains_key("__NV_PRIME_RENDER_OFFLOAD"));
+        assert!(!env.contains_key("__GL_SYNC_TO_VBLANK"));
+        assert_eq!(env.get("DRI_PRIME").map(String::as_str), Some("1"));
+        assert_eq!(env.get("vblank_mode").map(String::as_str), Some("0"));
+    }
+
+    #[test]
+    fn test_low_core_cpu_blocks_gl_yield_nothing() {
+        let mut caps = base_linux_nvidia_wayland_caps();
+        caps.cpu_cores = 2;
+        let cfg = serde_json::json!({
+            "enableNvidiaThreadedOpt": true,
+            "enableNvidiaBusyWait": true
+        });
+        let mut jvm = Vec::new();
+        let mut game = Vec::new();
+        let mut env = HashMap::new();
+        apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env,
+            None,
+        );
+
+        assert_eq!(env.get("__GL_THREADED_OPTIMIZATIONS").map(String::as_str), Some("1"));
+        assert!(!env.contains_key("__GL_YIELD"));
+    }
+
+    #[test]
+    fn test_x11_session_blocks_stale_wayland_and_system_glfw() {
+        let mut caps = base_linux_nvidia_wayland_caps();
+        caps.session_type = "x11".to_string();
+        caps.has_wayland = false;
+
+        let cfg = serde_json::json!({
+            "enableNativeWayland": true,
+            "preferSystemGlfw": true
+        });
+        let mut jvm = Vec::new();
+        let mut game = Vec::new();
+        let mut env = HashMap::new();
+        apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env,
+            None,
+        );
+
+        assert!(!env.contains_key("GLFW_PLATFORM"));
+        assert!(!env.contains_key("SDL_VIDEODRIVER"));
+        assert!(!env.contains_key("GDK_BACKEND"));
+        assert!(!jvm.iter().any(|a| a.starts_with("-Dorg.lwjgl.glfw.libname=")));
+    }
+
+    #[test]
+    fn test_wayland_system_glfw_gated_on_wayland_capable_elf_and_user_override() {
+        let mut caps = base_linux_nvidia_wayland_caps();
+        caps.system_glfw_wayland = false; // X11-only system GLFW
+
+        let cfg = serde_json::json!({
+            "enableNativeWayland": true,
+            "preferSystemGlfw": true
+        });
+        let mut jvm = Vec::new();
+        let mut game = Vec::new();
+        let mut env = HashMap::new();
+        apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env,
+            None,
+        );
+        assert_eq!(env.get("GLFW_PLATFORM").map(String::as_str), Some("wayland"));
+        assert!(!jvm.iter().any(|a| a.starts_with("-Dorg.lwjgl.glfw.libname=")));
+
+        // Now with Wayland-capable GLFW and NO user override
+        caps.system_glfw_wayland = true;
+        let mut jvm2 = Vec::new();
+        let mut env2 = HashMap::new();
+        apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm2,
+            &mut game,
+            &mut env2,
+            None,
+        );
+        assert!(jvm2.contains(&"-Dorg.lwjgl.glfw.libname=/usr/lib/libglfw.so".to_string()));
+
+        // Existing user JVM override must not be duplicated
+        let mut jvm3 = vec!["-Dorg.lwjgl.glfw.libname=/opt/custom/libglfw.so".into()];
+        let mut env3 = HashMap::new();
+        apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm3,
+            &mut game,
+            &mut env3,
+            None,
+        );
+        assert_eq!(jvm3.len(), 1);
+    }
+
+    #[test]
+    fn test_zink_and_vulkan_backend_suppress_nvidia_opengl_conflicts() {
+        let mut caps = base_linux_nvidia_wayland_caps();
+        caps.is_hybrid_gpu = true;
+
+        // Zink active on OpenGL/default: must use __GLX_VENDOR_LIBRARY_NAME=mesa & vblank_mode=0, NO nvidia GL flags
+        let zink_cfg = serde_json::json!({
+            "graphicsBackend": "default",
+            "enableZink": true,
+            "enableDiscreteGpu": true,
+            "enableNvidiaThreadedOpt": true,
+            "enableNvidiaBusyWait": true,
+            "disableVsync": true
+        });
+        let mut jvm = Vec::new();
+        let mut game = vec!["--version".into(), "26.3".into()];
+        let mut env = HashMap::new();
+        apply_capability_launch_tuning(
+            &zink_cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env,
+            None,
+        );
+        assert_eq!(env.get("MESA_LOADER_DRIVER_OVERRIDE").map(String::as_str), Some("zink"));
+        assert_eq!(env.get("GALLIUM_DRIVER").map(String::as_str), Some("zink"));
+        assert_eq!(env.get("__GLX_VENDOR_LIBRARY_NAME").map(String::as_str), Some("mesa"));
+        assert_eq!(env.get("__VK_LAYER_NV_optimus").map(String::as_str), Some("NVIDIA_only"));
+        assert_eq!(env.get("vblank_mode").map(String::as_str), Some("0"));
+        assert!(!env.contains_key("__NV_PRIME_RENDER_OFFLOAD"));
+        assert!(!env.contains_key("__GL_THREADED_OPTIMIZATIONS"));
+        assert!(!env.contains_key("__GL_YIELD"));
+        assert!(!env.contains_key("__GL_SYNC_TO_VBLANK"));
+
+        // Native Vulkan backend on 26.3: passes --graphicsBackend vulkan, suppresses Zink + OpenGL flags
+        let vk_cfg = serde_json::json!({
+            "graphicsBackend": "vulkan",
+            "enableZink": true,
+            "enableDiscreteGpu": true,
+            "enableNvidiaThreadedOpt": true,
+            "disableVsync": true
+        });
+        let mut jvm2 = Vec::new();
+        let mut game2 = vec!["--version".into(), "fabric-loader-0.18.4-26.3".into()];
+        let mut env2 = HashMap::new();
+        apply_capability_launch_tuning(
+            &vk_cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm2,
+            &mut game2,
+            &mut env2,
+            None,
+        );
+        assert_eq!(game2, vec!["--version", "fabric-loader-0.18.4-26.3", "--graphicsBackend", "vulkan"]);
+        assert!(!env2.contains_key("MESA_LOADER_DRIVER_OVERRIDE"));
+        assert!(!env2.contains_key("__GL_THREADED_OPTIMIZATIONS"));
+        assert!(!env2.contains_key("vblank_mode"));
+        assert_eq!(env2.get("__VK_LAYER_NV_optimus").map(String::as_str), Some("NVIDIA_only"));
+    }
+
+    #[test]
+    fn test_old_mc_version_and_no_vulkan_guard() {
+        let mut caps = base_linux_nvidia_wayland_caps();
+        caps.has_vulkan = false;
+
+        // Vulkan unavailable -> blocked even on 26.3
+        let cfg = serde_json::json!({ "graphicsBackend": "vulkan" });
+        let mut jvm = Vec::new();
+        let mut game = vec!["--version".into(), "26.3".into()];
+        let mut env = HashMap::new();
+        apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env,
+            None,
+        );
+        assert!(!game.contains(&"--graphicsBackend".to_string()));
+
+        // Old 1.21.11 -> never gets --graphicsBackend opengl
+        let cfg_gl = serde_json::json!({ "graphicsBackend": "opengl" });
+        let mut game_old = vec!["--version".into(), "1.21.11".into()];
+        apply_capability_launch_tuning(
+            &cfg_gl,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game_old,
+            &mut env,
+            None,
+        );
+        assert!(!game_old.contains(&"--graphicsBackend".to_string()));
+    }
+
+    #[test]
+    fn test_custom_env_vars_string_object_and_gamemode_dedup() {
+        let caps = base_linux_nvidia_wayland_caps();
+        let cfg = serde_json::json!({
+            "enableGameMode": true,
+            "enableNvidiaThreadedOpt": true,
+            "customEnvVars": "# comment line\nexport __GL_THREADED_OPTIMIZATIONS=0\nMANGOHUD=1\nTEST_QUOTED=\"hello world\"\nINVALID-KEY=1\nLD_PRELOAD='/usr/lib/libgamemodeauto.so.0'\n"
+        });
+        let mut jvm = Vec::new();
+        let mut game = Vec::new();
+        let mut env = HashMap::new();
+        let (wrapper, _) = apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env,
+            None,
+        );
+
+        // User override wins over launcher setting
+        assert_eq!(env.get("__GL_THREADED_OPTIMIZATIONS").map(String::as_str), Some("0"));
+        assert_eq!(env.get("MANGOHUD").map(String::as_str), Some("1"));
+        assert_eq!(env.get("TEST_QUOTED").map(String::as_str), Some("hello world"));
+        assert!(!env.contains_key("INVALID-KEY"));
+        // GameMode wrapper must skip when LD_PRELOAD already loads libgamemodeauto
+        assert_eq!(wrapper, None);
+
+        // Host LD_PRELOAD also skips wrapper
+        let cfg2 = serde_json::json!({ "enableGameMode": true });
+        let (wrapper2, _) = apply_capability_launch_tuning(
+            &cfg2,
+            TargetOs::Linux,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut HashMap::new(),
+            Some("/usr/$LIB/libgamemodeauto.so.0"),
+        );
+        assert_eq!(wrapper2, None);
+    }
+
+    #[test]
+    fn test_windows_dedicated_gpu_and_priority() {
+        let mut caps = base_linux_nvidia_wayland_caps();
+        caps.platform = "windows".to_string();
+        caps.is_dedicated_gpu = true;
+
+        let cfg = serde_json::json!({
+            "winDedicatedGpu": true,
+            "winHighPriority": true,
+            "enableNativeWayland": true,
+            "enableGameMode": true,
+            "enableNvidiaThreadedOpt": true
+        });
+        let mut jvm = Vec::new();
+        let mut game = Vec::new();
+        let mut env = HashMap::new();
+        let (wrapper, hp) = apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Windows,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env,
+            None,
+        );
+
+        assert!(hp);
+        assert_eq!(wrapper, None);
+        assert_eq!(env.get("SHIM_MCCOMPAT").map(String::as_str), Some("0xD4000000"));
+        assert!(!env.contains_key("GLFW_PLATFORM"));
+        assert!(!env.contains_key("__GL_THREADED_OPTIMIZATIONS"));
+
+        // Integrated-only Windows laptop must NOT get SHIM_MCCOMPAT
+        caps.is_dedicated_gpu = false;
+        caps.is_hybrid_gpu = false;
+        let mut env_igpu = HashMap::new();
+        apply_capability_launch_tuning(
+            &cfg,
+            TargetOs::Windows,
+            &caps,
+            &[],
+            &mut jvm,
+            &mut game,
+            &mut env_igpu,
+            None,
+        );
+        assert!(!env_igpu.contains_key("SHIM_MCCOMPAT"));
+    }
 }
 
 impl LaunchSpec {
@@ -2382,7 +3119,9 @@ pub fn construct_launch_spec(
         }
     }
 
-    // 10. Environment Variables
+    // 10. Environment Variables & Capability-Gated Performance Tuning
+    let mut deduped_jvm = deduped_jvm;
+    let mut game_args = game_args;
     let mut env_vars: HashMap<String, String> = HashMap::new();
 
     if target_os == TargetOs::Linux {
@@ -2393,25 +3132,20 @@ pub fn construct_launch_spec(
             format!("{}:{}:{}", java_dir.to_string_lossy(), natives_dir.to_string_lossy(), current_ld)
         };
         env_vars.insert("LD_LIBRARY_PATH".to_string(), new_ld);
-
-        let native_wayland = config
-            .get("enableNativeWayland")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        if native_wayland {
-            env_vars.insert("GLFW_PLATFORM".to_string(), "wayland".to_string());
-            env_vars.insert("SDL_VIDEODRIVER".to_string(), "wayland".to_string());
-            env_vars.insert("GDK_BACKEND".to_string(), "wayland,x11".to_string());
-        }
     }
 
-    if let Some(custom_envs) = config.get("customEnvVars").and_then(|v| v.as_object()) {
-        for (k, v) in custom_envs {
-            if let Some(s) = v.as_str() {
-                env_vars.insert(k.clone(), s.to_string());
-            }
-        }
-    }
+    let caps = crate::services::detect_system_capabilities();
+    let host_ld_preload = std::env::var("LD_PRELOAD").ok();
+    let (wrapper, high_priority) = apply_capability_launch_tuning(
+        config,
+        target_os,
+        &caps,
+        &classpath_paths,
+        &mut deduped_jvm,
+        &mut game_args,
+        &mut env_vars,
+        host_ld_preload.as_deref(),
+    );
 
     Ok(LaunchSpec {
         executable: java_path.to_path_buf(),
@@ -2422,6 +3156,8 @@ pub fn construct_launch_spec(
         game_args,
         env_vars,
         working_dir: game_instance_dir,
+        wrapper,
+        high_priority,
     })
 }
 
@@ -2737,9 +3473,33 @@ pub async fn spawn_game_process<R: Runtime>(
     reset_termination_intent();
 
     let full_args = spec.build_full_args();
-    let mut cmd = tokio::process::Command::new(&spec.executable);
-    cmd.args(&full_args);
+    let mut cmd = if let Some(ref wrapper_path) = spec.wrapper {
+        if is_executable_wrapper(wrapper_path) {
+            let mut c = tokio::process::Command::new(wrapper_path);
+            c.arg(&spec.executable);
+            c.args(&full_args);
+            c
+        } else {
+            eprintln!(
+                "[LAUNCHER] Wrapper '{}' not found or not executable; launching Java directly",
+                wrapper_path.display()
+            );
+            let mut c = tokio::process::Command::new(&spec.executable);
+            c.args(&full_args);
+            c
+        }
+    } else {
+        let mut c = tokio::process::Command::new(&spec.executable);
+        c.args(&full_args);
+        c
+    };
     cmd.current_dir(&spec.working_dir);
+
+    #[cfg(target_os = "windows")]
+    if spec.high_priority {
+        const HIGH_PRIORITY_CLASS: u32 = 0x0000_0080;
+        cmd.creation_flags(HIGH_PRIORITY_CLASS);
+    }
 
     for (k, v) in &spec.env_vars {
         cmd.env(k, v);

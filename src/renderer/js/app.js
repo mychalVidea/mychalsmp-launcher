@@ -808,6 +808,234 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateNetworkStatus();
     startNetworkStatusPolling();
 
+    let cachedSystemInfo = null;
+
+    function setPerfCardState(cardId, inputId, reasonId, opts = {}) {
+        const card = document.getElementById(cardId);
+        const input = document.getElementById(inputId);
+        const reasonEl = reasonId ? document.getElementById(reasonId) : null;
+        const available = opts.available !== false;
+
+        if (card) card.classList.toggle('is-unavailable', !available);
+        if (input) input.disabled = !available;
+        if (reasonEl) {
+            if (!available && opts.reasonText) {
+                reasonEl.textContent = opts.reasonText;
+                reasonEl.className = 'perf-toggle-reason';
+                reasonEl.style.display = 'block';
+            } else if (available && opts.readyText) {
+                reasonEl.textContent = opts.readyText;
+                reasonEl.className = 'perf-toggle-reason perf-toggle-reason--ready';
+                reasonEl.style.display = 'block';
+            } else {
+                reasonEl.textContent = '';
+                reasonEl.style.display = 'none';
+            }
+        }
+        if (opts.warningId) {
+            const warnEl = document.getElementById(opts.warningId);
+            if (warnEl) warnEl.style.display = opts.warningVisible ? 'block' : 'none';
+        }
+    }
+
+    function renderHardwareCapabilityBar(sysInfo) {
+        const bar = document.getElementById('gpuCapabilityBar');
+        if (!bar || !sysInfo) return;
+        bar.innerHTML = '';
+
+        const items = [];
+        const sessionLabel = sysInfo.platform === 'windows'
+            ? 'Windows'
+            : (sysInfo.hasWayland
+                ? 'Wayland'
+                : (sysInfo.sessionType === 'x11' ? 'X11' : (sysInfo.sessionType || 'Neznámá')));
+        items.push(['Relace', sessionLabel]);
+
+        if (sysInfo.hasNvidiaGpu) {
+            const drv = sysInfo.hasNvidiaProprietary
+                ? 'NVIDIA Proprietární'
+                : (sysInfo.nvidiaDriver === 'nouveau' ? 'Nouveau (open-source)' : (sysInfo.nvidiaDriver || 'Chybí'));
+            items.push(['Ovladač', drv]);
+        } else if (sysInfo.gpuVendor === 'amd') {
+            items.push(['Ovladač', sysInfo.platform === 'windows' ? 'AMD Software' : 'Mesa / AMDGPU']);
+        } else if (sysInfo.gpuVendor === 'intel') {
+            items.push(['Ovladač', sysInfo.platform === 'windows' ? 'Intel Graphics' : 'Mesa / Intel']);
+        }
+
+        if (sysInfo.cpuCores) {
+            items.push(['CPU', `${sysInfo.cpuCores} vláken`]);
+        }
+        items.push(['Vulkan', sysInfo.hasVulkan ? 'Dostupný' : 'Nedostupný']);
+        if (sysInfo.platform !== 'windows') {
+            items.push(['GameMode', sysInfo.hasGamemodeRun ? 'Připraven' : 'Chybí']);
+        }
+
+        items.forEach(([k, v], idx) => {
+            if (idx > 0) {
+                const div = document.createElement('span');
+                div.className = 'gpu-spec-divider';
+                bar.appendChild(div);
+            }
+            const item = document.createElement('span');
+            item.className = 'gpu-spec-item';
+            const keyEl = document.createElement('span');
+            keyEl.className = 'gpu-spec-key';
+            keyEl.textContent = k;
+            const valEl = document.createElement('span');
+            valEl.className = 'gpu-spec-val';
+            valEl.textContent = v;
+            item.appendChild(keyEl);
+            item.appendChild(valEl);
+            bar.appendChild(item);
+        });
+    }
+
+    function applyHardwareAndSessionGating(sysInfo) {
+        const info = sysInfo || cachedSystemInfo;
+        const currentPlatform = (window.api && window.api.platform) ? window.api.platform : 'linux';
+        const isWindows = currentPlatform === 'win32' || info?.platform === 'windows';
+
+        // Render API Vulkan gate
+        const hasVulkan = info ? !!info.hasVulkan : true;
+        const radioBackendVulkan = document.getElementById('radioBackendVulkan');
+        const labelBackendVulkan = document.getElementById('labelBackendVulkan');
+        const graphicsBackendHint = document.getElementById('graphicsBackendHint');
+        if (radioBackendVulkan) radioBackendVulkan.disabled = !hasVulkan;
+        if (labelBackendVulkan) labelBackendVulkan.classList.toggle('is-unavailable', !hasVulkan);
+        if (graphicsBackendHint) {
+            graphicsBackendHint.textContent = hasVulkan ? 'Minecraft 26.2+' : 'Vulkan ICD nenalezen (použije se Výchozí)';
+        }
+
+        const checkedBackend = document.querySelector('input[name="graphicsBackend"]:checked')?.value || 'default';
+        const isVulkanActive = checkedBackend === 'vulkan' && hasVulkan;
+
+        if (isWindows) {
+            const hasDedicatedOrHybrid = info ? (!!info.isHybridGpu || !!info.isDedicatedGpu) : true;
+            setPerfCardState('cardWinHighPriority', 'checkWinHighPriority', null, { available: true });
+            setPerfCardState('cardWinDedicatedGpu', 'checkWinDedicatedGpu', 'reasonWinDedicatedGpu', {
+                available: hasDedicatedOrHybrid,
+                reasonText: 'Detekována pouze integrovaná grafika — není na co přepínat.'
+            });
+            return;
+        }
+
+        // Linux hardware / session gating
+        const hasGamemode = !!info?.hasGamemodeRun;
+        setPerfCardState('cardGameMode', 'checkGameMode', 'reasonGameMode', {
+            available: hasGamemode,
+            reasonText: 'Binárka gamemoderun nebyla nalezena v systému.',
+            readyText: info?.gamemodePath ? `Připraven: ${info.gamemodePath}` : ''
+        });
+
+        const descDiscreteGpu = document.getElementById('descDiscreteGpu');
+        if (descDiscreteGpu) {
+            descDiscreteGpu.textContent = info?.hasNvidiaProprietary
+                ? 'Přepne hybridní grafiku na diskrétní NVIDIA GPU (__NV_PRIME_RENDER_OFFLOAD).'
+                : 'Přepne hybridní grafiku na diskrétní GPU přes Mesa (DRI_PRIME=1).';
+        }
+        setPerfCardState('cardDiscreteGpu', 'checkDiscreteGpu', 'reasonDiscreteGpu', {
+            available: !!info?.isHybridGpu,
+            reasonText: 'Detekována pouze jedna grafická karta — přepínání není potřeba.'
+        });
+
+        setPerfCardState('cardDisableVsync', 'checkDisableVsync', 'reasonDisableVsync', {
+            available: !isVulkanActive,
+            reasonText: 'Při nativním Vulkan režimu řídí V-Sync samotný Minecraft.'
+        });
+
+        const hasWayland = !!info?.hasWayland;
+        setPerfCardState('cardNativeWayland', 'checkNativeWayland', 'reasonNativeWayland', {
+            available: hasWayland,
+            reasonText: `Aktivní relace (${info?.sessionType || 'X11'}) nemá dostupný WAYLAND_DISPLAY.`
+        });
+
+        const nativeWaylandChecked = !!document.getElementById('checkNativeWayland')?.checked;
+        const sysGlfwOk = hasWayland && nativeWaylandChecked && !!info?.systemGlfwWayland;
+        let sysGlfwReason = '';
+        if (!hasWayland) {
+            sysGlfwReason = 'Vyžaduje aktivní Wayland relaci.';
+        } else if (!info?.systemGlfwWayland) {
+            sysGlfwReason = info?.hasSystemGlfw
+                ? 'Nalezený systémový libglfw.so byl sestaven bez podpory Waylandu.'
+                : 'Systémová knihovna libglfw.so (např. glfw-wayland-minecraft) nenalezena.';
+        } else if (!nativeWaylandChecked) {
+            sysGlfwReason = 'Nejprve zapněte přepínač Nativní Wayland okno.';
+        }
+        setPerfCardState('cardSystemGlfw', 'checkSystemGlfw', 'reasonSystemGlfw', {
+            available: sysGlfwOk,
+            reasonText: sysGlfwReason,
+            readyText: info?.systemGlfwPath ? `Knihovna: ${info.systemGlfwPath}` : ''
+        });
+
+        let zinkReason = '';
+        if (!hasVulkan) {
+            zinkReason = 'Chybí hardwarový Vulkan ovladač.';
+        } else if (isVulkanActive) {
+            zinkReason = 'Zbytečné při zapnutém nativním Vulkan backendu.';
+        }
+        setPerfCardState('cardZink', 'checkZink', 'reasonZink', {
+            available: hasVulkan && !isVulkanActive,
+            reasonText: zinkReason
+        });
+
+        // Conditional NVIDIA OpenGL subsection
+        const nvidiaSection = document.getElementById('nvidiaOpenGlSection');
+        if (!nvidiaSection) return;
+
+        if (!info?.hasNvidiaGpu) {
+            nvidiaSection.style.display = 'none';
+            return;
+        }
+        nvidiaSection.style.display = 'block';
+
+        const driverHint = document.getElementById('nvidiaDriverBadgeHint');
+        if (driverHint) {
+            driverHint.textContent = info.hasNvidiaProprietary
+                ? 'Proprietární ovladač'
+                : (info.nvidiaDriver === 'nouveau' ? 'Nouveau (open-source)' : 'Ovladač nenalezen');
+        }
+
+        const zinkActive = !!(document.getElementById('checkZink')?.checked) && hasVulkan && !isVulkanActive;
+        const noticeEl = document.getElementById('noticeNvidiaUnavailable');
+        const noticeTextEl = document.getElementById('textNvidiaUnavailable');
+        let nvidiaSectionBlockedReason = '';
+
+        if (!info.hasNvidiaProprietary) {
+            nvidiaSectionBlockedReason = 'Detekován otevřený ovladač Nouveau. Proprietární NVIDIA OpenGL volby vyžadují oficiální ovladač NVIDIA.';
+        } else if (isVulkanActive) {
+            nvidiaSectionBlockedReason = 'Aktivní nativní Vulkan Render API — NVIDIA OpenGL optimalizace jsou v tomto režimu neaktivní.';
+        } else if (zinkActive) {
+            nvidiaSectionBlockedReason = 'Aktivní Mesa Zink — proprietární NVIDIA GLX příznaky jsou vypnuty kvůli kompatibilitě.';
+        }
+
+        if (nvidiaSectionBlockedReason) {
+            if (noticeEl) noticeEl.style.display = 'flex';
+            if (noticeTextEl) noticeTextEl.textContent = nvidiaSectionBlockedReason;
+            setPerfCardState('cardNvidiaThreadedOpt', 'checkNvidiaThreadedOpt', 'reasonNvidiaThreadedOpt', {
+                available: false,
+                reasonText: ''
+            });
+            setPerfCardState('cardNvidiaBusyWait', 'checkNvidiaBusyWait', 'reasonNvidiaBusyWait', {
+                available: false,
+                reasonText: '',
+                warningId: 'warnNvidiaBusyWaitBattery',
+                warningVisible: false
+            });
+        } else {
+            if (noticeEl) noticeEl.style.display = 'none';
+            setPerfCardState('cardNvidiaThreadedOpt', 'checkNvidiaThreadedOpt', 'reasonNvidiaThreadedOpt', {
+                available: true
+            });
+            const hasEnoughCores = (info.cpuCores || 0) >= 4;
+            setPerfCardState('cardNvidiaBusyWait', 'checkNvidiaBusyWait', 'reasonNvidiaBusyWait', {
+                available: hasEnoughCores,
+                reasonText: hasEnoughCores ? '' : `Vyžaduje procesor s alespoň 4 vlákny (detekováno ${info.cpuCores || 0}).`,
+                warningId: 'warnNvidiaBusyWaitBattery',
+                warningVisible: hasEnoughCores && !!info.hasBattery
+            });
+        }
+    }
+
     // ── Configuration Loader ────────────────────────────────────────────────
     async function loadConfiguration() {
         try {
@@ -896,7 +1124,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     };
                 });
 
-                // Auto-Detekce dedikované grafiky (Windows i Linux)
+                cachedSystemInfo = sysInfo || null;
+                renderHardwareCapabilityBar(cachedSystemInfo);
+
+                // Auto-Detekce dedikované / hybridní grafiky (Windows i Linux)
                 const gpuNameText = document.getElementById('gpuNameText');
                 const gpuDedicatedBadge = document.getElementById('gpuDedicatedBadge');
                 if (gpuNameText) {
@@ -914,14 +1145,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     gpuNameText.textContent = cleanGpu || 'Standardní grafická karta';
                 }
                 if (gpuDedicatedBadge) {
-                    gpuDedicatedBadge.style.display = sysInfo?.isDedicatedGpu ? 'inline-block' : 'none';
-                    gpuDedicatedBadge.textContent = 'Výkonná grafika';
-                }
-
-                // Na Windows schovat čistě linuxová nastavení (co dělají bordel na Windows)
-                const linuxPerfGroup = document.getElementById('linuxPerfGroup');
-                if (linuxPerfGroup) {
-                    linuxPerfGroup.style.display = (sysInfo?.platform === 'win32') ? 'none' : 'block';
+                    if (sysInfo?.isHybridGpu) {
+                        gpuDedicatedBadge.style.display = 'inline-block';
+                        gpuDedicatedBadge.textContent = 'Hybridní GPU';
+                    } else if (sysInfo?.isDedicatedGpu) {
+                        gpuDedicatedBadge.style.display = 'inline-block';
+                        gpuDedicatedBadge.textContent = 'Dedikovaná GPU';
+                    } else {
+                        gpuDedicatedBadge.style.display = 'none';
+                    }
                 }
             } catch (sysErr) {
                 console.warn('Detekce hardware RAM/GPU selhala:', sysErr);
@@ -1014,21 +1246,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             const checkWinDedicatedGpu = document.getElementById('checkWinDedicatedGpu');
             if (checkWinDedicatedGpu) checkWinDedicatedGpu.checked = currentConfig.winDedicatedGpu !== false;
 
-            const checkWinWindowedOptimization = document.getElementById('checkWinWindowedOptimization');
-            if (checkWinWindowedOptimization) checkWinWindowedOptimization.checked = currentConfig.winWindowedOptimization !== false;
-
-            const checkWinDisableStickyKeys = document.getElementById('checkWinDisableStickyKeys');
-            if (checkWinDisableStickyKeys) checkWinDisableStickyKeys.checked = currentConfig.winDisableStickyKeys !== false;
-
-            const checkWinTrimMemory = document.getElementById('checkWinTrimMemory');
-            if (checkWinTrimMemory) checkWinTrimMemory.checked = currentConfig.winTrimMemory !== false;
-
             // Linux & Wayland Performance Settings
             const checkGameMode = document.getElementById('checkGameMode');
             if (checkGameMode) checkGameMode.checked = currentConfig.enableGameMode !== false;
 
             const checkDiscreteGpu = document.getElementById('checkDiscreteGpu');
             if (checkDiscreteGpu) checkDiscreteGpu.checked = currentConfig.enableDiscreteGpu !== false;
+
+            const checkNvidiaThreadedOpt = document.getElementById('checkNvidiaThreadedOpt');
+            if (checkNvidiaThreadedOpt) checkNvidiaThreadedOpt.checked = currentConfig.enableNvidiaThreadedOpt !== false;
+
+            const checkNvidiaBusyWait = document.getElementById('checkNvidiaBusyWait');
+            if (checkNvidiaBusyWait) checkNvidiaBusyWait.checked = !!currentConfig.enableNvidiaBusyWait;
 
             const checkZink = document.getElementById('checkZink');
             if (checkZink) checkZink.checked = !!currentConfig.enableZink;
@@ -1038,6 +1267,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const checkNativeWayland = document.getElementById('checkNativeWayland');
             if (checkNativeWayland) checkNativeWayland.checked = !!currentConfig.enableNativeWayland;
+
+            const checkSystemGlfw = document.getElementById('checkSystemGlfw');
+            if (checkSystemGlfw) checkSystemGlfw.checked = !!currentConfig.preferSystemGlfw;
+
+            // Aplikovat hardware/session zámky až po naplnění uložených voleb
+            applyHardwareAndSessionGating(cachedSystemInfo);
 
             // Universal Settings
             const checkDiscordRpc = document.getElementById('checkDiscordRpc');
@@ -1067,7 +1302,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (jvmArgsInput) jvmArgsInput.value = (currentConfig.customJvmArgs || '-XX:+UseZGC -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC').replace(/-XX:\+ZGenerational\s*/g, '').replace(/-XX:\+AlwaysPreTouch\s*/g, '').trim();
 
             const customEnvVarsInput = document.getElementById('customEnvVarsInput');
-            if (customEnvVarsInput) customEnvVarsInput.value = currentConfig.customEnvVars || '';
+            if (customEnvVarsInput) {
+                const rawEnv = currentConfig.customEnvVars;
+                if (typeof rawEnv === 'string') {
+                    customEnvVarsInput.value = rawEnv;
+                } else if (rawEnv && typeof rawEnv === 'object' && !Array.isArray(rawEnv)) {
+                    customEnvVarsInput.value = Object.entries(rawEnv)
+                        .filter(([, v]) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+                        .map(([k, v]) => `${k}=${v}`)
+                        .join('\n');
+                } else {
+                    customEnvVarsInput.value = '';
+                }
+            }
 
             // Vyřešíme aktivní nebo naposledy hraný profil hned při načtení
             currentConfig.activeProfileId = resolveLaunchProfileId();
@@ -7931,16 +8178,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Windows settings
         const checkWinHighPriority = document.getElementById('checkWinHighPriority');
         const checkWinDedicatedGpu = document.getElementById('checkWinDedicatedGpu');
-        const checkWinWindowedOptimization = document.getElementById('checkWinWindowedOptimization');
-        const checkWinDisableStickyKeys = document.getElementById('checkWinDisableStickyKeys');
-        const checkWinTrimMemory = document.getElementById('checkWinTrimMemory');
 
         // Linux settings
         const checkGameMode = document.getElementById('checkGameMode');
         const checkDiscreteGpu = document.getElementById('checkDiscreteGpu');
+        const checkNvidiaThreadedOpt = document.getElementById('checkNvidiaThreadedOpt');
+        const checkNvidiaBusyWait = document.getElementById('checkNvidiaBusyWait');
         const checkZink = document.getElementById('checkZink');
         const checkDisableVsync = document.getElementById('checkDisableVsync');
         const checkNativeWayland = document.getElementById('checkNativeWayland');
+        const checkSystemGlfw = document.getElementById('checkSystemGlfw');
 
         // Universal settings
         const checkDiscordRpc = document.getElementById('checkDiscordRpc');
@@ -7958,14 +8205,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             graphicsBackend: graphicsBackend || 'default',
             winHighPriority: checkWinHighPriority ? checkWinHighPriority.checked : true,
             winDedicatedGpu: checkWinDedicatedGpu ? checkWinDedicatedGpu.checked : true,
-            winWindowedOptimization: checkWinWindowedOptimization ? checkWinWindowedOptimization.checked : true,
-            winDisableStickyKeys: checkWinDisableStickyKeys ? checkWinDisableStickyKeys.checked : true,
-            winTrimMemory: checkWinTrimMemory ? checkWinTrimMemory.checked : true,
             enableGameMode: checkGameMode ? checkGameMode.checked : true,
             enableDiscreteGpu: checkDiscreteGpu ? checkDiscreteGpu.checked : true,
+            enableNvidiaThreadedOpt: checkNvidiaThreadedOpt ? checkNvidiaThreadedOpt.checked : true,
+            enableNvidiaBusyWait: checkNvidiaBusyWait ? checkNvidiaBusyWait.checked : false,
             enableZink: checkZink ? checkZink.checked : false,
             disableVsync: checkDisableVsync ? checkDisableVsync.checked : false,
             enableNativeWayland: checkNativeWayland ? checkNativeWayland.checked : false,
+            preferSystemGlfw: checkSystemGlfw ? checkSystemGlfw.checked : false,
             enableDiscordRpc: checkDiscordRpc ? checkDiscordRpc.checked : true,
             autoUpdateMods: checkAutoUpdateMods ? checkAutoUpdateMods.checked : true,
             screenshotToClipboard: checkScreenshotClipboard ? checkScreenshotClipboard.checked : true,
@@ -8076,35 +8323,41 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Auto-save listeners on all checkboxes & controls
     document.querySelectorAll('input[name="graphicsBackend"]').forEach(radio => {
-        radio.addEventListener('change', () => autoSaveSettings(true));
+        radio.addEventListener('change', () => {
+            applyHardwareAndSessionGating(cachedSystemInfo);
+            autoSaveSettings(true);
+        });
     });
 
     const winSettingCheckboxes = [
         'checkWinHighPriority',
-        'checkWinDedicatedGpu',
-        'checkWinWindowedOptimization',
-        'checkWinDisableStickyKeys',
-        'checkWinTrimMemory'
+        'checkWinDedicatedGpu'
     ];
     winSettingCheckboxes.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', () => autoSaveSettings(true));
     });
 
-    const checkGameModeEl = document.getElementById('checkGameMode');
-    if (checkGameModeEl) checkGameModeEl.addEventListener('change', () => autoSaveSettings(true));
-
-    const checkDiscreteGpuEl = document.getElementById('checkDiscreteGpu');
-    if (checkDiscreteGpuEl) checkDiscreteGpuEl.addEventListener('change', () => autoSaveSettings(true));
-
-    const checkZinkEl = document.getElementById('checkZink');
-    if (checkZinkEl) checkZinkEl.addEventListener('change', () => autoSaveSettings(true));
-
-    const checkDisableVsyncEl = document.getElementById('checkDisableVsync');
-    if (checkDisableVsyncEl) checkDisableVsyncEl.addEventListener('change', () => autoSaveSettings(true));
-
-    const checkNativeWaylandEl = document.getElementById('checkNativeWayland');
-    if (checkNativeWaylandEl) checkNativeWaylandEl.addEventListener('change', () => autoSaveSettings(true));
+    const gatedLinuxCheckboxIds = [
+        'checkGameMode',
+        'checkDiscreteGpu',
+        'checkZink',
+        'checkDisableVsync',
+        'checkNativeWayland',
+        'checkSystemGlfw',
+        'checkNvidiaThreadedOpt',
+        'checkNvidiaBusyWait'
+    ];
+    gatedLinuxCheckboxIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', () => {
+            if (id === 'checkNativeWayland' || id === 'checkZink') {
+                applyHardwareAndSessionGating(cachedSystemInfo);
+            }
+            autoSaveSettings(true);
+        });
+    });
 
     const checkDiscordRpcEl = document.getElementById('checkDiscordRpc');
     if (checkDiscordRpcEl) checkDiscordRpcEl.addEventListener('change', () => autoSaveSettings(true));

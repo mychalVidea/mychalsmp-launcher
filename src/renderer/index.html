@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
         rel="stylesheet" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/style.css?v=1.6.0">
+    <link rel="stylesheet" href="css/style.css?v=1.6.1">
 </head>
 
 <body>
@@ -1338,20 +1338,21 @@
                                     <span class="badge-status badge-success" id="gpuDedicatedBadge"
                                         style="display: none;">Diskrétní GPU</span>
                                 </div>
+                                <div class="gpu-spec-bar" id="gpuCapabilityBar" aria-live="polite"></div>
                             </div>
 
                             <div class="form-group" id="graphicsBackendGroup" style="margin-bottom: 0;">
                                 <div class="setting-section-header">
                                     <label class="setting-section-label">Grafický režim (Render API)</label>
-                                    <span class="setting-section-hint">Minecraft 26.x</span>
+                                    <span class="setting-section-hint" id="graphicsBackendHint">Minecraft 26.2+</span>
                                 </div>
                                 <div class="backend-options">
                                     <label class="radio-label radio-label--backend">
                                         <input type="radio" name="graphicsBackend" value="default" checked>
                                         <span>Výchozí</span>
                                     </label>
-                                    <label class="radio-label radio-label--backend">
-                                        <input type="radio" name="graphicsBackend" value="vulkan">
+                                    <label class="radio-label radio-label--backend" id="labelBackendVulkan">
+                                        <input type="radio" name="graphicsBackend" id="radioBackendVulkan" value="vulkan">
                                         <span class="backend-vulkan-label">
                                             <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                                 <polygon points="12 2 2 7 12 12 22 7 12 2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1617,43 +1618,20 @@
                                             <span>Tato nastavení jsou dostupná pouze na operačním systému Windows.</span>
                                         </div>
                                         <div class="perf-settings-grid">
-                                            <label class="perf-toggle-card">
+                                            <label class="perf-toggle-card" id="cardWinHighPriority">
                                                 <input type="checkbox" id="checkWinHighPriority" checked>
                                                 <div class="perf-toggle-info">
                                                     <span class="perf-toggle-title">Vysoká priorita procesu</span>
-                                                    <span class="perf-toggle-desc">Přiřadí Minecraftu vysokou prioritu (HIGH_PRIORITY_CLASS) pro stabilní FPS při zátěži.</span>
+                                                    <span class="perf-toggle-desc">Spustí proces Minecraftu s prioritou HIGH_PRIORITY_CLASS pro stabilní frame time.</span>
                                                 </div>
                                             </label>
 
-                                            <label class="perf-toggle-card">
+                                            <label class="perf-toggle-card" id="cardWinDedicatedGpu">
                                                 <input type="checkbox" id="checkWinDedicatedGpu" checked>
                                                 <div class="perf-toggle-info">
                                                     <span class="perf-toggle-title">Vynucení dedikované GPU</span>
-                                                    <span class="perf-toggle-desc">Aktivuje SHIM_MCCOMPAT (0xD4000000) pro automatický běh na výkonné NVIDIA/AMD grafice.</span>
-                                                </div>
-                                            </label>
-
-                                            <label class="perf-toggle-card">
-                                                <input type="checkbox" id="checkWinWindowedOptimization" checked>
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Optimalizace oken (DWM Flip)</span>
-                                                    <span class="perf-toggle-desc">Aktivuje moderní Flip Model prezentaci DWM snižující latenci a input lag v okně.</span>
-                                                </div>
-                                            </label>
-
-                                            <label class="perf-toggle-card">
-                                                <input type="checkbox" id="checkWinDisableStickyKeys" checked>
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Potlačení dialogu StickyKeys</span>
-                                                    <span class="perf-toggle-desc">Zabrání vyskakování otravného okna při 5x stisku Shiftu (pro crouching a PvP).</span>
-                                                </div>
-                                            </label>
-
-                                            <label class="perf-toggle-card">
-                                                <input type="checkbox" id="checkWinTrimMemory" checked>
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Uvolnění RAM launcheru</span>
-                                                    <span class="perf-toggle-desc">Po startu hry uvolní paměť launcheru na ~15 MB pro maximální volnou RAM pro Minecraft.</span>
+                                                    <span class="perf-toggle-desc">Nastaví SHIM_MCCOMPAT (0xD4000000) pro preference výkonného GPU akcelerátoru.</span>
+                                                    <span class="perf-toggle-reason" id="reasonWinDedicatedGpu" style="display: none;"></span>
                                                 </div>
                                             </label>
                                         </div>
@@ -1687,45 +1665,95 @@
                                             <span>Tato nastavení jsou dostupná pouze na operačním systému Linux.</span>
                                         </div>
                                         <div class="perf-settings-grid">
-                                            <label class="perf-toggle-card">
+                                            <label class="perf-toggle-card" id="cardGameMode">
                                                 <input type="checkbox" id="checkGameMode" checked>
                                                 <div class="perf-toggle-info">
                                                     <span class="perf-toggle-title">Herní režim (GameMode)</span>
-                                                    <span class="perf-toggle-desc">Aktivuje herní prioritu jader CPU a GPU pro maximální FPS (Feral GameMode).</span>
+                                                    <span class="perf-toggle-desc">Spustí hru přes gamemoderun pro výkonný CPU governor a I/O prioritu.</span>
+                                                    <span class="perf-toggle-reason" id="reasonGameMode" style="display: none;"></span>
                                                 </div>
                                             </label>
 
-                                            <label class="perf-toggle-card">
+                                            <label class="perf-toggle-card" id="cardDiscreteGpu">
                                                 <input type="checkbox" id="checkDiscreteGpu" checked>
                                                 <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Dedikovaná GPU (DRI_PRIME)</span>
-                                                    <span class="perf-toggle-desc">Vynutí spuštění hry na diskrétní grafické kartě.</span>
+                                                    <span class="perf-toggle-title">Dedikovaná GPU (PRIME Offload)</span>
+                                                    <span class="perf-toggle-desc" id="descDiscreteGpu">Přepne hybridní grafiku na diskrétní GPU místo integrovaného čipu.</span>
+                                                    <span class="perf-toggle-reason" id="reasonDiscreteGpu" style="display: none;"></span>
                                                 </div>
                                             </label>
 
-                                            <label class="perf-toggle-card">
+                                            <label class="perf-toggle-card" id="cardDisableVsync">
                                                 <input type="checkbox" id="checkDisableVsync">
                                                 <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Nízká odezva (V-Sync)</span>
-                                                    <span class="perf-toggle-desc">Vypne V-Sync ovladače pro nejnižší input lag.</span>
+                                                    <span class="perf-toggle-title">Nízká odezva (V-Sync ovladače)</span>
+                                                    <span class="perf-toggle-desc">Potlačí V-Sync na úrovni OpenGL ovladače pro nižší input lag.</span>
+                                                    <span class="perf-toggle-reason" id="reasonDisableVsync" style="display: none;"></span>
                                                 </div>
                                             </label>
 
-                                            <label class="perf-toggle-card">
+                                            <label class="perf-toggle-card" id="cardNativeWayland">
                                                 <input type="checkbox" id="checkNativeWayland">
                                                 <div class="perf-toggle-info">
                                                     <span class="perf-toggle-title">Nativní Wayland okno (GLFW)</span>
-                                                    <span class="perf-toggle-desc">Vynutí čisté Wayland okno bez XWayland.</span>
+                                                    <span class="perf-toggle-desc">Spustí hru přímo na Waylandu bez XWayland mezivrstvy.</span>
+                                                    <span class="perf-toggle-reason" id="reasonNativeWayland" style="display: none;"></span>
                                                 </div>
                                             </label>
 
-                                            <label class="perf-toggle-card">
+                                            <label class="perf-toggle-card" id="cardSystemGlfw">
+                                                <input type="checkbox" id="checkSystemGlfw">
+                                                <div class="perf-toggle-info">
+                                                    <span class="perf-toggle-title">Systémová knihovna GLFW</span>
+                                                    <span class="perf-toggle-desc">Předá LWJGL systémovou knihovnu libglfw.so (např. glfw-wayland-minecraft).</span>
+                                                    <span class="perf-toggle-reason" id="reasonSystemGlfw" style="display: none;"></span>
+                                                </div>
+                                            </label>
+
+                                            <label class="perf-toggle-card" id="cardZink">
                                                 <input type="checkbox" id="checkZink">
                                                 <div class="perf-toggle-info">
                                                     <span class="perf-toggle-title">Zink (OpenGL přes Vulkan)</span>
-                                                    <span class="perf-toggle-desc">Mesa ovladač převádějící OpenGL do Vulkan API.</span>
+                                                    <span class="perf-toggle-desc">Mesa ovladač převádějící OpenGL volání do Vulkan API.</span>
+                                                    <span class="perf-toggle-reason" id="reasonZink" style="display: none;"></span>
                                                 </div>
                                             </label>
+                                        </div>
+
+                                        <!-- Podmíněná sekce pro NVIDIA OpenGL (skrytá bez NVIDIA GPU) -->
+                                        <div class="perf-subsection" id="nvidiaOpenGlSection" style="display: none;">
+                                            <div class="perf-subsection-header">
+                                                <span class="perf-subsection-title">NVIDIA OpenGL akcelerace</span>
+                                                <span class="perf-subsection-hint" id="nvidiaDriverBadgeHint">Proprietární ovladač</span>
+                                            </div>
+                                            <div class="os-inactive-notice" id="noticeNvidiaUnavailable" style="display: none;">
+                                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <circle cx="12" cy="12" r="10"></circle>
+                                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                                </svg>
+                                                <span id="textNvidiaUnavailable">Proprietární NVIDIA OpenGL volby nejsou dostupné.</span>
+                                            </div>
+                                            <div class="perf-settings-grid">
+                                                <label class="perf-toggle-card" id="cardNvidiaThreadedOpt">
+                                                    <input type="checkbox" id="checkNvidiaThreadedOpt" checked>
+                                                    <div class="perf-toggle-info">
+                                                        <span class="perf-toggle-title">OpenGL Threaded Optimization</span>
+                                                        <span class="perf-toggle-desc">Zapne vícevláknové zpracování draw callů (__GL_THREADED_OPTIMIZATIONS=1).</span>
+                                                        <span class="perf-toggle-reason" id="reasonNvidiaThreadedOpt" style="display: none;"></span>
+                                                    </div>
+                                                </label>
+
+                                                <label class="perf-toggle-card" id="cardNvidiaBusyWait">
+                                                    <input type="checkbox" id="checkNvidiaBusyWait">
+                                                    <div class="perf-toggle-info">
+                                                        <span class="perf-toggle-title">Aktivní čekání vlákna (__GL_YIELD)</span>
+                                                        <span class="perf-toggle-desc">Nastaví __GL_YIELD=NOTHING pro nižší latenci kamery na úkor vyššího odběru CPU.</span>
+                                                        <span class="perf-toggle-warning" id="warnNvidiaBusyWaitBattery" style="display: none;">Detekována baterie — aktivní čekání zvyšuje spotřebu a zkracuje výdrž.</span>
+                                                        <span class="perf-toggle-reason" id="reasonNvidiaBusyWait" style="display: none;"></span>
+                                                    </div>
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
                                 </details>
@@ -3415,7 +3443,7 @@
 
     <script src="js/lib/skinview3d.bundle.js"></script>
     <script src="js/tauri-bridge.js?v=1.6.0"></script>
-    <script src="js/app.js?v=1.6.1"></script>
+    <script src="js/app.js?v=1.6.2"></script>
 </body>
 
 </html>

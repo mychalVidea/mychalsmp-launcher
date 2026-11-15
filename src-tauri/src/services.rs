@@ -801,48 +801,672 @@ pub fn get_system_info() -> Value {
         10
     };
 
-    let (gpu_name, is_dedicated) = detect_gpu_info();
+    let caps = detect_system_capabilities();
 
     json!({
-        "platform": std::env::consts::OS,
-        "arch": std::env::consts::ARCH,
+        "platform": caps.platform,
+        "arch": caps.arch,
         "totalRamGB": total_ram_gb,
         "recommendedRamGB": recommended_ram_gb,
         "maxAllowedRamGB": max_allowed_ram_gb,
-        "gpuName": gpu_name,
-        "isDedicatedGpu": is_dedicated
+        "gpuName": caps.gpu_name,
+        "isDedicatedGpu": caps.is_dedicated_gpu,
+        "gpuVendor": caps.gpu_vendor,
+        "isHybridGpu": caps.is_hybrid_gpu,
+        "hasNvidiaGpu": caps.has_nvidia_gpu,
+        "hasNvidiaProprietary": caps.has_nvidia_proprietary,
+        "nvidiaDriver": caps.nvidia_driver,
+        "hasAmdGpu": caps.has_amd_gpu,
+        "hasIntelGpu": caps.has_intel_gpu,
+        "gpus": caps.gpus,
+        "cpuCores": caps.cpu_cores,
+        "hasBattery": caps.has_battery,
+        "sessionType": caps.session_type,
+        "hasWayland": caps.has_wayland,
+        "hasGamemodeRun": caps.has_gamemode_run,
+        "gamemodePath": caps.gamemode_path,
+        "hasSystemGlfw": caps.has_system_glfw,
+        "systemGlfwPath": caps.system_glfw_path,
+        "systemGlfwWayland": caps.system_glfw_wayland,
+        "hasVulkan": caps.has_vulkan
     })
 }
 
-fn detect_gpu_info() -> (String, bool) {
-    #[cfg(target_os = "linux")]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuDeviceInfo {
+    pub name: String,
+    pub vendor: String,
+    pub is_dedicated: bool,
+    pub driver: Option<String>,
+    pub boot_vga: Option<bool>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemCapabilities {
+    pub platform: String,
+    pub arch: String,
+    pub gpu_name: String,
+    pub is_dedicated_gpu: bool,
+    pub gpu_vendor: String,
+    pub is_hybrid_gpu: bool,
+    pub has_nvidia_gpu: bool,
+    pub has_nvidia_proprietary: bool,
+    pub nvidia_driver: Option<String>,
+    pub has_amd_gpu: bool,
+    pub has_intel_gpu: bool,
+    pub gpus: Vec<GpuDeviceInfo>,
+    pub cpu_cores: usize,
+    pub has_battery: bool,
+    pub session_type: String,
+    pub has_wayland: bool,
+    pub has_gamemode_run: bool,
+    pub gamemode_path: Option<String>,
+    pub has_system_glfw: bool,
+    pub system_glfw_path: Option<String>,
+    pub system_glfw_wayland: bool,
+    pub has_vulkan: bool,
+}
+
+impl Default for SystemCapabilities {
+    fn default() -> Self {
+        Self {
+            platform: std::env::consts::OS.to_string(),
+            arch: std::env::consts::ARCH.to_string(),
+            gpu_name: "Standardní grafická karta".to_string(),
+            is_dedicated_gpu: false,
+            gpu_vendor: "unknown".to_string(),
+            is_hybrid_gpu: false,
+            has_nvidia_gpu: false,
+            has_nvidia_proprietary: false,
+            nvidia_driver: None,
+            has_amd_gpu: false,
+            has_intel_gpu: false,
+            gpus: Vec::new(),
+            cpu_cores: 4,
+            has_battery: false,
+            session_type: "unknown".to_string(),
+            has_wayland: false,
+            has_gamemode_run: false,
+            gamemode_path: None,
+            has_system_glfw: false,
+            system_glfw_path: None,
+            system_glfw_wayland: false,
+            has_vulkan: false,
+        }
+    }
+}
+
+fn has_word_token(haystack: &str, token: &str) -> bool {
+    haystack
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|part| part == token)
+}
+
+pub fn classify_gpu_vendor(name: &str) -> &'static str {
+    let lower = name.to_lowercase();
+    if lower.contains("nvidia")
+        || lower.contains("geforce")
+        || lower.contains("quadro")
+        || lower.contains("tesla")
+        || has_word_token(&lower, "rtx")
+        || has_word_token(&lower, "gtx")
     {
-        if let Ok(output) = std::process::Command::new("lspci").output() {
-            let text = String::from_utf8_lossy(&output.stdout);
-            let mut gpus = Vec::new();
-            for line in text.lines() {
-                let lower = line.to_lowercase();
-                if lower.contains("vga compatible controller")
-                    || lower.contains("3d controller")
-                    || lower.contains("display controller")
-                {
-                    gpus.push(line.trim().to_string());
-                }
+        "nvidia"
+    } else if has_word_token(&lower, "amd")
+        || has_word_token(&lower, "ati")
+        || lower.contains("radeon")
+        || lower.contains("advanced micro devices")
+    {
+        "amd"
+    } else if has_word_token(&lower, "intel") {
+        "intel"
+    } else {
+        "unknown"
+    }
+}
+
+pub fn is_dedicated_gpu_model(name: &str, vendor: &str, is_3d_controller: bool) -> bool {
+    let lower = name.to_lowercase();
+
+    // Virtual / USB display adapters are never hardware-accelerated dGPUs
+    if lower.contains("microsoft basic")
+        || lower.contains("llvmpipe")
+        || lower.contains("virtio")
+        || lower.contains("qxl")
+        || lower.contains("vmware")
+        || lower.contains("virtualbox")
+        || lower.contains("displaylink")
+    {
+        return false;
+    }
+
+    match vendor {
+        "nvidia" => !lower.contains("nforce"),
+        "amd" => {
+            let clearly_integrated = lower.contains("raphael")
+                || lower.contains("phoenix")
+                || lower.contains("rembrandt")
+                || lower.contains("cezanne")
+                || lower.contains("renoir")
+                || lower.contains("lucienne")
+                || lower.contains("picasso")
+                || lower.contains("raven")
+                || lower.contains("strix")
+                || lower.contains("hawk point")
+                || lower.contains("granite ridge")
+                || lower.contains("barcelo")
+                || lower.contains("mendocino")
+                || lower.contains("vangogh")
+                || lower.contains("van gogh")
+                || lower.contains("780m")
+                || lower.contains("760m")
+                || lower.contains("740m")
+                || lower.contains("680m")
+                || lower.contains("660m")
+                || lower.contains("890m")
+                || lower.contains("880m")
+                || lower.contains("vega 3")
+                || lower.contains("vega 6")
+                || lower.contains("vega 7")
+                || lower.contains("vega 8")
+                || lower.contains("vega 10")
+                || lower.contains("vega 11")
+                || lower.contains("radeon(tm) graphics")
+                || (lower.contains("radeon graphics")
+                    && !lower.contains("rx")
+                    && !lower.contains("pro"));
+            if clearly_integrated {
+                return false;
             }
-            if !gpus.is_empty() {
-                let dedicated = gpus.iter().find(|g| {
-                    let l = g.to_lowercase();
-                    l.contains("nvidia") || l.contains("geforce") || l.contains("radeon") || l.contains("amd")
-                });
-                let chosen = dedicated.unwrap_or(&gpus[0]);
-                let is_ded = {
-                    let l = chosen.to_lowercase();
-                    (l.contains("nvidia") || l.contains("geforce") || l.contains("radeon") || l.contains("amd"))
-                        && !l.contains("intel")
-                };
-                return (clean_gpu_name(chosen), is_ded);
+            if is_3d_controller {
+                return true;
+            }
+            lower.contains("radeon rx")
+                || lower.contains("rx ")
+                || lower.contains("radeon pro")
+                || lower.contains("firepro")
+                || lower.contains("radeon vii")
+                || lower.contains("radeon hd")
+                || lower.contains("navi")
+                || lower.contains("polaris")
+                || lower.contains("ellesmere")
+                || lower.contains("baffin")
+                || lower.contains("vega 56")
+                || lower.contains("vega 64")
+                || lower.contains("frontier edition")
+                || lower.contains("r9 ")
+        }
+        "intel" => {
+            if is_3d_controller && lower.contains("arc") {
+                return true;
+            }
+            lower.contains("arc ")
+                || lower.contains("alchemist")
+                || lower.contains("battlemage")
+                || lower.contains("dg2")
+        }
+        _ => false,
+    }
+}
+
+pub fn parse_lspci_gpus(lspci_stdout: &str) -> Vec<GpuDeviceInfo> {
+    let mut gpus = Vec::new();
+    for line in lspci_stdout.lines() {
+        let trimmed = line.trim();
+        let lower = trimmed.to_lowercase();
+        let is_3d = lower.contains("3d controller");
+        if lower.contains("vga compatible controller")
+            || is_3d
+            || lower.contains("display controller")
+        {
+            let vendor = classify_gpu_vendor(trimmed).to_string();
+            let is_dedicated = is_dedicated_gpu_model(trimmed, &vendor, is_3d);
+            gpus.push(GpuDeviceInfo {
+                name: clean_gpu_name(trimmed),
+                vendor,
+                is_dedicated,
+                driver: None,
+                boot_vga: None,
+            });
+        }
+    }
+    gpus
+}
+
+pub fn select_primary_gpu(gpus: &[GpuDeviceInfo]) -> Option<&GpuDeviceInfo> {
+    gpus.iter()
+        .find(|g| g.vendor == "nvidia" && g.is_dedicated)
+        .or_else(|| gpus.iter().find(|g| g.is_dedicated))
+        .or_else(|| gpus.first())
+}
+
+pub fn evaluate_is_hybrid_gpu(gpus: &[GpuDeviceInfo]) -> bool {
+    if gpus.len() < 2 {
+        return false;
+    }
+    let has_dedicated = gpus.iter().any(|g| g.is_dedicated);
+    let has_integrated = gpus.iter().any(|g| !g.is_dedicated && g.vendor != "unknown");
+    let has_nvidia = gpus.iter().any(|g| g.vendor == "nvidia");
+    let has_non_nvidia = gpus.iter().any(|g| g.vendor != "nvidia" && g.vendor != "unknown");
+    (has_dedicated && has_integrated) || (has_nvidia && has_non_nvidia)
+}
+
+pub fn detect_nvidia_driver_from_signals(
+    has_proc_nvidia_version: bool,
+    has_sys_module_nvidia: bool,
+    has_sys_module_nouveau: bool,
+    drm_drivers: &[Option<String>],
+) -> Option<String> {
+    if has_proc_nvidia_version
+        || has_sys_module_nvidia
+        || drm_drivers
+            .iter()
+            .any(|d| d.as_deref() == Some("nvidia"))
+    {
+        return Some("nvidia".to_string());
+    }
+    if has_sys_module_nouveau
+        || drm_drivers
+            .iter()
+            .any(|d| d.as_deref() == Some("nouveau"))
+    {
+        return Some("nouveau".to_string());
+    }
+    None
+}
+
+pub fn parse_session_info(
+    platform: &str,
+    wayland_display: Option<&str>,
+    xdg_session_type: Option<&str>,
+    _x11_display: Option<&str>,
+) -> (String, bool) {
+    if platform == "windows" {
+        return ("windows".to_string(), false);
+    }
+    if platform == "macos" {
+        return ("macos".to_string(), false);
+    }
+
+    let wayland_env = wayland_display
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let xdg_env = xdg_session_type
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty());
+
+    // Wayland native requires an actual WAYLAND_DISPLAY socket and must not override explicit X11 sessions
+    if wayland_env.is_some() && xdg_env.as_deref() != Some("x11") {
+        return ("wayland".to_string(), true);
+    }
+
+    if let Some(xdg) = xdg_env {
+        if xdg == "x11" || x11_display_present(_x11_display) {
+            return ("x11".to_string(), false);
+        }
+        return (xdg, false);
+    }
+
+    if x11_display_present(_x11_display) {
+        return ("x11".to_string(), false);
+    }
+
+    ("unknown".to_string(), false)
+}
+
+fn x11_display_present(x11_display: Option<&str>) -> bool {
+    x11_display.map(str::trim).is_some_and(|s| !s.is_empty())
+}
+
+pub fn is_system_battery(supply_type: &str, scope: Option<&str>, name: &str) -> bool {
+    if !supply_type.trim().eq_ignore_ascii_case("Battery") {
+        return false;
+    }
+    if let Some(sc) = scope {
+        if sc.trim().eq_ignore_ascii_case("Device") {
+            return false;
+        }
+    }
+    let lower_name = name.trim().to_lowercase();
+    if lower_name.starts_with("hidpp_")
+        || lower_name.starts_with("hid-")
+        || lower_name.contains("mouse")
+        || lower_name.contains("keyboard")
+        || lower_name.starts_with("sony_controller")
+        || lower_name.starts_with("wacom_")
+    {
+        return false;
+    }
+    true
+}
+
+pub fn find_executable_in_paths(
+    name: &str,
+    path_env: Option<&str>,
+    extra_dirs: &[&str],
+) -> Option<std::path::PathBuf> {
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(path_str) = path_env {
+        dirs.extend(std::env::split_paths(path_str));
+    }
+    for dir in extra_dirs {
+        let p = std::path::PathBuf::from(dir);
+        if !dirs.contains(&p) {
+            dirs.push(p);
+        }
+    }
+
+    for dir in dirs {
+        let candidate = dir.join(name);
+        if is_executable_file(&candidate) {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn is_executable_file(path: &std::path::Path) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !meta.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+pub fn bytes_contain_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return false;
+    }
+    haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+pub fn elf_has_wayland_glfw(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"\x7fELF") && bytes_contain_subslice(bytes, b"glfwGetWaylandWindow")
+}
+
+pub fn has_hardware_vulkan_icd_names(filenames: &[&str]) -> bool {
+    filenames.iter().any(|name| {
+        let lower = name.to_lowercase();
+        lower.ends_with(".json")
+            && !lower.starts_with("lvp_icd")
+            && !lower.contains("lavapipe")
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn read_drm_sysfs_cards() -> Vec<(Option<String>, Option<String>, Option<bool>)> {
+    let mut results = Vec::new();
+    let Ok(entries) = std::fs::read_dir("/sys/class/drm") else {
+        return results;
+    };
+    let mut card_dirs: Vec<std::path::PathBuf> = entries
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with("card")
+                && !name.contains('-')
+                && name[4..].chars().all(|c| c.is_ascii_digit())
+            {
+                Some(e.path())
+            } else {
+                None
+            }
+        })
+        .collect();
+    card_dirs.sort();
+
+    for card_path in card_dirs {
+        let dev_path = card_path.join("device");
+        let vendor = std::fs::read_to_string(dev_path.join("vendor"))
+            .ok()
+            .map(|v| match v.trim().to_lowercase().as_str() {
+                "0x10de" => "nvidia".to_string(),
+                "0x1002" => "amd".to_string(),
+                "0x8086" => "intel".to_string(),
+                other => other.to_string(),
+            });
+        let driver = std::fs::read_link(dev_path.join("driver"))
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()));
+        let boot_vga = std::fs::read_to_string(dev_path.join("boot_vga"))
+            .ok()
+            .map(|v| v.trim() == "1");
+        if vendor.is_some() || driver.is_some() {
+            results.push((vendor, driver, boot_vga));
+        }
+    }
+    results
+}
+
+#[cfg(target_os = "linux")]
+fn detect_linux_battery() -> bool {
+    let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Ok(supply_type) = std::fs::read_to_string(path.join("type")) else {
+            continue;
+        };
+        let scope = std::fs::read_to_string(path.join("scope")).ok();
+        if is_system_battery(&supply_type, scope.as_deref(), &name) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "linux")]
+fn detect_linux_system_glfw() -> (bool, Option<String>, bool) {
+    const CANDIDATE_PATHS: &[&str] = &[
+        "/usr/lib/libglfw.so",
+        "/usr/lib/libglfw.so.3",
+        "/usr/lib64/libglfw.so",
+        "/usr/lib64/libglfw.so.3",
+        "/usr/lib/x86_64-linux-gnu/libglfw.so",
+        "/usr/lib/x86_64-linux-gnu/libglfw.so.3",
+        "/usr/lib/aarch64-linux-gnu/libglfw.so",
+        "/usr/lib/aarch64-linux-gnu/libglfw.so.3",
+        "/usr/local/lib/libglfw.so",
+        "/usr/local/lib/libglfw.so.3",
+    ];
+
+    let mut fallback_x11_only: Option<String> = None;
+
+    for raw_path in CANDIDATE_PATHS {
+        let p = std::path::Path::new(raw_path);
+        if !p.is_file() {
+            continue;
+        }
+        let resolved = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let Ok(bytes) = std::fs::read(&resolved) else {
+            continue;
+        };
+        if elf_has_wayland_glfw(&bytes) {
+            return (
+                true,
+                Some(raw_path.to_string()),
+                true,
+            );
+        }
+        if fallback_x11_only.is_none() && bytes.starts_with(b"\x7fELF") {
+            fallback_x11_only = Some(raw_path.to_string());
+        }
+    }
+
+    if let Some(path) = fallback_x11_only {
+        (true, Some(path), false)
+    } else {
+        (false, None, false)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn detect_linux_vulkan() -> bool {
+    const VULKAN_LIBS: &[&str] = &[
+        "/usr/lib/libvulkan.so.1",
+        "/usr/lib64/libvulkan.so.1",
+        "/usr/lib/x86_64-linux-gnu/libvulkan.so.1",
+        "/usr/lib/aarch64-linux-gnu/libvulkan.so.1",
+        "/usr/local/lib/libvulkan.so.1",
+    ];
+    let has_loader = VULKAN_LIBS.iter().any(|p| std::path::Path::new(p).is_file());
+    if !has_loader {
+        return false;
+    }
+
+    for env_key in &["VK_ICD_FILENAMES", "VK_DRIVER_FILES"] {
+        if let Ok(val) = std::env::var(env_key) {
+            let files: Vec<&str> = val
+                .split(':')
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && std::path::Path::new(s).is_file())
+                .collect();
+            if has_hardware_vulkan_icd_names(&files) {
+                return true;
             }
         }
+    }
+
+    const ICD_DIRS: &[&str] = &[
+        "/usr/share/vulkan/icd.d",
+        "/etc/vulkan/icd.d",
+        "/usr/local/share/vulkan/icd.d",
+    ];
+    let mut filenames: Vec<String> = Vec::new();
+    for dir in ICD_DIRS {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_file() {
+                    filenames.push(entry.file_name().to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    let refs: Vec<&str> = filenames.iter().map(String::as_str).collect();
+    has_hardware_vulkan_icd_names(&refs)
+}
+
+pub fn detect_system_capabilities() -> SystemCapabilities {
+    let platform = std::env::consts::OS.to_string();
+    let arch = std::env::consts::ARCH.to_string();
+    let cpu_cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+
+    let wayland_env = std::env::var("WAYLAND_DISPLAY").ok();
+    let xdg_env = std::env::var("XDG_SESSION_TYPE").ok();
+    let x11_env = std::env::var("DISPLAY").ok();
+    let (session_type, has_wayland) = parse_session_info(
+        &platform,
+        wayland_env.as_deref(),
+        xdg_env.as_deref(),
+        x11_env.as_deref(),
+    );
+
+    let mut caps = SystemCapabilities {
+        platform: platform.clone(),
+        arch,
+        cpu_cores,
+        session_type,
+        has_wayland,
+        ..SystemCapabilities::default()
+    };
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut gpus = if let Ok(output) = std::process::Command::new("lspci").output() {
+            parse_lspci_gpus(&String::from_utf8_lossy(&output.stdout))
+        } else {
+            Vec::new()
+        };
+
+        let drm_cards = read_drm_sysfs_cards();
+        if gpus.is_empty() && !drm_cards.is_empty() {
+            for (vendor_opt, driver_opt, boot_vga) in &drm_cards {
+                let vendor = vendor_opt.clone().unwrap_or_else(|| "unknown".to_string());
+                let name = match vendor.as_str() {
+                    "nvidia" => "NVIDIA GPU".to_string(),
+                    "amd" => "AMD GPU".to_string(),
+                    "intel" => "Intel GPU".to_string(),
+                    _ => "Linux DRM GPU".to_string(),
+                };
+                gpus.push(GpuDeviceInfo {
+                    name,
+                    is_dedicated: vendor == "nvidia",
+                    vendor,
+                    driver: driver_opt.clone(),
+                    boot_vga: *boot_vga,
+                });
+            }
+        } else {
+            // Attach DRM driver and boot_vga signals to matching GPUs when vendors line up cleanly
+            for gpu in &mut gpus {
+                if let Some((_, drv, boot)) = drm_cards.iter().find(|(v, _, _)| v.as_deref() == Some(gpu.vendor.as_str())) {
+                    gpu.driver = drv.clone();
+                    gpu.boot_vga = *boot;
+                }
+            }
+        }
+
+        let drm_drivers: Vec<Option<String>> = drm_cards.iter().map(|(_, d, _)| d.clone()).collect();
+        let has_nvidia_gpu = gpus.iter().any(|g| g.vendor == "nvidia")
+            || drm_cards.iter().any(|(v, _, _)| v.as_deref() == Some("nvidia"));
+        let nvidia_driver = if has_nvidia_gpu {
+            detect_nvidia_driver_from_signals(
+                std::path::Path::new("/proc/driver/nvidia/version").exists(),
+                std::path::Path::new("/sys/module/nvidia").exists(),
+                std::path::Path::new("/sys/module/nouveau").exists(),
+                &drm_drivers,
+            )
+        } else {
+            None
+        };
+        let has_nvidia_proprietary = has_nvidia_gpu && nvidia_driver.as_deref() == Some("nvidia");
+
+        if let Some(primary) = select_primary_gpu(&gpus) {
+            caps.gpu_name = primary.name.clone();
+            caps.is_dedicated_gpu = primary.is_dedicated;
+            caps.gpu_vendor = primary.vendor.clone();
+        }
+        caps.has_nvidia_gpu = has_nvidia_gpu;
+        caps.has_nvidia_proprietary = has_nvidia_proprietary;
+        caps.nvidia_driver = nvidia_driver;
+        caps.has_amd_gpu = gpus.iter().any(|g| g.vendor == "amd");
+        caps.has_intel_gpu = gpus.iter().any(|g| g.vendor == "intel");
+        caps.is_hybrid_gpu = evaluate_is_hybrid_gpu(&gpus);
+        caps.gpus = gpus;
+
+        caps.has_battery = detect_linux_battery();
+
+        let path_env = std::env::var("PATH").ok();
+        let gm_path = find_executable_in_paths(
+            "gamemoderun",
+            path_env.as_deref(),
+            &["/usr/bin", "/usr/games", "/usr/local/bin"],
+        );
+        caps.has_gamemode_run = gm_path.is_some();
+        caps.gamemode_path = gm_path.map(|p| p.to_string_lossy().to_string());
+
+        let (has_glfw, glfw_path, glfw_wayland) = detect_linux_system_glfw();
+        caps.has_system_glfw = has_glfw;
+        caps.system_glfw_path = glfw_path;
+        caps.system_glfw_wayland = glfw_wayland;
+
+        caps.has_vulkan = detect_linux_vulkan();
     }
 
     #[cfg(target_os = "windows")]
@@ -851,33 +1475,165 @@ fn detect_gpu_info() -> (String, bool) {
             .args(&[
                 "-NoProfile",
                 "-Command",
-                "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+                "$gpus = (Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name); $bat = @(Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue).Count; Write-Output ('BAT=' + $bat); $gpus | ForEach-Object { Write-Output ('GPU=' + $_) }",
             ])
             .output()
         {
             let text = String::from_utf8_lossy(&output.stdout);
-            let lines: Vec<&str> = text.lines().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-            if !lines.is_empty() {
-                let dedicated = lines.iter().find(|l| {
-                    let lower = l.to_lowercase();
-                    lower.contains("nvidia")
-                        || lower.contains("geforce")
-                        || lower.contains("rtx")
-                        || lower.contains("gtx")
-                        || lower.contains("radeon")
-                        || lower.contains("amd")
-                });
-                let chosen = dedicated.unwrap_or(&lines[0]);
-                let is_ded = {
-                    let lower = chosen.to_lowercase();
-                    !lower.contains("intel") && !lower.contains("basic") && !lower.contains("microsoft")
+            let mut gpus = Vec::new();
+            for line in text.lines().map(str::trim).filter(|s| !s.is_empty()) {
+                if let Some(bat_str) = line.strip_prefix("BAT=") {
+                    caps.has_battery = bat_str.trim().parse::<u32>().unwrap_or(0) > 0;
+                } else if let Some(gpu_raw) = line.strip_prefix("GPU=") {
+                    let vendor = classify_gpu_vendor(gpu_raw).to_string();
+                    let is_dedicated = is_dedicated_gpu_model(gpu_raw, &vendor, false);
+                    gpus.push(GpuDeviceInfo {
+                        name: clean_gpu_name(gpu_raw),
+                        vendor,
+                        is_dedicated,
+                        driver: Some("windows".to_string()),
+                        boot_vga: None,
+                    });
+                }
+            }
+            if !gpus.is_empty() {
+                if let Some(primary) = select_primary_gpu(&gpus) {
+                    caps.gpu_name = primary.name.clone();
+                    caps.is_dedicated_gpu = primary.is_dedicated;
+                    caps.gpu_vendor = primary.vendor.clone();
+                }
+                caps.has_nvidia_gpu = gpus.iter().any(|g| g.vendor == "nvidia");
+                caps.has_nvidia_proprietary = caps.has_nvidia_gpu;
+                caps.nvidia_driver = if caps.has_nvidia_gpu {
+                    Some("windows".to_string())
+                } else {
+                    None
                 };
-                return (clean_gpu_name(chosen), is_ded);
+                caps.has_amd_gpu = gpus.iter().any(|g| g.vendor == "amd");
+                caps.has_intel_gpu = gpus.iter().any(|g| g.vendor == "intel");
+                caps.is_hybrid_gpu = evaluate_is_hybrid_gpu(&gpus);
+                caps.gpus = gpus;
             }
         }
+        caps.has_vulkan = std::path::Path::new("C:\\Windows\\System32\\vulkan-1.dll").is_file();
     }
 
-    ("Standardní grafická karta".to_string(), false)
+    caps
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    #[test]
+    fn test_ryzen_igpu_plus_rtx_desktop_detected_correctly() {
+        let lspci = "\
+01:00.0 VGA compatible controller: NVIDIA Corporation AD104 [GeForce RTX 4070] (rev a1)
+0c:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Raphael (rev c5)
+";
+        let gpus = parse_lspci_gpus(lspci);
+        assert_eq!(gpus.len(), 2);
+        assert_eq!(gpus[0].vendor, "nvidia");
+        assert!(gpus[0].is_dedicated);
+        assert_eq!(gpus[1].vendor, "amd");
+        assert!(!gpus[1].is_dedicated);
+        assert!(evaluate_is_hybrid_gpu(&gpus));
+
+        let primary = select_primary_gpu(&gpus).unwrap();
+        assert_eq!(primary.vendor, "nvidia");
+        assert!(primary.is_dedicated);
+    }
+
+    #[test]
+    fn test_intel_plus_amd_rx_hybrid_laptop() {
+        let lspci = "\
+00:02.0 VGA compatible controller: Intel Corporation Raptor Lake-P [Iris Xe Graphics] (rev 04)
+03:00.0 Display controller: Advanced Micro Devices, Inc. [AMD/ATI] Navi 23 [Radeon RX 6600M] (rev c3)
+";
+        let gpus = parse_lspci_gpus(lspci);
+        assert_eq!(gpus.len(), 2);
+        assert_eq!(gpus[0].vendor, "intel");
+        assert!(!gpus[0].is_dedicated);
+        assert_eq!(gpus[1].vendor, "amd");
+        assert!(gpus[1].is_dedicated);
+        assert!(evaluate_is_hybrid_gpu(&gpus));
+
+        let primary = select_primary_gpu(&gpus).unwrap();
+        assert_eq!(primary.vendor, "amd");
+        assert!(primary.is_dedicated);
+    }
+
+    #[test]
+    fn test_single_amd_apu_not_flagged_hybrid_or_dedicated() {
+        let lspci = "04:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev c1)\n";
+        let gpus = parse_lspci_gpus(lspci);
+        assert_eq!(gpus.len(), 1);
+        assert_eq!(gpus[0].vendor, "amd");
+        assert!(!gpus[0].is_dedicated);
+        assert!(!evaluate_is_hybrid_gpu(&gpus));
+    }
+
+    #[test]
+    fn test_nvidia_driver_distinguishes_proprietary_vs_nouveau() {
+        assert_eq!(
+            detect_nvidia_driver_from_signals(true, true, false, &[Some("nvidia".into())]),
+            Some("nvidia".to_string())
+        );
+        assert_eq!(
+            detect_nvidia_driver_from_signals(false, false, true, &[Some("nouveau".into())]),
+            Some("nouveau".to_string())
+        );
+        assert_eq!(
+            detect_nvidia_driver_from_signals(false, false, false, &[Some("amdgpu".into())]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_wireless_mouse_battery_is_ignored() {
+        assert!(!is_system_battery("Battery\n", Some("Device\n"), "hidpp_battery_0"));
+        assert!(!is_system_battery("Battery", None, "hid-00:11:22-battery"));
+        assert!(!is_system_battery("Mains", Some("System"), "AC"));
+        assert!(is_system_battery("Battery\n", Some("System\n"), "BAT0"));
+        assert!(is_system_battery("Battery\n", None, "BAT1"));
+    }
+
+    #[test]
+    fn test_session_detection_x11_never_enables_wayland() {
+        assert_eq!(
+            parse_session_info("linux", None, Some("x11"), Some(":0")),
+            ("x11".to_string(), false)
+        );
+        assert_eq!(
+            parse_session_info("linux", Some("wayland-0"), Some("x11"), Some(":0")),
+            ("x11".to_string(), false)
+        );
+        assert_eq!(
+            parse_session_info("linux", Some("wayland-0"), Some("wayland"), Some(":1")),
+            ("wayland".to_string(), true)
+        );
+        assert_eq!(
+            parse_session_info("linux", Some(""), Some("wayland"), None),
+            ("wayland".to_string(), false)
+        );
+    }
+
+    #[test]
+    fn test_vulkan_icd_filters_lavapipe_only() {
+        assert!(!has_hardware_vulkan_icd_names(&["lvp_icd.x86_64.json"]));
+        assert!(has_hardware_vulkan_icd_names(&[
+            "lvp_icd.x86_64.json",
+            "nvidia_icd.json"
+        ]));
+        assert!(has_hardware_vulkan_icd_names(&["radeon_icd.x86_64.json"]));
+    }
+
+    #[test]
+    fn test_elf_wayland_glfw_detection() {
+        assert!(!elf_has_wayland_glfw(b"not an elf glfwGetWaylandWindow"));
+        assert!(!elf_has_wayland_glfw(b"\x7fELF...glfwGetX11Window..."));
+        assert!(elf_has_wayland_glfw(b"\x7fELF...glfwGetWaylandWindow..."));
+    }
 }
 
 fn clean_gpu_name(raw: &str) -> String {

@@ -91,7 +91,7 @@ pub fn default_profiles() -> Value {
 
 pub fn default_config() -> Value {
     let game_dir = get_default_game_dir().to_string_lossy().to_string();
-    json!({
+    let mut cfg = json!({
         "authType": "offline",
         "offlineUsername": "Player",
         "microsoftAccount": Value::Null,
@@ -150,7 +150,26 @@ pub fn default_config() -> Value {
             "skinName": "Klasický Steve",
             "cape": "none"
         }
-    })
+    });
+    if let Some(map) = cfg.as_object_mut() {
+        for (k, v) in [
+            ("graphicsBackend", json!("default")),
+            ("enableGameMode", json!(true)),
+            ("enableDiscreteGpu", json!(true)),
+            ("enableNvidiaThreadedOpt", json!(true)),
+            ("enableNvidiaBusyWait", json!(false)),
+            ("disableVsync", json!(false)),
+            ("enableNativeWayland", json!(false)),
+            ("preferSystemGlfw", json!(false)),
+            ("enableZink", json!(false)),
+            ("customEnvVars", json!("")),
+            ("winHighPriority", json!(true)),
+            ("winDedicatedGpu", json!(true)),
+        ] {
+            map.insert(k.to_string(), v);
+        }
+    }
+    cfg
 }
 
 pub fn load_config() -> Value {
