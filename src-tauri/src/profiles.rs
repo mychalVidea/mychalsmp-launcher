@@ -836,6 +836,12 @@ pub async fn upgrade_profile(
     source_profile_id: &str,
     target_version: &str,
 ) -> Value {
+    if crate::config::is_coming_soon_version(target_version) {
+        return json!({
+            "success": false,
+            "error": format!("Minecraft {} ještě nevyšel (Coming Soon).", target_version)
+        });
+    }
     let cfg = load_config();
     let profiles = cfg
         .get("profiles")
@@ -1173,10 +1179,11 @@ pub fn update_profile_settings(profile_id: &str, updates: &Value) -> Value {
             found = true;
             let is_imported = p.get("isImported").and_then(|v| v.as_bool()).unwrap_or(false)
                 || profile_id.starts_with("imported-");
+            let is_coming_soon = crate::config::is_coming_soon_profile(p);
 
             if let Some(obj) = updates.as_object() {
                 for (k, v) in obj {
-                    if is_imported && k == "loader" {
+                    if (is_imported || is_coming_soon) && k == "loader" {
                         continue;
                     }
                     p[k] = v.clone();

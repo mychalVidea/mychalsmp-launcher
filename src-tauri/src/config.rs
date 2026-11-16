@@ -44,6 +44,26 @@ pub fn default_servers() -> Value {
     ])
 }
 
+pub fn is_coming_soon_version(version: &str) -> bool {
+    let v = version.trim();
+    v == "26.4" || v.starts_with("26.4.")
+}
+
+pub fn is_coming_soon_profile(profile: &Value) -> bool {
+    if profile
+        .get("comingSoon")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    profile
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(is_coming_soon_version)
+        .unwrap_or(false)
+}
+
 pub fn default_profiles() -> Value {
     json!([
         {
@@ -55,6 +75,16 @@ pub fn default_profiles() -> Value {
             "icon": "assets/logo.png",
             "badge": "DOPORUČENO",
             "description": "Maximální FPS (Sodium, Lithium, Iris Shaders) + Simple Voice Chat pro MYCHAL SMP."
+        },
+        {
+            "id": "vanilla-26-4",
+            "name": "Minecraft 26.4",
+            "type": "release",
+            "version": "26.4",
+            "loader": "vanilla",
+            "icon": "latest",
+            "comingSoon": true,
+            "description": "Připravovaná verze Minecraft 26.4 — Coming Soon."
         },
         {
             "id": "vanilla-26-3",
@@ -252,6 +282,21 @@ pub fn load_config() -> Value {
             deleted_defaults.iter().any(|d| d == id)
                 || arr.iter().any(|x| x.get("id").and_then(|v| v.as_str()) == Some(id))
         };
+        if !has_or_deleted(profiles, "vanilla-26-4") {
+            profiles.insert(
+                (1usize).min(profiles.len()),
+                json!({
+                    "id": "vanilla-26-4",
+                    "name": "Minecraft 26.4",
+                    "type": "release",
+                    "version": "26.4",
+                    "loader": "vanilla",
+                    "icon": "latest",
+                    "comingSoon": true,
+                    "description": "Připravovaná verze Minecraft 26.4 — Coming Soon."
+                }),
+            );
+        }
         if !has_or_deleted(profiles, "vanilla-26-3") {
             profiles.insert(
                 (1usize).min(profiles.len()),
@@ -426,6 +471,38 @@ pub fn sync_self_nametag_config(config: &Value) {
     let selected_dir = resolve_profile_dir(config, None);
     if selected_dir != base_dir {
         write_to(&selected_dir);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_coming_soon_version_and_profile_detection() {
+        assert!(is_coming_soon_version("26.4"));
+        assert!(is_coming_soon_version(" 26.4.1 "));
+        assert!(!is_coming_soon_version("26.3"));
+        assert!(!is_coming_soon_version("26.40"));
+
+        assert!(is_coming_soon_profile(&json!({ "version": "26.4" })));
+        assert!(is_coming_soon_profile(&json!({ "version": "26.3", "comingSoon": true })));
+        assert!(!is_coming_soon_profile(&json!({ "version": "26.3" })));
+    }
+
+    #[test]
+    fn test_default_profiles_include_coming_soon_26_4_without_spoiler_title() {
+        let profiles = default_profiles();
+        let arr = profiles.as_array().expect("default_profiles should be an array");
+        let p264 = arr
+            .iter()
+            .find(|p| p.get("id").and_then(|v| v.as_str()) == Some("vanilla-26-4"))
+            .expect("vanilla-26-4 should exist in default profiles");
+        assert_eq!(p264.get("version").and_then(|v| v.as_str()), Some("26.4"));
+        assert_eq!(p264.get("loader").and_then(|v| v.as_str()), Some("vanilla"));
+        assert_eq!(p264.get("comingSoon").and_then(|v| v.as_bool()), Some(true));
+        let serialized = p264.to_string().to_lowercase();
+        assert!(!serialized.contains("deep freeze"));
     }
 }
 

@@ -378,6 +378,13 @@ pub async fn download_mod_or_pack_with_deps(
         }
     }
 
+    if crate::config::is_coming_soon_version(&mc_version) {
+        return Err(format!(
+            "Minecraft {} ještě nevyšel (Coming Soon) a není dostupný v katalogu Modrinth.",
+            mc_version
+        ));
+    }
+
     let target_subdir = match project_type {
         "resourcepack" => "resourcepacks",
         "shader" => "shaderpacks",
@@ -1077,6 +1084,10 @@ pub async fn check_profile_mod_updates_bulk(profile_id: Option<&str>) -> Value {
         }
     }
 
+    if crate::config::is_coming_soon_version(&mc_version) {
+        return json!({ "success": true, "updates": [] });
+    }
+
     let mut hash_to_file: HashMap<String, String> = HashMap::new();
     if let Ok(entries) = fs::read_dir(&mods_dir) {
         for entry in entries.flatten() {
@@ -1434,6 +1445,19 @@ pub fn toggle_bundled_mod_state(mod_id: &str) -> Value {
 }
 
 pub async fn apply_profile_optimization(app: &AppHandle, profile_id: &str) -> Value {
+    let cfg = load_config();
+    if let Some(p) = cfg
+        .get("profiles")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.iter().find(|x| x.get("id").and_then(|v| v.as_str()) == Some(profile_id)))
+    {
+        if crate::config::is_coming_soon_profile(p) {
+            return json!({
+                "success": false,
+                "error": "Minecraft 26.4 ještě nevyšel (Coming Soon). Optimalizace zatím není dostupná."
+            });
+        }
+    }
     install_optimization_pack_for_profile(app, Some(profile_id), None).await
 }
 

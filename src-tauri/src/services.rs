@@ -2107,6 +2107,9 @@ pub fn format_version_label(mc_version: &str, loader_type: &str) -> String {
     if ver.is_empty() {
         return "Minecraft".to_string();
     }
+    if crate::config::is_coming_soon_version(ver) {
+        return format!("Verze {} (Coming Soon)", ver);
+    }
     let ldr = loader_type.trim();
     if ldr.is_empty() || ldr.eq_ignore_ascii_case("vanilla") {
         return format!("Verze {}", ver);
@@ -2948,6 +2951,7 @@ mod tests {
     fn test_format_version_label_and_idle_state() {
         assert_eq!(format_version_label("26.3", "fabric"), "Verze 26.3 (Fabric)");
         assert_eq!(format_version_label("26.3", "vanilla"), "Verze 26.3");
+        assert_eq!(format_version_label("26.4", "vanilla"), "Verze 26.4 (Coming Soon)");
         assert_eq!(format_version_label("1.21.11", ""), "Verze 1.21.11");
 
         let cfg = json!({

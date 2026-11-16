@@ -941,6 +941,25 @@ body.is-maximized {
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
+.mc-btn-quickplay.is-coming-soon-btn,
+.mc-btn-quickplay.is-coming-soon-btn:hover,
+.mc-btn-quickplay.is-coming-soon-btn:disabled {
+    background: var(--surface2, #18181c);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: var(--brand-gray, #94a3b8);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.9;
+}
+
+.mc-btn-quickplay.is-coming-soon-btn svg {
+    stroke: var(--brand-gray, #94a3b8) !important;
+    fill: none !important;
+    color: var(--brand-gray, #94a3b8) !important;
+    filter: none;
+}
+
 /* ── TAB: PLAY (DASHBOARD SPLIT) ──────────────────────────────────────── */
 #tab-play.active {
     display: block;
@@ -1773,6 +1792,20 @@ body.is-maximized {
 .profile-actions .btn-upgrade-profile:disabled:hover,
 .profile-actions .btn-profile-delete:disabled:hover,
 .profile-tool-btn:disabled:hover {
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.profile-actions .btn-launch-profile.is-coming-soon-btn,
+.profile-actions .btn-launch-profile.is-coming-soon-btn:hover,
+.profile-actions .btn-launch-profile.is-coming-soon-btn:disabled,
+.btn-launch-profile.is-coming-soon-btn {
+    background: var(--surface2, #18181c) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--brand-gray, #94a3b8) !important;
+    opacity: 0.88 !important;
+    filter: none !important;
+    cursor: not-allowed !important;
     box-shadow: none !important;
     transform: none !important;
 }
@@ -6114,6 +6147,33 @@ input[type="range"].slider.is-dragging::-webkit-slider-thumb {
     font-size: 13px;
 }
 
+.custom-option-tag {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #60a5fa;
+}
+
+.custom-dropdown.is-locked .custom-dropdown-trigger {
+    opacity: 0.65;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+.form-helper-note {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-sm, 8px);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--brand-gray, #94a3b8);
+}
+
 /* ── Create Profile Button & Header Row ────────────────────────────── */
 .section-header-actions {
     display: flex;
@@ -9862,6 +9922,13 @@ body.app-in-tray-paused #skinCanvas3D {
 .profile-spec-bar .spec-upgrade-hint:hover {
     color: #93c5fd;
     text-decoration: underline;
+}
+
+.profile-spec-bar .spec-coming-soon {
+    color: #60a5fa;
+    font-weight: 600;
+    letter-spacing: 0.35px;
+    text-transform: uppercase;
 }
 
 /* ── Section Header Secondary Action (SMP-PACK) ───────────────────────── */

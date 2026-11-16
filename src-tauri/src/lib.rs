@@ -99,6 +99,15 @@ async fn launch_game(
         .get("version")
         .and_then(|v| v.as_str())
         .unwrap_or("26.3");
+    if crate::config::is_coming_soon_profile(&profile)
+        || crate::config::is_coming_soon_version(mc_ver)
+    {
+        return json!({
+            "success": false,
+            "comingSoon": true,
+            "error": format!("Minecraft {} ještě nevyšel (Coming Soon). Spuštění zatím není dostupné.", mc_ver)
+        });
+    }
     let mc_ver_owned = mc_ver.to_string();
 
     let app_clone = app.clone();
@@ -470,6 +479,15 @@ async fn preload_launch_environment(_app: AppHandle, profile_id: Option<String>)
         .or_else(|| cfg.get("version").and_then(|v| v.as_str()))
         .unwrap_or("26.3");
 
+    if profile
+        .as_ref()
+        .map(crate::config::is_coming_soon_profile)
+        .unwrap_or(false)
+        || crate::config::is_coming_soon_version(mc_ver)
+    {
+        return json!({ "success": false, "comingSoon": true });
+    }
+
     let _ = crate::launcher::ensure_java_executable(&cfg, &base_dir, |_, _| {}).await;
     if let Ok(manifest) = crate::launcher::ensure_fabric_profile(&base_dir, mc_ver).await {
         let _ = crate::launcher::ensure_vanilla_client_jar(&base_dir, mc_ver, &manifest).await;
@@ -491,6 +509,13 @@ async fn search_modrinth(
     offset: Option<u32>,
     limit: Option<u32>,
 ) -> Value {
+    if version
+        .as_deref()
+        .map(crate::config::is_coming_soon_version)
+        .unwrap_or(false)
+    {
+        return json!({ "hits": [], "total_hits": 0, "comingSoon": true });
+    }
     match crate::mods::search_modrinth_api(
         query.as_deref().unwrap_or(""),
         version.as_deref().unwrap_or(""),

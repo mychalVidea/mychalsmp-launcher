@@ -404,15 +404,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         userRequestedGameStop = true;
         setTimeout(() => { userRequestedGameStop = false; }, 6000);
     }
+    function isComingSoonVersion(ver) {
+        const v = String(ver || '').trim();
+        return v === '26.4' || v.startsWith('26.4.');
+    }
+
+    function isComingSoonProfile(profile) {
+        return Boolean(profile && (profile.comingSoon === true || isComingSoonVersion(profile.version)));
+    }
+
     const BUNDLED_KEYARTS = {
         '1.21.11': 'assets/keyarts/1.21.11.jpg',
         '26.1': 'assets/keyarts/26.1.jpg',
         '26.2': 'assets/keyarts/26.2.jpg',
         '26.3': 'assets/keyarts/26.3.jpg',
+        '26.4': 'assets/keyarts/26.4.webp',
         'card-1.21.11': 'assets/keyarts/card-1.21.11.jpg',
         'card-26.1': 'assets/keyarts/card-26.1.jpg',
         'card-26.2': 'assets/keyarts/card-26.2.jpg',
         'card-26.3': 'assets/keyarts/card-26.3.jpg',
+        'card-26.4': 'assets/keyarts/26.4.webp',
         'default': 'assets/keyarts/default.jpg'
     };
     const BUNDLED_CARD_KEYARTS = {
@@ -420,6 +431,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         '26.1': 'assets/keyarts/card-26.1.jpg',
         '26.2': 'assets/keyarts/card-26.2.jpg',
         '26.3': 'assets/keyarts/card-26.3.jpg',
+        '26.4': 'assets/keyarts/26.4.webp',
         'default': 'assets/keyarts/default.jpg'
     };
     let availableKeyartsMap = { ...BUNDLED_KEYARTS };
@@ -1950,6 +1962,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    function handleQuickJoinServer(srv) {
+        if (isRunning) {
+            showToast('Hra již běží. Před připojením k serveru nejprve ukonči běžící instanci.', 'error');
+            return;
+        }
+        if (isLaunching) {
+            showToast('Probíhá spouštění nebo stahování verze. Počkej na dokončení.', 'warning');
+            return;
+        }
+        const targetProfileId = resolveLaunchProfileId();
+        const targetProf = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
+        if (isComingSoonProfile(targetProf)) {
+            showToast('Minecraft 26.4 ještě nevyšel (Coming Soon). Vyber jiný profil pro připojení na server.', 'info');
+            return;
+        }
+        recordServerJoin(srv);
+        selectActiveProfile(targetProfileId);
+        startLaunch(targetProfileId, srv);
+    }
+
     function renderServerTracker() {
         if (!trackedServersList) return;
         const servers = getSortedServers();
@@ -1995,21 +2027,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Bind quick join buttons
         trackedServersList.querySelectorAll('.btn-quick-join').forEach(btn => {
-            btn.addEventListener('click', () => {
-                if (isRunning) {
-                    showToast('Hra již běží. Před připojením k serveru nejprve ukonči běžící hru.', 'error');
-                    return;
-                }
-                if (isLaunching) {
-                    showToast('Probíhá spouštění nebo stahování verze. Počkej na dokončení.', 'warning');
-                    return;
-                }
-                const srv = btn.dataset.server;
-                const targetProfileId = resolveLaunchProfileId();
-                recordServerJoin(srv);
-                selectActiveProfile(targetProfileId);
-                startLaunch(targetProfileId, srv);
-            });
+            btn.addEventListener('click', () => handleQuickJoinServer(btn.dataset.server));
         });
 
         // Bind delete buttons
@@ -2137,21 +2155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Bind quick join buttons
         fullList.querySelectorAll('.btn-quick-join').forEach(btn => {
-            btn.addEventListener('click', () => {
-                if (isRunning) {
-                    showToast('Hra již běží. Před připojením k serveru nejprve ukonči běžící hru.', 'error');
-                    return;
-                }
-                if (isLaunching) {
-                    showToast('Probíhá spouštění nebo stahování verze. Počkej na dokončení.', 'warning');
-                    return;
-                }
-                const srv = btn.dataset.server;
-                const targetProfileId = resolveLaunchProfileId();
-                recordServerJoin(srv);
-                selectActiveProfile(targetProfileId);
-                startLaunch(targetProfileId, srv);
-            });
+            btn.addEventListener('click', () => handleQuickJoinServer(btn.dataset.server));
         });
 
         // Bind delete buttons
@@ -2554,7 +2558,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Quick Play MYCHAL SMP Banner ────────────────────────────────────────
     if (btnQuickPlayMychal) {
         btnQuickPlayMychal.addEventListener('pointerenter', () => {
-            if (!isRunning && !isLaunching && typeof prewarmLaunchEnvironment === 'function') {
+            const targetProf = (currentConfig.profiles || []).find(p => p.id === resolveLaunchProfileId());
+            if (!isRunning && !isLaunching && !isComingSoonProfile(targetProf) && typeof prewarmLaunchEnvironment === 'function') {
                 prewarmLaunchEnvironment();
             }
         }, { passive: true });
@@ -2569,6 +2574,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             const targetProfileId = resolveLaunchProfileId();
+            const targetProf = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
+            if (isComingSoonProfile(targetProf)) {
+                showToast('Minecraft 26.4 ještě nevyšel (Coming Soon). Vyber jiný profil pro spuštění hry.', 'info');
+                return;
+            }
             selectActiveProfile(targetProfileId);
 
             const scan = await window.api.checkWardenProbe(targetProfileId);
@@ -3002,6 +3012,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 3. Profil, který uživatel naposledy hrál (s nejnovějším lastPlayed timestampem)
         const playedProfiles = profiles.filter(p => {
+            if (isComingSoonProfile(p)) return false;
             const ts = (typeof p.lastPlayed === 'number' && p.lastPlayed > 0) ? p.lastPlayed : (parseInt(p.lastPlayed, 10) || 0);
             return ts > 0;
         });
@@ -3015,15 +3026,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // 4. Defaultní serverový profil MYCHALSMP, pokud existuje
-        const foundMychal = profiles.find(p => p.id === 'minecraft-26.3' || p.id === 'mychalsmp-26.3' || p.id === 'mychalsmp-26.2' || p.id === 'mychalsmp');
+        const foundMychal = profiles.find(p => p.id === 'mychalsmp-fabric' || p.id === 'minecraft-26.3' || p.id === 'mychalsmp-26.3' || p.id === 'mychalsmp-26.2' || p.id === 'mychalsmp');
         if (foundMychal) return foundMychal.id;
 
         if (currentConfig.activeProfileId) {
             const activeProf = profiles.find(p => p.id === currentConfig.activeProfileId);
-            if (activeProf) return activeProf.id;
+            if (activeProf && !isComingSoonProfile(activeProf)) return activeProf.id;
         }
 
-        return profiles[0].id;
+        const firstPlayable = profiles.find(p => !isComingSoonProfile(p));
+        return (firstPlayable || profiles[0]).id;
     }
 
     // Seřadí profily přesně podle reality hraní: 1. Běžící hra, 2. Čas posledního hraní (lastPlayed), 3. Herní čas
@@ -3055,9 +3067,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return bPlaytime - aPlaytime;
             }
 
-            // 4. Přirozené pořadí verzí sítě: 26.3 -> 26.2 -> 26.1.2 -> 1.21.11
+            // 3b. Doporučený hlavní serverový profil má přednost před nehraným Coming Soon náhledem
+            const aMain = a.id === 'mychalsmp-fabric' || a.id === 'minecraft-26.3';
+            const bMain = b.id === 'mychalsmp-fabric' || b.id === 'minecraft-26.3';
+            if (aMain && !bMain) return -1;
+            if (!aMain && bMain) return 1;
+
+            // 4. Přirozené pořadí verzí sítě: 26.4 -> 26.3 -> 26.2 -> 26.1.2 -> 1.21.11
             const getVersionPriority = (ver) => {
                 const v = String(ver || '').toLowerCase();
+                if (v.includes('26.4')) return 50;
                 if (v.includes('26.3')) return 40;
                 if (v.includes('26.2')) return 30;
                 if (v.includes('26.1')) return 20;
@@ -3242,6 +3261,52 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    function formatHeroProfileName(profile) {
+        if (!profile) return 'Minecraft 26.3';
+        const loaderTag = (profile.loader && profile.loader !== 'vanilla') ? ` (${profile.loader})` : '';
+        const base = `${profile.name}${loaderTag}`;
+        if (isComingSoonProfile(profile) && !String(profile.name || '').toLowerCase().includes('coming soon')) {
+            return `${base} · Coming Soon`;
+        }
+        return base;
+    }
+
+    function syncPrimaryActionButtonsForProfile(profile) {
+        const isComingSoon = isComingSoonProfile(profile);
+        if (btnQuickPlayMychal && !isRunning && !isLaunching) {
+            if (!btnQuickPlayMychal.dataset.defaultHtml) {
+                btnQuickPlayMychal.dataset.defaultHtml = btnQuickPlayMychal.innerHTML;
+            }
+            if (isComingSoon) {
+                btnQuickPlayMychal.disabled = true;
+                btnQuickPlayMychal.classList.add('mc-btn-disabled', 'is-coming-soon-btn');
+                btnQuickPlayMychal.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> COMING SOON (26.4)</span>';
+                btnQuickPlayMychal.title = 'Minecraft 26.4 ještě nevyšel (Coming Soon). Vyber jiný profil pro spuštění hry.';
+            } else {
+                btnQuickPlayMychal.disabled = false;
+                btnQuickPlayMychal.classList.remove('mc-btn-disabled', 'is-coming-soon-btn');
+                if (btnQuickPlayMychal.dataset.defaultHtml) {
+                    btnQuickPlayMychal.innerHTML = btnQuickPlayMychal.dataset.defaultHtml;
+                }
+                const loaderTag = (profile && profile.loader && profile.loader !== 'vanilla') ? ` • ${profile.loader}` : '';
+                btnQuickPlayMychal.title = profile
+                    ? `Rychlé připojení na MYCHAL SMP (${profile.name}${loaderTag})`
+                    : 'Rychlé připojení na MYCHAL SMP';
+            }
+        }
+        if (sidebarPlayBtn && !isRunning && !isLaunching) {
+            if (isComingSoon) {
+                sidebarPlayBtn.disabled = true;
+                sidebarPlayBtn.classList.add('mc-btn-disabled');
+                sidebarPlayBtn.title = 'Minecraft 26.4 ještě nevyšel (Coming Soon).';
+            } else {
+                sidebarPlayBtn.disabled = false;
+                sidebarPlayBtn.classList.remove('mc-btn-disabled');
+                sidebarPlayBtn.title = profile ? `Hrát (${profile.name})` : 'Hrát';
+            }
+        }
+    }
+
     // ── Profile List Rendering & Interactive Selection ──────────────────────
     function renderProfilesList() {
         const list = document.getElementById('profileCardsList');
@@ -3255,12 +3320,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         const activeProfile = profiles.find(p => p.id === activeId);
         const heroActiveProfileEl = document.getElementById('heroActiveProfileName');
         if (heroActiveProfileEl && activeProfile) {
-            const loaderTag = (activeProfile.loader && activeProfile.loader !== 'vanilla') ? ` (${activeProfile.loader})` : '';
-            heroActiveProfileEl.textContent = `${activeProfile.name}${loaderTag}`;
+            heroActiveProfileEl.textContent = formatHeroProfileName(activeProfile);
         }
-        if (btnQuickPlayMychal && activeProfile) {
-            const loaderTag = (activeProfile.loader && activeProfile.loader !== 'vanilla') ? ` • ${activeProfile.loader}` : '';
-            btnQuickPlayMychal.title = `Rychlé připojení na MYCHAL SMP (${activeProfile.name}${loaderTag})`;
+        syncPrimaryActionButtonsForProfile(activeProfile);
+        if (sideConsoleStatus && activeProfile && !isRunning && !isLaunching) {
+            if (isComingSoonProfile(activeProfile)) {
+                sideConsoleStatus.textContent = `Minecraft ${activeProfile.version} ještě nevyšel (Coming Soon).`;
+            } else {
+                const activeInst = Array.isArray(installedVersions) && installedVersions.includes(activeProfile.version);
+                sideConsoleStatus.textContent = activeInst
+                    ? 'Klient je připraven ke spuštění.'
+                    : `Verze ${activeProfile.version} není nainstalována.`;
+            }
         }
 
         updateHeroKeyart(activeProfile ? activeProfile.version : currentConfig.version);
@@ -3353,41 +3424,48 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ? `<div class="profile-icon-box">${iconDesc.svg}</div>`
                 : `<div class="profile-icon-box"><img src="${escapeHtml((iconDesc && iconDesc.src) || 'assets/icons/old.png')}" class="profile-3d-float-icon" alt="${escapeHtml(p.name || '')}" draggable="false" /></div>`;
 
+            const isComingSoon = isComingSoonProfile(p);
             const loaderTag = (p.loader && p.loader !== 'vanilla') ? `${p.loader.charAt(0).toUpperCase() + p.loader.slice(1)}` : 'Vanilla';
             const playtimeStr = (p.playtimeSeconds && p.playtimeSeconds >= 60) ? formatPlaytime(p.playtimeSeconds) : 'Zatím nehráno';
             const lastPlayedStr = p.lastPlayed ? formatLastPlayed(p.lastPlayed) : null;
-            const canUpgrade = p.version && !String(p.version).includes('26.3') && !String(p.version).includes('26.4');
+            const canUpgrade = !isComingSoon && p.version && !String(p.version).includes('26.3') && !String(p.version).includes('26.4');
 
             const specBarHtml = isProfilesTab ? `
                 <div class="profile-spec-bar">
                     <span class="spec-item spec-loader">${escapeHtml(loaderTag)}</span>
                     <span class="spec-divider"></span>
                     <span class="spec-item spec-version">v${escapeHtml(p.version || '26.3')}</span>
+                    ${isComingSoon ? '<span class="spec-divider"></span><span class="spec-item spec-coming-soon">Coming Soon</span>' : `
                     <span class="spec-divider"></span>
                     <span class="spec-item spec-ram">${p.ramMax || 4} GB RAM</span>
                     <span class="spec-divider"></span>
                     <span class="spec-item spec-playtime">${escapeHtml(playtimeStr)}</span>
                     ${lastPlayedStr ? `<span class="spec-divider"></span><span class="spec-item spec-last">${escapeHtml(lastPlayedStr)}</span>` : ''}
-                    ${canUpgrade ? `<span class="spec-divider"></span><span class="spec-item spec-upgrade-hint" data-upgrade-pid="${escapeHtml(p.id)}">Upgrade → 26.3</span>` : ''}
+                    ${canUpgrade ? `<span class="spec-divider"></span><span class="spec-item spec-upgrade-hint" data-upgrade-pid="${escapeHtml(p.id)}">Upgrade → 26.3</span>` : ''}`}
                 </div>
             ` : `
                 <div class="profile-spec-bar">
                     <span class="spec-item spec-loader">${escapeHtml(loaderTag)}</span>
                     <span class="spec-divider"></span>
                     <span class="spec-item spec-version">v${escapeHtml(p.version || '26.3')}</span>
+                    ${isComingSoon ? '<span class="spec-divider"></span><span class="spec-item spec-coming-soon">Coming Soon</span>' : ''}
                 </div>
             `;
 
-            const isThisRunning = isRunning && runningProfileId && (p.id === runningProfileId);
-            const isThisLaunching = isLaunching && launchingProfileId && (p.id === launchingProfileId);
-            const isBlocked = (isRunning || isLaunching) && !isThisRunning && !isThisLaunching;
+            const isThisRunning = !isComingSoon && isRunning && runningProfileId && (p.id === runningProfileId);
+            const isThisLaunching = !isComingSoon && isLaunching && launchingProfileId && (p.id === launchingProfileId);
+            const isBlocked = !isComingSoon && (isRunning || isLaunching) && !isThisRunning && !isThisLaunching;
 
-            const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
+            const isInst = !isComingSoon && Array.isArray(installedVersions) && installedVersions.includes(p.version);
             let launchBtnClass = 'mc-btn btn-launch-profile';
             let launchBtnAttrs = `data-profile-id="${escapeHtml(p.id)}"`;
             let launchBtnContent = '';
 
-            if (isThisRunning) {
+            if (isComingSoon) {
+                launchBtnClass += ' is-coming-soon-btn mc-btn-disabled';
+                launchBtnAttrs += ' disabled title="Minecraft 26.4 ještě nevyšel (Coming Soon). Spuštění zatím není dostupné."';
+                launchBtnContent = '<svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Coming Soon';
+            } else if (isThisRunning) {
                 launchBtnClass += ' mc-btn-red btn-stop-running';
                 launchBtnAttrs += ' title="Kliknutím ukončíš běžící hru"';
                 launchBtnContent = '<svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg> Stop';
@@ -3435,7 +3513,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
 
             return `
-                <div class="profile-row-card ${isActive ? 'active-profile' : ''}" data-profile-id="${escapeHtml(p.id)}">
+                <div class="profile-row-card ${isActive ? 'active-profile' : ''} ${isComingSoon ? 'is-coming-soon' : ''}" data-profile-id="${escapeHtml(p.id)}">
                     ${pKeyart ? `<div class="profile-card-keyart-bg" style="${keyartBgStyle}"></div><div class="profile-card-keyart-overlay"></div>` : ''}
                     ${iconHtml}
                     <div class="profile-details">
@@ -3471,14 +3549,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Bind Play buttons
             container.querySelectorAll('.btn-launch-profile').forEach(btn => {
                 btn.addEventListener('pointerenter', () => {
-                    if (!btn.disabled && typeof prewarmLaunchEnvironment === 'function') {
-                        prewarmLaunchEnvironment(btn.dataset.profileId);
+                    const pid = btn.dataset.profileId;
+                    const prof = (currentConfig.profiles || []).find(p => p.id === pid);
+                    if (!btn.disabled && !isComingSoonProfile(prof) && typeof prewarmLaunchEnvironment === 'function') {
+                        prewarmLaunchEnvironment(pid);
                     }
                 }, { passive: true });
                 btn.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    if (btn.disabled) return;
                     const pid = btn.dataset.profileId;
+                    const prof = (currentConfig.profiles || []).find(p => p.id === pid);
+                    if (isComingSoonProfile(prof)) {
+                        showToast('Minecraft 26.4 ještě nevyšel (Coming Soon). Spuštění zatím není dostupné.', 'info');
+                        return;
+                    }
+                    if (btn.disabled) return;
                     const isThisRunning = isRunning && (runningProfileId ? pid === runningProfileId : pid === currentConfig.activeProfileId);
                     if (isThisRunning) {
                         if (confirm('Chceš ukončit běžící Minecraft proces?')) {
@@ -3613,26 +3698,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             appendLog(`[PROFIL] Aktivován profil: ${p.name} (${p.version}, zavaděč: ${(p.loader || 'vanilla').toUpperCase()})`);
             const heroActiveProfileEl = document.getElementById('heroActiveProfileName');
             if (heroActiveProfileEl) {
-                const loaderTag = (p.loader && p.loader !== 'vanilla') ? ` (${p.loader})` : '';
-                heroActiveProfileEl.textContent = `${p.name}${loaderTag}`;
+                heroActiveProfileEl.textContent = formatHeroProfileName(p);
                 heroActiveProfileEl.classList.remove('val-pulse');
                 void heroActiveProfileEl.offsetWidth;
                 heroActiveProfileEl.classList.add('val-pulse');
             }
-            if (btnQuickPlayMychal) {
-                const loaderTag = (p.loader && p.loader !== 'vanilla') ? ` • ${p.loader}` : '';
-                btnQuickPlayMychal.title = `Rychlé připojení na MYCHAL SMP (${p.name}${loaderTag})`;
-            }
-            const isInst = Array.isArray(installedVersions) && installedVersions.includes(p.version);
+            syncPrimaryActionButtonsForProfile(p);
+            const isInst = !isComingSoonProfile(p) && Array.isArray(installedVersions) && installedVersions.includes(p.version);
             if (sideConsoleStatus && !isRunning && !isLaunching) {
-                sideConsoleStatus.textContent = isInst
-                    ? 'Klient je připraven ke spuštění.'
-                    : `Verze ${p.version} není nainstalována.`;
+                sideConsoleStatus.textContent = isComingSoonProfile(p)
+                    ? `Minecraft ${p.version} ještě nevyšel (Coming Soon).`
+                    : (isInst
+                        ? 'Klient je připraven ke spuštění.'
+                        : `Verze ${p.version} není nainstalována.`);
             }
         } else {
             window.api.saveConfig({ activeProfileId: profileId });
         }
-        selectedModsProfileId = profileId;
+        if (!p || !isComingSoonProfile(p)) {
+            selectedModsProfileId = profileId;
+        }
         if (typeof syncModFilterToProfile === 'function') {
             syncModFilterToProfile(profileId);
         }
@@ -3677,11 +3762,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             const targetProfileId = resolveLaunchProfileId();
+            const targetProf = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
+            if (isComingSoonProfile(targetProf)) {
+                showToast('Minecraft 26.4 ještě nevyšel (Coming Soon). Spuštění zatím není dostupné.', 'info');
+                return;
+            }
             selectActiveProfile(targetProfileId, true);
             startLaunch(targetProfileId, null);
         });
         sidebarPlayBtn.addEventListener('pointerenter', () => {
-            if (!isRunning && !isLaunching) {
+            const targetProf = (currentConfig.profiles || []).find(p => p.id === resolveLaunchProfileId());
+            if (!isRunning && !isLaunching && !isComingSoonProfile(targetProf)) {
                 prewarmLaunchEnvironment();
             }
         }, { passive: true });
@@ -3849,6 +3940,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const targetPid = profileId || currentConfig.activeProfileId || 'minecraft-26.3';
         const targetProf = (currentConfig.profiles || []).find(x => x.id === targetPid);
+        if (isComingSoonProfile(targetProf) || (!targetProf && isComingSoonVersion(currentConfig.version))) {
+            showToast('Minecraft 26.4 ještě nevyšel (Coming Soon). Spuštění zatím není dostupné.', 'info');
+            return;
+        }
 
         // ⚡ Blesková vizuální odezva do 16 ms (1. frame):
         isLaunching = true;
@@ -4232,21 +4327,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             sidebarPlayBtn.querySelector('span').innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
         }
         document.querySelectorAll('.btn-launch-profile').forEach(btn => {
-            btn.disabled = false;
-            btn.style.opacity = '1';
             const pid = btn.dataset.profileId;
             const prof = (currentConfig.profiles || []).find(p => p.id === pid);
+            if (isComingSoonProfile(prof)) {
+                btn.disabled = true;
+                btn.style.opacity = '';
+                btn.classList.remove('mc-btn-red', 'mc-btn-green', 'btn-stop-running', 'mc-btn-primary');
+                btn.classList.add('is-coming-soon-btn', 'mc-btn-disabled');
+                btn.title = 'Minecraft 26.4 ještě nevyšel (Coming Soon). Spuštění zatím není dostupné.';
+                btn.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Coming Soon</span>';
+                return;
+            }
+            btn.disabled = false;
+            btn.style.opacity = '1';
             const isInst = prof && Array.isArray(installedVersions) && installedVersions.includes(prof.version);
             btn.innerHTML = `<span>${isInst ? '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Hrát' : '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Stáhnout'}</span>`;
-            btn.classList.remove('mc-btn-red', 'mc-btn-green');
+            btn.classList.remove('mc-btn-red', 'mc-btn-green', 'is-coming-soon-btn', 'mc-btn-disabled');
             btn.classList.add('mc-btn-primary');
         });
         const activeP = (currentConfig.profiles || []).find(x => x.id === (currentConfig.activeProfileId || 'minecraft-26.3'));
-        const activeInst = activeP && Array.isArray(installedVersions) && installedVersions.includes(activeP.version);
+        syncPrimaryActionButtonsForProfile(activeP);
+        const activeInst = activeP && !isComingSoonProfile(activeP) && Array.isArray(installedVersions) && installedVersions.includes(activeP.version);
         if (sideConsoleStatus) {
-            sideConsoleStatus.textContent = activeInst
-                ? 'Klient je připraven ke spuštění.'
-                : `Verze ${activeP ? activeP.version : ''} není nainstalována.`;
+            sideConsoleStatus.textContent = (activeP && isComingSoonProfile(activeP))
+                ? `Minecraft ${activeP.version} ještě nevyšel (Coming Soon).`
+                : (activeInst
+                    ? 'Klient je připraven ke spuštění.'
+                    : `Verze ${activeP ? activeP.version : ''} není nainstalována.`);
         }
         document.querySelectorAll('.v-card-progress').forEach(p => p.style.display = 'none');
         refreshVersionStatuses();
@@ -4262,7 +4369,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Synchronizace filtrů Modrinthu (verze a loader) podle zadaného nebo aktivního profilu
     function syncModFilterToProfile(profileId) {
-        const p = (currentConfig.profiles || []).find(x => x.id === (profileId || currentConfig.activeProfileId)) || currentConfig.profiles?.[0];
+        const profiles = (currentConfig.profiles || []).filter(x => !isComingSoonProfile(x));
+        const requested = (currentConfig.profiles || []).find(x => x.id === (profileId || currentConfig.activeProfileId));
+        const p = (requested && !isComingSoonProfile(requested)) ? requested : profiles[0];
         if (p) {
             const rawLoader = (p.loader && p.loader !== 'vanilla') ? p.loader.toLowerCase() : 'fabric';
             let targetLoader = 'fabric';
@@ -4277,7 +4386,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const radio = document.querySelector(`input[name="filterLoader"][value="${targetLoader}"]`);
             if (radio) radio.checked = true;
 
-            const targetVer = p.version || currentConfig.version || '26.3';
+            const rawVer = p.version || currentConfig.version || '26.3';
+            const targetVer = isComingSoonVersion(rawVer) ? '26.3' : rawVer;
             currentModFilter.version = targetVer;
             let vRadio = document.querySelector(`input[name="filterVersion"][value="${targetVer}"]`);
             if (!vRadio) {
@@ -4297,6 +4407,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (vRadio) {
                 vRadio.checked = true;
             }
+        } else {
+            currentModFilter.version = '26.3';
+            const defaultRadio = document.querySelector('input[name="filterVersion"][value="26.3"]');
+            if (defaultRadio) defaultRadio.checked = true;
         }
     }
 
@@ -4305,9 +4419,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         const select = document.getElementById('modsProfileSelect');
         if (!select) return;
 
-        const profiles = currentConfig.profiles || [];
+        const profiles = (currentConfig.profiles || []).filter(p => !isComingSoonProfile(p));
+        if (profiles.length === 0) {
+            selectedModsProfileId = null;
+            syncModFilterToProfile(null);
+            select.innerHTML = '<option value="" disabled selected>Žádný dostupný profil pro Modrinth</option>';
+            return;
+        }
+
         if (!selectedModsProfileId || !profiles.some(p => p.id === selectedModsProfileId)) {
-            selectedModsProfileId = currentConfig.activeProfileId || (profiles[0] ? profiles[0].id : null);
+            const activeCandidate = profiles.find(p => p.id === currentConfig.activeProfileId);
+            selectedModsProfileId = activeCandidate ? activeCandidate.id : profiles[0].id;
         }
 
         syncModFilterToProfile(selectedModsProfileId);
@@ -5587,6 +5709,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
                             const prof = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
                             const profVer = prof?.version || currentModFilter.version || '26.3';
+                            if (isComingSoonProfile(prof) || isComingSoonVersion(profVer)) {
+                                continue;
+                            }
                             let chosenLoader = prof?.loader && prof.loader !== 'vanilla' ? prof.loader : (currentModFilter.loader || 'fabric');
 
                             const res = await window.api.downloadModOrPack({
@@ -5732,6 +5857,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const targetProfile = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
                 const profileLoader = targetProfile?.loader || 'vanilla';
                 const profileVersion = targetProfile?.version || currentModFilter.version || '26.3';
+
+                if (isComingSoonProfile(targetProfile) || isComingSoonVersion(profileVersion)) {
+                    showToast('Minecraft 26.4 zatím není v katalogu Modrinth (Coming Soon).', 'info');
+                    return;
+                }
 
                 if (action === 'installed') {
                     showToast(`Mód ${title} je již v profilu nainstalován.`, 'info');
@@ -10435,8 +10565,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     const newProfileRamValueBadge = document.getElementById('newProfileRamValueBadge');
     let newProfileSelectedIcon = 'sword';
 
-    const dropdownNewVersion = setupCustomDropdown('dropdownNewProfileVersion');
     const dropdownNewLoader = setupCustomDropdown('dropdownNewProfileLoader');
+
+    function syncNewProfileVersionState(selectedVersion) {
+        const isCs = isComingSoonVersion(selectedVersion);
+        const loaderContainer = document.getElementById('dropdownNewProfileLoader');
+        const hintEl = document.getElementById('newProfileComingSoonLoaderHint');
+        if (isCs) {
+            dropdownNewLoader?.setValue('vanilla');
+        }
+        if (loaderContainer) {
+            loaderContainer.classList.toggle('is-locked', isCs);
+        }
+        if (hintEl) {
+            hintEl.style.display = isCs ? 'flex' : 'none';
+        }
+    }
+
+    const dropdownNewVersion = setupCustomDropdown('dropdownNewProfileVersion', syncNewProfileVersionState);
 
     if (newProfileRamSlider && newProfileRamValueBadge) {
         newProfileRamSliderController = setupSmoothSnapSlider(newProfileRamSlider, newProfileRamValueBadge);
@@ -10465,6 +10611,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         dropdownNewVersion?.setValue('26.3');
         dropdownNewLoader?.setValue('vanilla');
+        syncNewProfileVersionState('26.3');
         const newJvmInput = document.getElementById('newProfileJvmArgsInput');
         if (newJvmInput) newJvmInput.value = '';
         newProfileSelectedIcon = 'sword';
@@ -10512,7 +10659,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const ver = dropdownNewVersion ? dropdownNewVersion.getValue() : '26.3';
-            const ldr = dropdownNewLoader ? dropdownNewLoader.getValue() : 'vanilla';
+            const isCs = isComingSoonVersion(ver);
+            const ldr = isCs ? 'vanilla' : (dropdownNewLoader ? dropdownNewLoader.getValue() : 'vanilla');
             const ram = newProfileRamSliderController ? newProfileRamSliderController.getTarget() : parseInt(newProfileRamSlider?.value || '4', 10);
             const rawJvm = document.getElementById('newProfileJvmArgsInput')?.value?.trim() || '';
             const newId = 'profile-' + Date.now();
@@ -10522,8 +10670,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 name: rawName,
                 version: ver,
                 loader: ldr,
+                comingSoon: isCs,
                 optimizedChosen: ldr === 'fabric' ? 'optimized' : 'vanilla',
-                desc: `${rawName} (${ver}${ldr !== 'vanilla' ? ' • ' + ldr : ''})`,
+                desc: isCs
+                    ? `Připravovaná verze Minecraft ${ver} — Coming Soon.`
+                    : `${rawName} (${ver}${ldr !== 'vanilla' ? ' • ' + ldr : ''})`,
                 icon: newProfileSelectedIcon,
                 ramMax: ram,
                 jvmArgs: rawJvm,
@@ -10534,7 +10685,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const existing = currentConfig.profiles || [];
             currentConfig.profiles = [newProf, ...existing];
-            currentConfig.activeProfileId = newId;
+            selectActiveProfile(newId, true);
 
             await window.api.saveConfig({
                 profiles: currentConfig.profiles,
@@ -10543,7 +10694,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             closeCreateProfileModal();
             renderProfilesList();
-            showToast(`Profil "${rawName}" vytvořen.`, 'success');
+            showToast(
+                isCs
+                    ? `Profil "${rawName}" (${ver} • Coming Soon) byl vytvořen.`
+                    : `Profil "${rawName}" vytvořen.`,
+                'success'
+            );
         });
     }
 
@@ -10933,6 +11089,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             (profile.desc && profile.desc.includes('Importováno')) ||
             (profile.gameDir && (profile.gameDir.includes('instances') || profile.gameDir.includes('profiles')) && profile.id.includes('import'))
         );
+        const isComingSoon = isComingSoonProfile(profile);
 
         const titleEl = document.getElementById('profileSettingsModalTitle');
         const nameInput = document.getElementById('profileSettingsNameInput');
@@ -10941,6 +11098,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const loaderCardsContainer = document.getElementById('loaderCardsContainer');
         const importedLoaderNotice = document.getElementById('profileImportedLoaderNotice');
         const importedLoaderLabel = document.getElementById('profileImportedLoaderLabel');
+        const loaderLockReasonEl = document.getElementById('profileLoaderLockReason');
         const quickOptBanner = document.getElementById('profileQuickOptBanner');
 
         // Banner optimalizace ve výchozím stavu schováme, aby nezpůsoboval žádný UI šum
@@ -10949,12 +11107,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (titleEl) titleEl.textContent = `Nastavení profilu: ${profile.name}`;
         if (nameInput) nameInput.value = profile.name;
 
-        const curLoader = profile.loader || 'fabric';
+        const curLoader = isComingSoon ? 'vanilla' : (profile.loader || 'fabric');
         if (loaderSelect) loaderSelect.value = curLoader;
 
-        // U importovaných profilů nezobrazujeme přepínač loaderů (Fabric/Vanilla/NeoForge/Forge),
-        // ale pouze čistou uzamčenou informaci o stávajícím zavaděči
-        if (isImported) {
+        // U importovaných a Coming Soon profilů nezobrazujeme přepínač loaderů,
+        // ale čistou uzamčenou informaci o zavaděči
+        if (isImported || isComingSoon) {
             if (loaderCardsContainer) loaderCardsContainer.style.display = 'none';
             if (importedLoaderNotice) {
                 importedLoaderNotice.style.display = 'flex';
@@ -10967,6 +11125,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                         quilt: 'Quilt'
                     };
                     importedLoaderLabel.textContent = loaderNames[curLoader.toLowerCase()] || curLoader;
+                }
+                if (loaderLockReasonEl) {
+                    loaderLockReasonEl.textContent = isComingSoon
+                        ? '(Coming Soon — zatím dostupná pouze čistá hra)'
+                        : '(uzamčeno pro importovaný profil)';
                 }
             }
         } else {
@@ -11031,7 +11194,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Zobrazí se výhradně tehdy, pokud profil optimalizovaný NENÍ a lze ho optimalizovat.
         (async () => {
             try {
-                if (isImported) {
+                if (isImported || isComingSoon) {
                     if (quickOptBanner) quickOptBanner.style.display = 'none';
                     return;
                 }
@@ -11144,12 +11307,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 )
             );
 
+            const isComingSoon = isComingSoonProfile(profile);
             const nameInput = document.getElementById('profileSettingsNameInput');
             const loaderSelect = document.getElementById('profileSettingsLoaderSelect');
             const newName = nameInput ? nameInput.value.trim() : '';
             const newRam = profileRamSliderController ? profileRamSliderController.getTarget() : (profileRamSlider ? parseInt(profileRamSlider.value, 10) : 4);
-            // U importovaných profilů se zavaděč nemění ani nepřepisuje
-            const newLoader = isImported ? ((profile && profile.loader) || 'fabric') : (loaderSelect ? loaderSelect.value : 'fabric');
+            // U importovaných a Coming Soon profilů se zavaděč nemění ani nepřepisuje
+            const newLoader = (isImported || isComingSoon) ? ((profile && profile.loader) || (isComingSoon ? 'vanilla' : 'fabric')) : (loaderSelect ? loaderSelect.value : 'fabric');
 
             const newJvm = document.getElementById('profileSettingsJvmArgsInput')?.value?.trim() || '';
 
