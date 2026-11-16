@@ -567,7 +567,31 @@ pub fn analyze_crash(
         });
     }
 
-    // 9. Generic Game Crash
+    // 9. Linux/POSIX missing executable or shared library (Exit code 127)
+    if exit_code == 127 {
+        let msg = "Proces skončil s kódem 127 (spustitelný soubor nebo systémová knihovna nebyla nalezena). Často jde o poškozený Java runtime, chybějící oprávnění +x nebo chybějící X11/systémovou knihovnu.";
+        return json!({
+            "hasCrash": true,
+            "isCleanShutdown": false,
+            "fixed": false,
+            "exitCode": exit_code,
+            "crashType": "MISSING_BINARY_OR_LIB",
+            "title": "Chybějící binárka nebo knihovna (kód 127)",
+            "message": msg,
+            "description": msg,
+            "recommendation": "Klikni na automatickou opravu pro opětovné stažení a nastavení práv Java runtime.",
+            "autoFix": {
+                "type": "reinstall_java",
+                "label": "Stáhnout a opravit Java runtime"
+            },
+            "logExcerpt": log_excerpt,
+            "stackExcerpt": log_excerpt,
+            "crashReportPath": report_path_str,
+            "reportPath": report_path_str
+        });
+    }
+
+    // 10. Generic Game Crash
     let generic_msg = format!("Hra byla neočekávaně ukončena s kódem {}.", exit_code);
     json!({
         "hasCrash": true,
@@ -688,6 +712,27 @@ pub async fn apply_crash_fix(
                     "success": false,
                     "error": format!("Nelze zakázat mód: {}", e)
                 }),
+            }
+        }
+        "reinstall_java" | "fix_java" => {
+            let cfg = load_config();
+            let base_dir = crate::config::get_default_game_dir();
+            let jre_dir = base_dir.join("runtime").join("java-25");
+            if jre_dir.exists() {
+                let _ = fs::remove_dir_all(&jre_dir);
+            }
+            match crate::launcher::download_and_install_java(25, &base_dir, |_, _| {}).await {
+                Ok(_) => json!({
+                    "success": true,
+                    "message": "Java 25 runtime byl úspěšně znovu stažen a opraven."
+                }),
+                Err(e) => {
+                    let _ = cfg;
+                    json!({
+                        "success": false,
+                        "error": format!("Nepodařilo se opravit Java runtime: {}", e)
+                    })
+                }
             }
         }
         "repair_client_jar" | "repair_client" => {

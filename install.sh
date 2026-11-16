@@ -6,6 +6,14 @@
 
 set -e
 
+export PATH="$PATH:/sbin:/usr/sbin:/usr/local/sbin"
+
+ARCH=$(uname -m)
+if [ "$ARCH" != "x86_64" ] && [ "$ARCH" != "amd64" ]; then
+    echo "❌ Chyba: SMPClient vyžaduje 64bitový x86_64 Linux (detekováno: $ARCH)."
+    exit 1
+fi
+
 INSTALL_DIR="$HOME/.local/share/mychalsmp-launcher"
 BIN_DIR="$HOME/.local/bin"
 DESKTOP_DIR="$HOME/.local/share/applications"
@@ -69,58 +77,122 @@ if [ ! -f "$INSTALL_DIR/mychalsmp-launcher" ]; then
     exit 1
 fi
 
-# Kontrola a automatická doinstalace systémových knihoven (WebKit2GTK 4.1 a AppIndicator pro Tray) pro CachyOS/Arch, Fedoru i Ubuntu/Debian
-NEED_DEPS=0
-if ! ldconfig -p 2>/dev/null | grep -q "libwebkit2gtk-4.1.so"; then
-    NEED_DEPS=1
-fi
-if ! ldconfig -p 2>/dev/null | grep -qE "libayatana-appindicator3\.so|libappindicator3\.so"; then
-    NEED_DEPS=1
-fi
-
-if [ "$NEED_DEPS" = "1" ]; then
-    echo "📦 Doinstalovávám chybějící systémové knihovny (WebKit2GTK 4.1 / AppIndicator) pro tvou distribuci..."
-    if command -v pacman >/dev/null 2>&1; then
-        sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 libayatana-appindicator 2>/dev/null || sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 || true
-    elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y webkit2gtk4.1 gtk3 libappindicator-gtk3 || true
-    elif command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 || true
-    elif command -v zypper >/dev/null 2>&1; then
-        sudo zypper install -y libwebkit2gtk-4_1-0 gtk3 || true
-    fi
-fi
-
-# Nastavení oprávnění a vytvoření spouštěcího wrapperu v ~/.local/bin
 chmod +x "$INSTALL_DIR/mychalsmp-launcher"
 [ -f "$INSTALL_DIR/SMPClient" ] && chmod +x "$INSTALL_DIR/SMPClient" || true
 
+# Kontrola a automatická doinstalace systémových knihoven (přímo přes ldd na binárku + ldconfig fallback)
+check_missing_libs() {
+    if command -v ldd >/dev/null 2>&1 && ldd "$INSTALL_DIR/mychalsmp-launcher" 2>/dev/null | grep -q "not found"; then
+        return 0
+    fi
+    if ! ldconfig -p 2>/dev/null | grep -q "libwebkit2gtk-4.1.so"; then
+        return 0
+    fi
+    if ! ldconfig -p 2>/dev/null | grep -qE "libayatana-appindicator3\.so|libappindicator3\.so"; then
+        return 0
+    fi
+    return 1
+}
+
+if check_missing_libs; then
+    echo "📦 Doinstalovávám chybějící systémové knihovny (WebKit2GTK 4.1 / GTK3 / AppIndicator)..."
+    if command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 libayatana-appindicator 2>/dev/null || sudo pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 || true
+    elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y webkit2gtk4.1 gtk3 libayatana-appindicator-gtk3 libappindicator-gtk3 2>/dev/null || sudo dnf install -y webkit2gtk4.1 gtk3 libappindicator-gtk3 || true
+    elif command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 || true
+    elif command -v zypper >/dev/null 2>&1; then
+        sudo zypper install -y libwebkit2gtk-4_1-0 gtk3 libayatana-appindicator3-1 2>/dev/null || sudo zypper install -y libwebkit2gtk-4_1-0 gtk3 || true
+    fi
+fi
+
+# Ověření po doinstalaci, zda binárce stále nechybí sdílené knihovny (prevence chyby status code 127)
+STILL_MISSING=""
+if command -v ldd >/dev/null 2>&1; then
+    STILL_MISSING=$(ldd "$INSTALL_DIR/mychalsmp-launcher" 2>/dev/null | grep "not found" || true)
+fi
+if [ -n "$STILL_MISSING" ]; then
+    echo "⚠️ Varování: Binárce stále chybí některé systémové knihovny:"
+    echo "$STILL_MISSING"
+fi
+
+# Vytvoření samo-opravného spouštěcího wrapperu v ~/.local/bin
 rm -f "$BIN_DIR/mychalsmp-launcher"
-cat <<EOF > "$BIN_DIR/mychalsmp-launcher"
+cat <<'EOF' > "$BIN_DIR/mychalsmp-launcher"
 #!/usr/bin/env bash
-# Na moderním WebKitGTK 2.44+ běží plná GPU akcelerace
-exec "$INSTALL_DIR/mychalsmp-launcher" "\$@"
+export PATH="$PATH:/sbin:/usr/sbin:/usr/local/sbin"
+INSTALL_DIR="$HOME/.local/share/mychalsmp-launcher"
+BIN="$INSTALL_DIR/mychalsmp-launcher"
+
+if [ ! -f "$BIN" ] && [ -f "$INSTALL_DIR/SMPClient" ]; then
+    ln -sf "$INSTALL_DIR/SMPClient" "$BIN"
+fi
+
+if [ ! -f "$BIN" ]; then
+    if command -v curl >/dev/null 2>&1; then
+        NO_START=1 curl -fsSL https://join.mychalsmp.xyz/install.sh | NO_START=1 bash || true
+    fi
+fi
+
+[ -f "$BIN" ] && chmod +x "$BIN" 2>/dev/null || true
+
+if [ -x "$BIN" ] && command -v ldd >/dev/null 2>&1 && ldd "$BIN" 2>/dev/null | grep -q "not found"; then
+    INSTALL_CMD=""
+    if command -v pacman >/dev/null 2>&1; then
+        INSTALL_CMD="pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3 libayatana-appindicator || pacman -S --needed --noconfirm webkit2gtk-4.1 gtk3"
+    elif command -v apt-get >/dev/null 2>&1; then
+        INSTALL_CMD="apt-get update && apt-get install -y libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1"
+    elif command -v dnf >/dev/null 2>&1; then
+        INSTALL_CMD="dnf install -y webkit2gtk4.1 gtk3 libayatana-appindicator-gtk3 libappindicator-gtk3"
+    elif command -v zypper >/dev/null 2>&1; then
+        INSTALL_CMD="zypper install -y libwebkit2gtk-4_1-0 gtk3 libayatana-appindicator3-1"
+    fi
+    if [ -n "$INSTALL_CMD" ]; then
+        if [ "$(id -u)" -eq 0 ]; then
+            sh -c "$INSTALL_CMD" || true
+        elif [ -t 0 ] && command -v sudo >/dev/null 2>&1; then
+            sudo sh -c "$INSTALL_CMD" || true
+        elif command -v pkexec >/dev/null 2>&1; then
+            pkexec sh -c "$INSTALL_CMD" || true
+        elif command -v sudo >/dev/null 2>&1; then
+            sudo sh -c "$INSTALL_CMD" || true
+        fi
+    fi
+fi
+
+exec "$BIN" "$@"
 EOF
 chmod +x "$BIN_DIR/mychalsmp-launcher"
 
 # Zajištění ikony aplikace
+for stale_dir in "$HOME/.local/share/icons/hicolor"/*/apps; do
+    [ -d "$stale_dir" ] || continue
+    rm -f "$stale_dir/mychalsmp-launcher".* "$stale_dir/SMPClient".* "$stale_dir/xyz.mychalsmp.launcher".* 2>/dev/null || true
+done
+
 if [ -f "$INSTALL_DIR/resources/app/src/renderer/assets/logo.png" ]; then
     cp "$INSTALL_DIR/resources/app/src/renderer/assets/logo.png" "$ICON_DIR/mychalsmp-launcher.png"
-elif [ -f "$INSTALL_DIR/resources/app/src/renderer/assets/server-icon.png" ]; then
-    cp "$INSTALL_DIR/resources/app/src/renderer/assets/server-icon.png" "$ICON_DIR/mychalsmp-launcher.png"
 elif [ -f "$INSTALL_DIR/resources/logo.png" ]; then
     cp "$INSTALL_DIR/resources/logo.png" "$ICON_DIR/mychalsmp-launcher.png"
-elif [ -f "$INSTALL_DIR/resources/server-icon.png" ]; then
-    cp "$INSTALL_DIR/resources/server-icon.png" "$ICON_DIR/mychalsmp-launcher.png"
+fi
+
+if [ -f "$ICON_DIR/mychalsmp-launcher.png" ]; then
+    cp "$ICON_DIR/mychalsmp-launcher.png" "$ICON_DIR/SMPClient.png"
+    cp "$ICON_DIR/mychalsmp-launcher.png" "$ICON_DIR/xyz.mychalsmp.launcher.png"
 fi
 
 # Vytvoření zástupce v menu aplikací (.desktop)
+case "$BIN_DIR" in
+    *" "*) DESKTOP_EXEC="\"$BIN_DIR/mychalsmp-launcher\" %U" ;;
+    *)     DESKTOP_EXEC="$BIN_DIR/mychalsmp-launcher %U" ;;
+esac
 cat <<EOF > "$DESKTOP_DIR/mychalsmp-launcher.desktop"
 [Desktop Entry]
 Name=SMPClient
 Comment=Oficiální Minecraft klient sítě MYCHAL SMP
-Exec=$BIN_DIR/mychalsmp-launcher %U
-Icon=mychalsmp-launcher
+Exec=$DESKTOP_EXEC
+Icon=$ICON_DIR/mychalsmp-launcher.png
 Terminal=false
 Type=Application
 Categories=Game;ActionGame;AdventureGame;
@@ -130,21 +202,34 @@ EOF
 chmod +x "$DESKTOP_DIR/mychalsmp-launcher.desktop"
 
 # Aktualizace ikony a menu cache pokud existují systémové nástroje
+rm -f "$HOME/.cache/icon-cache.kcache" 2>/dev/null || true
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -f "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+command -v kbuildsycoca6 >/dev/null 2>&1 && kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
 
 echo ""
 echo "✅ [HOTOVO] SMPClient byl úspěšně nainstalován!"
 
 # Pokud běží grafické prostředí (X11 nebo Wayland), automaticky spustíme launcher a zavřeme terminál
 if ([ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]) && [ "$NO_START" != "1" ] && [ "$1" != "--no-start" ]; then
+    if [ -n "$STILL_MISSING" ]; then
+        echo "❌ Launcher nelze spustit kvůli chybějícím knihovnám výše (kód 127). Doinstaluj je prosím ručně a spusť: $BIN_DIR/mychalsmp-launcher"
+        exit 1
+    fi
+
     echo "🚀 Spouštím herního klienta a zavírám terminál..."
 
     # Plně odpojené spuštění v nové session nezávislé na terminálu
-    nohup setsid "$INSTALL_DIR/mychalsmp-launcher" </dev/null >/dev/null 2>&1 &
+    nohup setsid "$BIN_DIR/mychalsmp-launcher" </dev/null >/dev/null 2>&1 &
+    APP_PID=$!
     disown -a 2>/dev/null || true
 
     sleep 1.2
+    if ! kill -0 "$APP_PID" 2>/dev/null; then
+        echo "⚠️ Proces launcheru se ihned ukončil. Diagnostika sdílených knihoven:"
+        command -v ldd >/dev/null 2>&1 && ldd "$INSTALL_DIR/mychalsmp-launcher" | grep "not found" || true
+        exit 1
+    fi
 
     # Automatické zavření okna terminálu ukončením rodičovského shellu
     if [ -n "$PPID" ] && [ "$PPID" -gt 1 ]; then
