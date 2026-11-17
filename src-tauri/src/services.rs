@@ -1471,13 +1471,19 @@ pub fn detect_system_capabilities() -> SystemCapabilities {
 
     #[cfg(target_os = "windows")]
     {
-        if let Ok(output) = std::process::Command::new("powershell")
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut ps_cmd = std::process::Command::new("powershell");
+        ps_cmd
             .args(&[
                 "-NoProfile",
+                "-WindowStyle",
+                "Hidden",
                 "-Command",
                 "$gpus = (Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name); $bat = @(Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue).Count; Write-Output ('BAT=' + $bat); $gpus | ForEach-Object { Write-Output ('GPU=' + $_) }",
             ])
-            .output()
+            .creation_flags(CREATE_NO_WINDOW);
+        if let Ok(output) = ps_cmd.output()
         {
             let text = String::from_utf8_lossy(&output.stdout);
             let mut gpus = Vec::new();

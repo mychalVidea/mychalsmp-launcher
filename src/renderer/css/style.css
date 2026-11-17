@@ -673,16 +673,46 @@ body.is-maximized {
     transition-duration: 0.08s;
 }
 
-/* Active State: Clean Matte Obsidian with Specular Top */
+/* Active State: Matte Obsidian Base + Tab-Specific Gradient Accent */
 .nav-icon-btn.active {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.14);
+    background: linear-gradient(135deg, #0a67e5 0%, #38bdf8 100%);
+    border-color: rgba(255, 255, 255, 0.24);
     color: #ffffff;
-    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1),
-        0 4px 14px rgba(0, 0, 0, 0.35);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
+        0 4px 12px rgba(0, 0, 0, 0.42);
 }
 
-/* Vertical indicator pill with clean Brand Blue accent */
+.nav-icon-btn[data-tab="play"].active {
+    background: linear-gradient(135deg, #0a67e5 0%, #38bdf8 100%);
+    border-color: rgba(56, 189, 248, 0.55);
+}
+
+.nav-icon-btn[data-tab="mods"].active {
+    background: linear-gradient(135deg, #1bd96a 0%, #0d7c3e 100%);
+    border-color: rgba(27, 217, 106, 0.55);
+}
+
+.nav-icon-btn[data-tab="character"].active {
+    background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+    border-color: rgba(236, 72, 153, 0.52);
+}
+
+.nav-icon-btn[data-tab="profiles"].active {
+    background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+    border-color: rgba(249, 115, 22, 0.55);
+}
+
+.nav-icon-btn[data-tab="servers"].active {
+    background: linear-gradient(135deg, #0a67e5 0%, #21de00 100%);
+    border-color: rgba(33, 222, 0, 0.5);
+}
+
+.nav-icon-btn[data-tab="settings"].active {
+    background: linear-gradient(135deg, #3b4252 0%, #0a67e5 100%);
+    border-color: rgba(96, 165, 250, 0.45);
+}
+
+/* Vertical indicator pill matched to each tab's gradient accent */
 .nav-icon-btn::before {
     content: '';
     position: absolute;
@@ -693,8 +723,32 @@ body.is-maximized {
     height: 20px;
     border-radius: 4px;
     background: var(--brand-blue, #0a67e5);
-    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, background 0.2s ease;
     opacity: 0;
+}
+
+.nav-icon-btn[data-tab="play"]::before {
+    background: linear-gradient(180deg, #38bdf8, #0a67e5);
+}
+
+.nav-icon-btn[data-tab="mods"]::before {
+    background: linear-gradient(180deg, #1bd96a, #0d7c3e);
+}
+
+.nav-icon-btn[data-tab="character"]::before {
+    background: linear-gradient(180deg, #a78bfa, #ec4899);
+}
+
+.nav-icon-btn[data-tab="profiles"]::before {
+    background: linear-gradient(180deg, #f97316, #ef4444);
+}
+
+.nav-icon-btn[data-tab="servers"]::before {
+    background: linear-gradient(180deg, #0a67e5, #21de00);
+}
+
+.nav-icon-btn[data-tab="settings"]::before {
+    background: linear-gradient(180deg, #60a5fa, #3b82f6);
 }
 
 .nav-icon-btn.active::before {
@@ -704,6 +758,7 @@ body.is-maximized {
 
 .nav-icon-btn.active svg {
     stroke: #ffffff;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
 .sidebar-nav-bottom {

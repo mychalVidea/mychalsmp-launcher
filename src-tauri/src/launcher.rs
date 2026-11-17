@@ -1150,9 +1150,15 @@ pub fn get_java_major_version(bin_path: &Path) -> u32 {
         return 0;
     }
     let test_bin = resolve_java_console_binary(bin_path);
-    let output = match std::process::Command::new(&test_bin)
-        .arg("-version")
-        .output()
+    let mut cmd = std::process::Command::new(&test_bin);
+    cmd.arg("-version");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let output = match cmd.output()
     {
         Ok(out) => {
             let mut s = String::from_utf8_lossy(&out.stderr).to_string();
@@ -3566,9 +3572,15 @@ pub async fn spawn_game_process<R: Runtime>(
     cmd.current_dir(&spec.working_dir);
 
     #[cfg(target_os = "windows")]
-    if spec.high_priority {
+    {
         const HIGH_PRIORITY_CLASS: u32 = 0x0000_0080;
-        cmd.creation_flags(HIGH_PRIORITY_CLASS);
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let flags = if spec.high_priority {
+            HIGH_PRIORITY_CLASS | CREATE_NO_WINDOW
+        } else {
+            CREATE_NO_WINDOW
+        };
+        cmd.creation_flags(flags);
     }
 
     for (k, v) in &spec.env_vars {
