@@ -1849,6 +1849,17 @@ fn classifier_matches_os(classifier_key: &str, target_os: TargetOs) -> bool {
     }
 }
 
+fn library_matches_host_arch(lib_name: &str, target_os: TargetOs) -> bool {
+    let parts: Vec<&str> = lib_name.split(':').collect();
+    if parts.len() >= 4 {
+        let classifier = parts[3];
+        if classifier.to_lowercase().contains("natives-") {
+            return classifier_matches_os(classifier, target_os);
+        }
+    }
+    true
+}
+
 pub fn evaluate_rules(rules: Option<&[Rule]>, target_os: TargetOs) -> bool {
     let rules = match rules {
         Some(r) if !r.is_empty() => r,
@@ -2255,7 +2266,9 @@ where
 
     let total = libraries.len();
     for (i, lib) in libraries.iter().enumerate() {
-        if !evaluate_rules(lib.rules.as_deref(), target_os) {
+        if !evaluate_rules(lib.rules.as_deref(), target_os)
+            || !library_matches_host_arch(&lib.name, target_os)
+        {
             continue;
         }
 
@@ -2357,41 +2370,93 @@ where
     Ok(result)
 }
 
-/// Extracts native shared libraries (.so, .dll, .dylib) from LWJGL and other native dependency JARs
-/// into `central_root/natives/<version>` and `central_root/natives_extract/<version>`
+fn is_shared_library_filename(name_lower: &str, target_os: TargetOs) -> bool {
+    if name_lower.ends_with(".sha1")
+        || name_lower.ends_with(".git")
+        || name_lower.ends_with(".sig")
+        || name_lower.ends_with(".md5")
+    {
+        return false;
+    }
+    match target_os {
+        TargetOs::Linux => name_lower.ends_with(".so") || name_lower.contains(".so."),
+        TargetOs::Windows => name_lower.ends_with(".dll"),
+        TargetOs::MacOs => name_lower.ends_with(".dylib"),
+    }
+}
+
+pub fn compute_natives_stamp(libraries: &[LibraryEntry], target_os: TargetOs) -> String {
+    let mut keys: Vec<String> = libraries
+        .iter()
+        .filter(|lib| {
+            evaluate_rules(lib.rules.as_deref(), target_os)
+                && library_matches_host_arch(&lib.name, target_os)
+                && (lib.name.to_lowercase().contains("natives")
+                    || lib.name.to_lowercase().contains("native")
+                    || lib.downloads.as_ref().map_or(false, |d| d.classifiers.is_some()))
+        })
+        .map(|lib| {
+            let sha1 = lib
+                .downloads
+                .as_ref()
+                .and_then(|d| d.artifact.as_ref())
+                .and_then(|a| a.sha1.as_deref())
+                .unwrap_or("");
+            format!("{}@{}", lib.name, sha1)
+        })
+        .collect();
+    keys.sort();
+    format!("{}:{}:{}", target_os.as_str(), std::env::consts::ARCH, keys.join("|"))
+}
+
+fn cleanup_stale_root_natives(natives_root: &Path) {
+    if let Ok(entries) = fs::read_dir(natives_root) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                let name = p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                if name.ends_with(".dll")
+                    || name.ends_with(".so")
+                    || name.contains(".so.")
+                    || name.ends_with(".dylib")
+                {
+                    let _ = fs::remove_file(&p);
+                }
+            }
+        }
+    }
+}
+
+/// Extracts native shared libraries (.so, .dll, .dylib) strictly matching `manifest.libraries`
+/// into isolated `central_root/natives/<version_id>` and `central_root/natives_extract/<version_id>`.
 pub fn extract_natives(
     central_root: &Path,
     version_id: &str,
     libraries: &[LibraryEntry],
     target_os: TargetOs,
 ) -> Result<PathBuf, LaunchError> {
-    let mut target_dirs = vec![
-        central_root.join("natives").join(version_id),
-        central_root.join("natives_extract").join(version_id),
-        central_root.join("natives"),
-    ];
+    let natives_root = central_root.join("natives");
+    let _ = fs::create_dir_all(&natives_root);
+    cleanup_stale_root_natives(&natives_root);
 
-    // If version_id is composite (e.g. fabric-loader-0.19.5-26.2), also extract into base game version
-    if let Some(pos) = version_id.rfind('-') {
-        let sub_ver = &version_id[pos + 1..];
-        if !sub_ver.is_empty() && sub_ver != version_id {
-            target_dirs.push(central_root.join("natives").join(sub_ver));
-            target_dirs.push(central_root.join("natives_extract").join(sub_ver));
-        }
-    }
+    let version_natives_dir = natives_root.join(version_id);
+    let version_extract_dir = central_root.join("natives_extract").join(version_id);
+    let target_dirs = vec![version_natives_dir.clone(), version_extract_dir.clone()];
 
-    let weird_dir = central_root.join("${natives_directory}");
-    if weird_dir.exists() {
-        for entry in walkdir::WalkDir::new(&weird_dir).into_iter().flatten() {
-            if entry.file_type().is_file() {
-                let p = entry.path();
-                if let Some(fname) = p.file_name() {
-                    for base in &target_dirs {
-                        let _ = fs::copy(p, base.join(fname));
-                        let _ = fs::copy(p, base.join("java").join(fname));
-                        let _ = fs::copy(p, base.join("lwjgl").join(fname));
-                    }
-                }
+    let expected_stamp = compute_natives_stamp(libraries, target_os);
+    let stamp_path = version_natives_dir.join(".natives-stamp");
+    let stamp_matches = fs::read_to_string(&stamp_path)
+        .map(|s| s.trim() == expected_stamp)
+        .unwrap_or(false);
+
+    if !stamp_matches && !libraries.is_empty() {
+        for dir in &target_dirs {
+            if dir.exists() {
+                let _ = fs::remove_dir_all(dir);
             }
         }
     }
@@ -2411,24 +2476,29 @@ pub fn extract_natives(
     let lib_dir = central_root.join("libraries");
     let mut native_jars: Vec<PathBuf> = Vec::new();
 
-    // 1. From manifest libraries matching current OS rules
+    // Only extract native JARs explicitly declared by this manifest and matching host OS + CPU arch
     for lib in libraries {
-        if !evaluate_rules(lib.rules.as_deref(), target_os) {
+        if !evaluate_rules(lib.rules.as_deref(), target_os)
+            || !library_matches_host_arch(&lib.name, target_os)
+        {
             continue;
         }
 
-        let is_native_lib = lib.name.contains("natives")
-            || lib.name.contains("native")
+        let name_lower = lib.name.to_lowercase();
+        let is_native_lib = name_lower.contains("natives")
+            || name_lower.contains("native")
             || lib.downloads.as_ref().map_or(false, |d| d.classifiers.is_some());
 
         if is_native_lib {
-            let rel = resolve_library_relative_path(
-                &lib.name,
-                lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()),
-            );
-            let jar_p = lib_dir.join(&rel);
-            if jar_p.exists() && !native_jars.contains(&jar_p) {
-                native_jars.push(jar_p);
+            if !is_classifiers_only(lib) {
+                let rel = resolve_library_relative_path(
+                    &lib.name,
+                    lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()),
+                );
+                let jar_p = lib_dir.join(&rel);
+                if jar_p.exists() && !native_jars.contains(&jar_p) {
+                    native_jars.push(jar_p);
+                }
             }
 
             if let Some(ref d) = lib.downloads {
@@ -2446,36 +2516,6 @@ pub fn extract_natives(
             }
         }
     }
-
-    // 2. Also deep scan central_root/libraries for any LWJGL/jtracy native jars for this OS
-    let is_os_native_jar = |fname: &str| -> bool {
-        if !fname.ends_with(".jar") {
-            return false;
-        }
-        match target_os {
-            TargetOs::Linux => fname.contains("natives-linux"),
-            TargetOs::Windows => fname.contains("natives-windows") || fname.contains("natives-win"),
-            TargetOs::MacOs => fname.contains("natives-macos") || fname.contains("natives-osx"),
-        }
-    };
-
-    if lib_dir.exists() {
-        for entry in walkdir::WalkDir::new(&lib_dir).into_iter().flatten() {
-            if entry.file_type().is_file() {
-                let p = entry.path();
-                let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if is_os_native_jar(fname) && !native_jars.contains(&p.to_path_buf()) {
-                    native_jars.push(p.to_path_buf());
-                }
-            }
-        }
-    }
-
-    let valid_exts: &[&str] = match target_os {
-        TargetOs::Linux => &[".so"],
-        TargetOs::Windows => &[".dll"],
-        TargetOs::MacOs => &[".dylib"],
-    };
 
     let mut extracted_count = 0;
 
@@ -2500,26 +2540,33 @@ pub fn extract_natives(
             }
 
             let entry_name = entry.name().to_string();
-            let is_native_file = valid_exts.iter().any(|ext| {
-                entry_name.ends_with(ext)
-                    || (target_os == TargetOs::Linux && entry_name.contains(".so."))
-            });
-
-            if !is_native_file {
+            let entry_lower = entry_name.to_lowercase();
+            if !is_shared_library_filename(&entry_lower, target_os) {
                 continue;
             }
 
             // Architecture sanity check to prevent non-native architectures overwriting host
-            let entry_lower = entry_name.to_lowercase();
             #[cfg(target_arch = "x86_64")]
             {
-                if entry_lower.contains("arm") || entry_lower.contains("aarch64") || entry_lower.contains("mips") || entry_lower.contains("riscv") || entry_lower.contains("x86/") || entry_lower.contains("i386") {
+                if entry_lower.contains("arm")
+                    || entry_lower.contains("aarch64")
+                    || entry_lower.contains("mips")
+                    || entry_lower.contains("riscv")
+                    || entry_lower.contains("x86/")
+                    || entry_lower.contains("x86_32/")
+                    || entry_lower.contains("i386")
+                {
                     continue;
                 }
             }
             #[cfg(target_arch = "aarch64")]
             {
-                if entry_lower.contains("x64") || entry_lower.contains("x86_64") || entry_lower.contains("amd64") || entry_lower.contains("i386") {
+                if entry_lower.contains("x64")
+                    || entry_lower.contains("x86_64")
+                    || entry_lower.contains("amd64")
+                    || entry_lower.contains("x86/")
+                    || entry_lower.contains("i386")
+                {
                     continue;
                 }
             }
@@ -2562,14 +2609,18 @@ pub fn extract_natives(
         }
     }
 
+    if !libraries.is_empty() {
+        let _ = fs::write(&stamp_path, &expected_stamp);
+    }
+
     println!(
         "[LAUNCHER] Úspěšně rozbaleno {} nativních knihoven ({}) do {}",
         extracted_count,
         target_os.as_str(),
-        central_root.join("natives").join(version_id).display()
+        version_natives_dir.display()
     );
 
-    Ok(central_root.join("natives").join(version_id))
+    Ok(version_natives_dir)
 }
 
 pub async fn ensure_assets<F>(
@@ -2775,7 +2826,7 @@ pub fn construct_launch_spec(
         jvm_args.push("-XX:StackShadowPages=32".to_string());
     }
 
-    // 4. Native Extract Directories & Shared Library Paths
+    // 4. Native Extract Directories & Shared Library Paths (strictly isolated per manifest.id)
     let natives_dir = base_dir.join("natives").join(&manifest.id);
     let natives_extract_dir = base_dir.join("natives_extract").join(&manifest.id);
     let java_dir = natives_dir.join("java");
@@ -2788,11 +2839,6 @@ pub fn construct_launch_spec(
         .and_then(|v| v.as_str())
         .unwrap_or(&manifest.id);
 
-    let ver_natives_dir = base_dir.join("natives").join(version);
-    let ver_java_dir = ver_natives_dir.join("java");
-    let ver_lwjgl_dir = ver_natives_dir.join("lwjgl");
-    let ver_extract_dir = base_dir.join("natives_extract").join(version);
-
     let all_dirs = [
         &natives_dir,
         &java_dir,
@@ -2803,30 +2849,25 @@ pub fn construct_launch_spec(
         &jna_dir,
         &netty_dir,
         &natives_extract_dir.join("lwjgl"),
-        &ver_natives_dir,
-        &ver_java_dir,
-        &ver_lwjgl_dir,
-        &ver_extract_dir,
     ];
     for d in &all_dirs {
         let _ = fs::create_dir_all(d);
     }
 
-    // Ensure natives are extracted if not already present
+    // Ensure isolated natives exist AND match current manifest's LWJGL/native stamp
     let test_file = match target_os {
         TargetOs::Linux => "liblwjgl.so",
         TargetOs::Windows => "lwjgl.dll",
         TargetOs::MacOs => "liblwjgl.dylib",
     };
-    if !java_dir.join(test_file).exists()
-        && !natives_dir.join(test_file).exists()
-        && !ver_java_dir.join(test_file).exists()
-        && !ver_natives_dir.join(test_file).exists()
+    let expected_stamp = compute_natives_stamp(&manifest.libraries, target_os);
+    let stamp_matches = fs::read_to_string(natives_dir.join(".natives-stamp"))
+        .map(|s| s.trim() == expected_stamp)
+        .unwrap_or(false);
+    if (!java_dir.join(test_file).exists() && !natives_dir.join(test_file).exists())
+        || (!manifest.libraries.is_empty() && !stamp_matches)
     {
         let _ = extract_natives(base_dir, &manifest.id, &manifest.libraries, target_os);
-        if version != manifest.id {
-            let _ = extract_natives(base_dir, version, &manifest.libraries, target_os);
-        }
     }
 
     let cp_sep = target_os.classpath_separator();
@@ -2834,12 +2875,8 @@ pub fn construct_launch_spec(
         natives_dir.to_string_lossy().to_string(),
         java_dir.to_string_lossy().to_string(),
         lwjgl_dir.to_string_lossy().to_string(),
-        ver_natives_dir.to_string_lossy().to_string(),
-        ver_java_dir.to_string_lossy().to_string(),
-        ver_lwjgl_dir.to_string_lossy().to_string(),
         natives_extract_dir.to_string_lossy().to_string(),
-        ver_extract_dir.to_string_lossy().to_string(),
-        base_dir.join("natives").to_string_lossy().to_string(),
+        natives_extract_dir.join("lwjgl").to_string_lossy().to_string(),
     ];
     let multi_native_path = native_search_dirs.join(cp_sep);
 
@@ -2977,7 +3014,10 @@ pub fn construct_launch_spec(
     let lib_dir = base_dir.join("libraries");
 
     for lib in &manifest.libraries {
-        if !is_classifiers_only(lib) && evaluate_rules(lib.rules.as_deref(), target_os) {
+        if !is_classifiers_only(lib)
+            && evaluate_rules(lib.rules.as_deref(), target_os)
+            && library_matches_host_arch(&lib.name, target_os)
+        {
             let lib_key = library_dedup_key(&lib.name);
             if seen_cp_libs.insert(lib_key) {
                 let rel = resolve_library_relative_path(
@@ -3882,6 +3922,7 @@ mod tests {
     #[test]
     fn test_extract_natives_creates_structure() {
         let temp_dir = std::env::temp_dir().join("mychalsmp_test_extract_natives");
+        let _ = fs::remove_dir_all(&temp_dir);
         let res = extract_natives(&temp_dir, "26.3", &[], TargetOs::Linux);
         assert!(res.is_ok());
         let natives_dir = temp_dir.join("natives").join("26.3");
@@ -3890,6 +3931,97 @@ mod tests {
         assert!(natives_dir.join("lwjgl").exists());
         assert!(natives_dir.join("jna").exists());
         assert!(natives_dir.join("netty").exists());
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_extract_natives_isolates_versions_and_skips_sha1_and_wrong_arch() {
+        let temp_dir = std::env::temp_dir().join(format!("mychalsmp_test_native_iso_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let lib_dir = temp_dir.join("libraries");
+
+        let write_zip = |rel: &str, entries: &[(&str, &[u8])]| {
+            let path = lib_dir.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let file = File::create(&path).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let opts = zip::write::SimpleFileOptions::default();
+            for (name, data) in entries {
+                zip.start_file(*name, opts).unwrap();
+                std::io::Write::write_all(&mut zip, data).unwrap();
+            }
+            zip.finish().unwrap();
+        };
+
+        // Older 3.4.1 Windows/Linux JAR present in shared libraries folder must NEVER contaminate 3.4.3!
+        write_zip(
+            "org/lwjgl/lwjgl/3.4.1/lwjgl-3.4.1-natives-windows.jar",
+            &[("windows/x64/org/lwjgl/lwjgl.dll", b"OLD_341_DLL")],
+        );
+        write_zip(
+            "org/lwjgl/lwjgl/3.4.3/lwjgl-3.4.3-natives-windows.jar",
+            &[
+                ("windows/x64/org/lwjgl/lwjgl.dll", b"NEW_343_DLL"),
+                ("META-INF/windows/x64/org/lwjgl/lwjgl.dll.sha1", b"deadbeef"),
+            ],
+        );
+        // x86 and arm64 variants with windows-only rule must be filtered out on x86_64
+        write_zip(
+            "org/lwjgl/lwjgl/3.4.3/lwjgl-3.4.3-natives-windows-x86.jar",
+            &[("windows/x86/org/lwjgl/lwjgl.dll", b"X86_DLL")],
+        );
+
+        // Poison target + legacy shared root dir before extraction
+        fs::create_dir_all(temp_dir.join("natives").join("26.3").join("java")).unwrap();
+        fs::write(temp_dir.join("natives").join("lwjgl.dll"), b"STALE_ROOT_DLL").unwrap();
+        fs::write(
+            temp_dir.join("natives").join("26.3").join("java").join("lwjgl.dll"),
+            b"STALE_VER_DLL",
+        )
+        .unwrap();
+
+        let libs = vec![
+            make_os_lib("org.lwjgl:lwjgl:3.4.3", Some("windows"), None, true),
+            make_os_lib("org.lwjgl:lwjgl:3.4.3:natives-windows", Some("windows"), None, true),
+            make_os_lib("org.lwjgl:lwjgl:3.4.3:natives-windows-x86", Some("windows"), None, true),
+            make_os_lib("org.lwjgl:lwjgl:3.4.3:natives-windows-arm64", Some("windows"), None, true),
+        ];
+
+        extract_natives(&temp_dir, "26.3", &libs, TargetOs::Windows).unwrap();
+
+        // Stale root DLL removed; extracted DLL matches 3.4.3 only
+        assert!(!temp_dir.join("natives").join("lwjgl.dll").exists());
+        assert_eq!(
+            fs::read(temp_dir.join("natives").join("26.3").join("java").join("lwjgl.dll")).unwrap(),
+            b"NEW_343_DLL"
+        );
+        assert!(!temp_dir.join("natives").join("26.3").join("lwjgl.dll.sha1").exists());
+
+        if std::env::consts::ARCH == "x86_64" {
+            let spec = construct_launch_spec(
+                &json!({}),
+                &json!({ "id": "p", "version": "26.3", "loader": "vanilla", "ramMin": 2048, "ramMax": 4096 }),
+                &json!({ "name": "Steve", "uuid": "0", "access_token": "x", "user_type": "legacy" }),
+                &VersionManifest {
+                    id: "26.3".to_string(),
+                    inherits_from: None,
+                    main_class: "net.minecraft.client.main.Main".to_string(),
+                    arguments: None,
+                    libraries: libs,
+                    asset_index: None,
+                    assets: None,
+                    downloads: None,
+                },
+                &temp_dir,
+                Path::new("/usr/bin/java"),
+                TargetOs::Windows,
+            )
+            .unwrap();
+            assert!(spec.classpath_str.contains("lwjgl-3.4.3-natives-windows.jar"));
+            assert!(!spec.classpath_str.contains("natives-windows-x86"));
+            assert!(!spec.classpath_str.contains("natives-windows-arm64"));
+        }
+
         let _ = fs::remove_dir_all(&temp_dir);
     }
 

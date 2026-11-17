@@ -225,9 +225,6 @@ async fn launch_game(
         if let Err(e) = crate::launcher::extract_natives(&base_dir, &manifest.id, &manifest.libraries, target_os) {
             eprintln!("[LAUNCHER] Varování při extrakci nativních knihoven pro {}: {}", manifest.id, e);
         }
-        if mc_ver_owned != manifest.id {
-            let _ = crate::launcher::extract_natives(&base_dir, &mc_ver_owned, &manifest.libraries, target_os);
-        }
 
         let app_ast = app_clone.clone();
         let _ = app_clone.emit(

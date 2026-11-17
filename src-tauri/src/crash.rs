@@ -257,11 +257,39 @@ pub fn analyze_crash(
         .and_then(|p| fs::read_to_string(p).ok())
         .unwrap_or_default();
 
-    let full_text = if !crash_content.is_empty() {
-        format!("{}\n{}", combined_logs, crash_content)
-    } else {
-        combined_logs.to_string()
-    };
+    // Also inspect newest hs_err_pid*.log in game_dir modified in last 30s
+    let hs_err_content = fs::read_dir(game_dir)
+        .ok()
+        .and_then(|entries| {
+            entries
+                .flatten()
+                .filter_map(|entry| {
+                    let path = entry.path();
+                    let name = path.file_name()?.to_str()?;
+                    if !(name.starts_with("hs_err_pid") && name.ends_with(".log")) {
+                        return None;
+                    }
+                    let mtime = entry.metadata().ok()?.modified().ok()?;
+                    if mtime.elapsed().ok()?.as_secs() <= 30 {
+                        Some((path, mtime))
+                    } else {
+                        None
+                    }
+                })
+                .max_by_key(|(_, mt)| *mt)
+                .and_then(|(p, _)| fs::read_to_string(p).ok())
+        })
+        .unwrap_or_default();
+
+    let mut full_text = combined_logs.to_string();
+    if !crash_content.is_empty() {
+        full_text.push('\n');
+        full_text.push_str(&crash_content);
+    }
+    if !hs_err_content.is_empty() {
+        full_text.push('\n');
+        full_text.push_str(&hs_err_content);
+    }
     let full_lower = full_text.to_lowercase();
 
     // Collect recent error lines for log excerpt
@@ -541,14 +569,54 @@ pub fn analyze_crash(
         });
     }
 
+    // 7.5 LWJGL Java vs Native Version Mismatch (check BEFORE OpenGL driver so nvoglv64.dll collateral segfaults report the true cause)
+    if full_lower.contains("incompatible java and native library versions detected") {
+        let msg = "Byly načteny nekompatibilní verze Java knihoven LWJGL a nativních souborů (.dll/.so), což způsobilo pád Javy (EXCEPTION_ACCESS_VIOLATION).";
+        return json!({
+            "hasCrash": true,
+            "isCleanShutdown": false,
+            "fixed": false,
+            "exitCode": exit_code,
+            "crashType": "LWJGL_NATIVES_MISMATCH",
+            "title": "Nekompatibilní nativní knihovny (LWJGL)",
+            "message": msg,
+            "description": msg,
+            "recommendation": "Vyčistit složku nativních knihoven (.mychalsmp/natives) a znovu rozbalit čistou verzi pro tento profil.",
+            "autoFix": {
+                "id": "REPAIR_NATIVES",
+                "type": "repair_natives",
+                "label": "Vyčistit a opravit nativní knihovny (LWJGL)"
+            },
+            "logExcerpt": log_excerpt,
+            "stackExcerpt": log_excerpt,
+            "crashReportPath": report_path_str,
+            "reportPath": report_path_str
+        });
+    }
+
     // 8. OpenGL / Graphics Driver
     if full_lower.contains("glfw error 65542")
         || full_lower.contains("wgl: the driver does not appear to support opengl")
         || full_lower.contains("pixel format not accelerated")
         || full_lower.contains("ig9ic64.dll")
         || full_lower.contains("nvoglv64.dll")
+        || full_lower.contains("atio6axx.dll")
     {
-        let msg = "Grafická karta nepodporuje požadovanou verzi OpenGL nebo chybí ovladače výrobce grafické karty (NVIDIA, AMD nebo Intel).";
+        let is_access_violation = full_lower.contains("exception_access_violation");
+        let msg = if is_access_violation {
+            "Došlo k nativnímu pádu v grafickém ovladači (EXCEPTION_ACCESS_VIOLATION). Zkuste opravit nativní knihovny LWJGL, dočasně vypnout shadery/Iris nebo aktualizovat ovladače GPU."
+        } else {
+            "Grafická karta nepodporuje požadovanou verzi OpenGL nebo chybí ovladače výrobce grafické karty (NVIDIA, AMD nebo Intel)."
+        };
+        let auto_fix = if is_access_violation {
+            json!({
+                "id": "REPAIR_NATIVES",
+                "type": "repair_natives",
+                "label": "Opravit nativní knihovny (LWJGL)"
+            })
+        } else {
+            Value::Null
+        };
         return json!({
             "hasCrash": true,
             "isCleanShutdown": false,
@@ -558,8 +626,12 @@ pub fn analyze_crash(
             "title": "Chyba grafického ovladače",
             "message": msg,
             "description": msg,
-            "recommendation": "Aktualizujte ovladače grafické karty.",
-            "autoFix": Value::Null,
+            "recommendation": if is_access_violation {
+                "Aktualizujte ovladače grafické karty nebo opravte nativní knihovny LWJGL."
+            } else {
+                "Aktualizujte ovladače grafické karty."
+            },
+            "autoFix": auto_fix,
             "logExcerpt": log_excerpt,
             "stackExcerpt": log_excerpt,
             "crashReportPath": report_path_str,
@@ -735,6 +807,19 @@ pub async fn apply_crash_fix(
                 }
             }
         }
+        "repair_natives" => {
+            let base_dir = crate::config::get_default_game_dir();
+            for folder in ["natives", "natives_extract", "${natives_directory}"] {
+                let p = base_dir.join(folder);
+                if p.exists() {
+                    let _ = fs::remove_dir_all(&p);
+                }
+            }
+            json!({
+                "success": true,
+                "message": "Nativní knihovny LWJGL byly vyčištěny a při dalším spuštění se rozbalí znovu v přesné verzi."
+            })
+        }
         "repair_client_jar" | "repair_client" => {
             let cfg = load_config();
             let base_dir = crate::config::get_default_game_dir();
@@ -826,4 +911,29 @@ pub async fn apply_crash_fix(
         }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_analyze_crash_prioritizes_lwjgl_natives_mismatch_over_driver_dll() {
+        let tmp = std::env::temp_dir().join(format!("mychalsmp_crash_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let logs = "[LWJGL] [ERROR] Incompatible Java and native library versions detected.\nA fatal error: EXCEPTION_ACCESS_VIOLATION (0xc0000005)\n# Problematic frame: C [nvoglv64.dll+0x1234]";
+        let res = analyze_crash(&tmp, 1, logs, None);
+        assert_eq!(res.get("crashType").and_then(|v| v.as_str()), Some("LWJGL_NATIVES_MISMATCH"));
+        assert_eq!(res.pointer("/autoFix/type").and_then(|v| v.as_str()), Some("repair_natives"));
+
+        let gl_logs = "GLFW error 65542: WGL: The driver does not appear to support OpenGL";
+        let gl_res = analyze_crash(&tmp, 1, gl_logs, None);
+        assert_eq!(gl_res.get("crashType").and_then(|v| v.as_str()), Some("OPENGL_DRIVER"));
+        assert!(gl_res.get("autoFix").map_or(false, |v| v.is_null()));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+}
+
 
