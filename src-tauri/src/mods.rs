@@ -213,7 +213,7 @@ fn build_modrinth_catalog_facets(
     };
     let mut facets: Vec<Vec<String>> = Vec::new();
     facets.push(vec![format!("project_type:{}", ptype)]);
-    if ptype == "mod" && !loader.is_empty() && loader != "all" && loader != "vanilla" {
+    if (ptype == "mod" || ptype == "modpack") && !loader.is_empty() && loader != "all" && loader != "vanilla" {
         facets.push(vec![format!("categories:{}", loader)]);
     }
     if !category.is_empty() && category != "all" {
@@ -739,6 +739,475 @@ pub async fn download_mod_or_pack_with_deps(
         "filename": filename,
         "path": dest_path.to_string_lossy().to_string(),
         "versionNumber": ver_info.get("version_number").cloned().unwrap_or(json!(""))
+    }))
+}
+
+fn sanitize_relative_pack_path(raw: &str) -> Option<std::path::PathBuf> {
+    let normalized = raw.replace('\\', "/");
+    let trimmed = normalized.trim().trim_start_matches("./");
+    if trimmed.is_empty() || trimmed.starts_with('/') {
+        return None;
+    }
+    let mut clean = std::path::PathBuf::new();
+    for comp in std::path::Path::new(trimmed).components() {
+        match comp {
+            std::path::Component::Normal(seg) => {
+                let s = seg.to_string_lossy();
+                if s.contains(':') {
+                    return None;
+                }
+                clean.push(seg);
+            }
+            std::path::Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    if clean.as_os_str().is_empty() {
+        None
+    } else {
+        Some(clean)
+    }
+}
+
+fn emit_modpack_progress(app: Option<&AppHandle>, project_id: &str, title: &str, percent: u32, status: &str) {
+    if let Some(a) = app {
+        let _ = a.emit(
+            "mod-download-progress",
+            json!({
+                "id": project_id,
+                "projectId": project_id,
+                "title": title,
+                "percent": percent.min(100),
+                "status": status
+            }),
+        );
+    }
+}
+
+pub async fn install_modrinth_modpack(
+    app: Option<&AppHandle>,
+    options: &Value,
+) -> Result<Value, String> {
+    use crate::config::{get_default_game_dir, save_config};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let project_id = options
+        .get("id")
+        .or_else(|| options.get("projectId"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "Chybí ID modpacku.".to_string())?;
+    let title = options
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(project_id);
+    let requested_ver = options
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("all"));
+
+    emit_modpack_progress(app, project_id, title, 5, "Načítám verze modpacku z Modrinthu...");
+
+    let client = modrinth_client();
+    let versions_url = format!(
+        "https://api.modrinth.com/v2/project/{}/version",
+        urlencoding::encode(project_id)
+    );
+    let resp = client.get(&versions_url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("Modrinth API vrátilo chybu HTTP {}.", resp.status().as_u16()));
+    }
+    let versions: Vec<Value> = resp.json().await.map_err(|e| e.to_string())?;
+    if versions.is_empty() {
+        return Err("Modpack nemá publikované žádné verze.".to_string());
+    }
+
+    let is_supported_modpack_ver = |v: &Value| -> bool {
+        let has_mrpack = v
+            .get("files")
+            .and_then(|f| f.as_array())
+            .map(|arr| {
+                arr.iter().any(|file| {
+                    file.get("filename")
+                        .and_then(|s| s.as_str())
+                        .map(|n| n.to_lowercase().ends_with(".mrpack"))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false);
+        if !has_mrpack {
+            return false;
+        }
+        let loaders = v
+            .get("loaders")
+            .and_then(|l| l.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str())
+                    .map(|s| s.to_lowercase())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        loaders.is_empty()
+            || loaders.iter().any(|l| l == "fabric" || l == "minecraft" || l == "vanilla")
+    };
+
+    let supported_versions: Vec<&Value> = versions.iter().filter(|v| is_supported_modpack_ver(v)).collect();
+    if supported_versions.is_empty() {
+        return Err(
+            "Tento modpack vyžaduje Forge / NeoForge / Quilt, které launcher zatím nepodporuje. Vyber modpack pro Fabric."
+                .to_string(),
+        );
+    }
+
+    let chosen_ver = if let Some(req_v) = requested_ver {
+        let candidates = get_version_candidates(req_v);
+        candidates
+            .iter()
+            .find_map(|cand| {
+                supported_versions.iter().copied().find(|v| {
+                    v.get("game_versions")
+                        .and_then(|gv| gv.as_array())
+                        .map(|arr| arr.iter().any(|x| x.as_str() == Some(cand.as_str())))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(supported_versions[0])
+    } else {
+        supported_versions[0]
+    };
+
+    let files_arr = chosen_ver
+        .get("files")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "Verze modpacku neobsahuje soubory.".to_string())?;
+    let mrpack_file = files_arr
+        .iter()
+        .find(|f| {
+            f.get("primary").and_then(|v| v.as_bool()) == Some(true)
+                && f.get("filename")
+                    .and_then(|v| v.as_str())
+                    .map(|n| n.to_lowercase().ends_with(".mrpack"))
+                    .unwrap_or(false)
+        })
+        .or_else(|| {
+            files_arr.iter().find(|f| {
+                f.get("filename")
+                    .and_then(|v| v.as_str())
+                    .map(|n| n.to_lowercase().ends_with(".mrpack"))
+                    .unwrap_or(false)
+            })
+        })
+        .ok_or_else(|| "Nenalezen archiv .mrpack ke stažení.".to_string())?;
+
+    let mrpack_url = mrpack_file
+        .get("url")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Chybí URL pro stažení .mrpack archivu.".to_string())?;
+    let mrpack_sha1 = mrpack_file.pointer("/hashes/sha1").and_then(|v| v.as_str());
+
+    let base_dir = get_default_game_dir();
+    let temp_dir = base_dir.join("temp");
+    let _ = fs::create_dir_all(&temp_dir);
+    let safe_slug: String = project_id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+    let ts = chrono::Utc::now().timestamp_millis();
+    let temp_mrpack = temp_dir.join(format!("modpack-{}-{}.mrpack", safe_slug, ts));
+
+    emit_modpack_progress(app, project_id, title, 14, "Stahuji balíček .mrpack...");
+    download_file_with_progress(mrpack_url, &temp_mrpack, mrpack_sha1).await?;
+
+    // Parse modrinth.index.json inside .mrpack
+    let index_json: Value = {
+        let f = File::open(&temp_mrpack)
+            .map_err(|e| format!("Nelze otevřít stažený .mrpack: {}", e))?;
+        let mut archive =
+            ZipArchive::new(f).map_err(|e| format!("Neplatný archiv .mrpack: {}", e))?;
+        let mut idx_entry = archive
+            .by_name("modrinth.index.json")
+            .map_err(|_| "Archiv .mrpack neobsahuje modrinth.index.json.".to_string())?;
+        let mut raw = String::new();
+        idx_entry
+            .read_to_string(&mut raw)
+            .map_err(|e| format!("Nelze přečíst modrinth.index.json: {}", e))?;
+        serde_json::from_str(&raw)
+            .map_err(|e| format!("Neplatný JSON v modrinth.index.json: {}", e))?
+    };
+
+    let deps = index_json
+        .get("dependencies")
+        .and_then(|d| d.as_object())
+        .ok_or_else(|| "Modpack neobsahuje definici dependencies.".to_string())?;
+    let mc_ver = deps
+        .get("minecraft")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "Modpack nespecifikuje verzi Minecraftu.".to_string())?
+        .to_string();
+
+    if crate::config::is_coming_soon_version(&mc_ver) {
+        let _ = fs::remove_file(&temp_mrpack);
+        return Err(format!("Minecraft {} ještě není podporován (Coming Soon).", mc_ver));
+    }
+
+    let loader = if deps.contains_key("fabric-loader") {
+        "fabric".to_string()
+    } else if deps.contains_key("forge")
+        || deps.contains_key("neoforge")
+        || deps.contains_key("quilt-loader")
+    {
+        let _ = fs::remove_file(&temp_mrpack);
+        return Err(
+            "Tento modpack vyžaduje Forge / NeoForge / Quilt, které launcher zatím nepodporuje."
+                .to_string(),
+        );
+    } else {
+        "vanilla".to_string()
+    };
+
+    let profile_id = format!("modpack-{}-{}", safe_slug, ts);
+    let instance_dir = base_dir.join("instances").join(&profile_id);
+    if let Err(e) = fs::create_dir_all(&instance_dir) {
+        let _ = fs::remove_file(&temp_mrpack);
+        return Err(format!("Nelze vytvořit složku instance: {}", e));
+    }
+
+    // Collect client files to download from modrinth.index.json
+    struct PackFileTask {
+        rel_path: std::path::PathBuf,
+        urls: Vec<String>,
+        sha1: Option<String>,
+        optional: bool,
+    }
+    let mut file_tasks = Vec::new();
+    if let Some(files) = index_json.get("files").and_then(|f| f.as_array()) {
+        for entry in files {
+            let client_env = entry
+                .pointer("/env/client")
+                .and_then(|v| v.as_str())
+                .unwrap_or("required");
+            if client_env.eq_ignore_ascii_case("unsupported") {
+                continue;
+            }
+            let Some(raw_path) = entry.get("path").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let Some(rel_path) = sanitize_relative_pack_path(raw_path) else {
+                continue;
+            };
+            let urls: Vec<String> = entry
+                .get("downloads")
+                .and_then(|d| d.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|u| u.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if urls.is_empty() {
+                continue;
+            }
+            let sha1 = entry
+                .pointer("/hashes/sha1")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            file_tasks.push(PackFileTask {
+                rel_path,
+                urls,
+                sha1,
+                optional: client_env.eq_ignore_ascii_case("optional"),
+            });
+        }
+    }
+
+    let total_files = file_tasks.len().max(1);
+    let completed = Arc::new(AtomicUsize::new(0));
+    let downloaded_ok = Arc::new(AtomicUsize::new(0));
+    let instance_dir_arc = Arc::new(instance_dir.clone());
+
+    emit_modpack_progress(
+        app,
+        project_id,
+        title,
+        24,
+        &format!("Stahuji soubory modpacku (0/{})...", file_tasks.len()),
+    );
+
+    let results: Vec<Result<(), String>> = futures_util::stream::iter(file_tasks.into_iter().map(|task| {
+        let inst_dir = Arc::clone(&instance_dir_arc);
+        let done_counter = Arc::clone(&completed);
+        let ok_counter = Arc::clone(&downloaded_ok);
+        let pid_str = project_id.to_string();
+        let title_str = title.to_string();
+        async move {
+            let dest = inst_dir.join(&task.rel_path);
+            let mut last_err = String::from("Chyba stahování souboru modpacku");
+            let mut ok = false;
+            for url in &task.urls {
+                match download_file_with_progress(url, &dest, task.sha1.as_deref()).await {
+                    Ok(()) => {
+                        ok = true;
+                        break;
+                    }
+                    Err(e) => {
+                        last_err = e;
+                    }
+                }
+            }
+            if !ok && !task.optional {
+                return Err(format!(
+                    "Nepodařilo se stáhnout soubor {}: {}",
+                    task.rel_path.display(),
+                    last_err
+                ));
+            }
+            if ok {
+                ok_counter.fetch_add(1, Ordering::Relaxed);
+            }
+            let n = done_counter.fetch_add(1, Ordering::Relaxed) + 1;
+            let pct = 24 + ((n * 64) / total_files) as u32;
+            emit_modpack_progress(
+                app,
+                &pid_str,
+                &title_str,
+                pct,
+                &format!("Stahuji mody ({}/{})...", n, total_files),
+            );
+            Ok(())
+        }
+    }))
+    .buffer_unordered(6)
+    .collect()
+    .await;
+
+    for res in results {
+        if let Err(e) = res {
+            let _ = fs::remove_dir_all(&instance_dir);
+            let _ = fs::remove_file(&temp_mrpack);
+            return Err(e);
+        }
+    }
+
+    // Extract overrides/ and client-overrides/ safely into instance_dir
+    emit_modpack_progress(app, project_id, title, 90, "Rozbaluji konfigurace modpacku...");
+    {
+        let f = File::open(&temp_mrpack)
+            .map_err(|e| format!("Nelze otevřít archiv pro rozbalení overrides: {}", e))?;
+        let mut archive =
+            ZipArchive::new(f).map_err(|e| format!("Neplatný archiv .mrpack: {}", e))?;
+        for i in 0..archive.len() {
+            let mut entry = match archive.by_index(i) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            if entry.is_dir() {
+                continue;
+            }
+            let entry_name = entry.name().replace('\\', "/");
+            let stripped = if let Some(s) = entry_name.strip_prefix("overrides/") {
+                Some(s)
+            } else if let Some(s) = entry_name.strip_prefix("client-overrides/") {
+                Some(s)
+            } else {
+                None
+            };
+            let Some(rel_raw) = stripped else {
+                continue;
+            };
+            let Some(rel_path) = sanitize_relative_pack_path(rel_raw) else {
+                continue;
+            };
+            let out_path = instance_dir.join(&rel_path);
+            if let Some(parent) = out_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Ok(mut out_file) = File::create(&out_path) {
+                let _ = std::io::copy(&mut entry, &mut out_file);
+            }
+        }
+    }
+    let _ = fs::remove_file(&temp_mrpack);
+
+    let ver_id = chosen_ver
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let ver_num = chosen_ver
+        .get("version_number")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let index_name = index_json
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(title);
+    let dl_count = downloaded_ok.load(Ordering::Relaxed);
+
+    let cfg = load_config();
+    let cur_ram = cfg.get("ramMax").and_then(|v| v.as_u64()).unwrap_or(4);
+    let modpack_ram = cur_ram.max(6).min(12);
+
+    let new_profile = json!({
+        "id": profile_id,
+        "name": index_name,
+        "version": mc_ver,
+        "loader": loader,
+        "ramMax": modpack_ram,
+        "optimizedChosen": if loader == "fabric" { "optimized" } else { "vanilla" },
+        "desc": format!("Modpack {} ({}) • {} souborů", ver_num, mc_ver, dl_count),
+        "icon": "latest",
+        "modpackProjectId": project_id,
+        "modpackVersionId": ver_id,
+        "modpackVersionNumber": ver_num,
+        "gameDir": instance_dir.to_string_lossy(),
+        "lastPlayed": Value::Null,
+        "playtimeSeconds": 0
+    });
+
+    let mut profiles = cfg
+        .get("profiles")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    profiles.insert(0, new_profile.clone());
+
+    let mut patch = json!({
+        "profiles": profiles,
+        "activeProfileId": profile_id,
+        "version": mc_ver,
+        "loader": loader
+    });
+    if let Some(order_arr) = cfg.get("profileOrder").and_then(|v| v.as_array()) {
+        let mut next_order = vec![Value::String(profile_id.clone())];
+        for item in order_arr {
+            if item.as_str() != Some(profile_id.as_str()) {
+                next_order.push(item.clone());
+            }
+        }
+        patch["profileOrder"] = Value::Array(next_order);
+    }
+    save_config(&patch);
+
+    emit_modpack_progress(app, project_id, title, 100, "Modpack nainstalován!");
+
+    Ok(json!({
+        "success": true,
+        "profile": new_profile,
+        "profileId": profile_id,
+        "downloadedFiles": dl_count,
+        "mcVersion": mc_ver,
+        "loader": loader
     }))
 }
 
@@ -1785,6 +2254,28 @@ mod tests {
         assert_eq!(fs::read(&target).unwrap(), BUNDLED_VANILLA_BRAND_JAR);
 
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_build_modrinth_catalog_facets_includes_loader_for_modpacks() {
+        let facets = build_modrinth_catalog_facets("modpack", "fabric", "optimization", "all");
+        let parsed: Vec<Vec<String>> = serde_json::from_str(&facets).unwrap();
+        assert!(parsed.contains(&vec!["project_type:modpack".to_string()]));
+        assert!(parsed.contains(&vec!["categories:fabric".to_string()]));
+        assert!(parsed.contains(&vec!["categories:optimization".to_string()]));
+        assert!(!facets.contains("versions:"));
+    }
+
+    #[test]
+    fn test_sanitize_relative_pack_path_blocks_traversal() {
+        assert_eq!(
+            sanitize_relative_pack_path("./mods/sodium.jar"),
+            Some(std::path::PathBuf::from("mods/sodium.jar"))
+        );
+        assert_eq!(sanitize_relative_pack_path("../evil.jar"), None);
+        assert_eq!(sanitize_relative_pack_path("overrides/../../etc/passwd"), None);
+        assert_eq!(sanitize_relative_pack_path("/abs/path.jar"), None);
+        assert_eq!(sanitize_relative_pack_path("C:\\Windows\\evil.dll"), None);
     }
 }
 

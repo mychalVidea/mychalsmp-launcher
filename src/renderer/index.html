@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
         rel="stylesheet" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/style.css?v=1.6.5">
+    <link rel="stylesheet" href="css/style.css?v=1.6.7">
 </head>
 
 <body>
@@ -803,6 +803,15 @@
                                 </svg>
                                 <span>Shadery</span>
                             </button>
+                            <button class="mod-tab-btn" data-mod-type="modpack">
+                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+                                    <path d="m3.3 7 8.7 5 8.7-5"/>
+                                    <path d="M12 22V12"/>
+                                    <path d="M16.5 9.4 7.55 4.24"/>
+                                </svg>
+                                <span>Modpacky</span>
+                            </button>
                         </div>
 
                         <div class="catalog-header-actions">
@@ -837,6 +846,10 @@
                         <aside class="mods-filters-col">
                             <div class="filter-group">
                                 <div class="filter-group-title">Verze hry</div>
+                                <label class="filter-label">
+                                    <input type="radio" name="filterVersion" value="all">
+                                    <span>Všechny</span>
+                                </label>
                                 <label class="filter-label">
                                     <input type="radio" name="filterVersion" value="26.3" checked>
                                     <span>26.3</span>
@@ -1219,10 +1232,10 @@
                  TAB 6: SETTINGS (JAVA 25/21, RAM, LINUX STABILITY)
             ══════════════════════════════════════════════════════════════════ -->
             <section class="tab-pane" id="tab-settings">
-                <div class="pane-header pane-header--with-actions">
+                <div class="pane-header pane-header--with-actions settings-top-header">
                     <div class="pane-header-title">
                         <h2>Nastavení</h2>
-                        <p>Konfigurace paměti RAM, rozlišení a herního výkonu.</p>
+                        <p>Rozdělená konfigurace obrazovky, výkonu, Javy a systémových funkcí.</p>
                     </div>
                     <div class="pane-header-actions">
                         <span class="settings-autosave-badge" id="settingsAutoSaveStatus" style="display: none;">
@@ -1243,72 +1256,262 @@
                     </div>
                 </div>
 
-                <div class="settings-flow-container">
-                    <!-- 1. KARTA: OBRAZOVKA A ROZLIŠENÍ HRY -->
-                    <div class="settings-group-card">
-                        <div class="settings-group-header">
-                            <span class="group-icon-wrap">
-                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
-                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                    <line x1="8" y1="21" x2="16" y2="21"></line>
-                                    <line x1="12" y1="17" x2="12" y2="21"></line>
-                                </svg>
-                            </span>
-                            <div>
-                                <h3 class="settings-group-title">Herní obrazovka a zobrazení</h3>
-                                <p class="settings-group-desc">Zvol velikost herního okna, zobrazení na monitoru a grafický režim.</p>
-                            </div>
+                <div class="settings-workbench" id="settingsWorkbench">
+                    <!-- Left Category Navigation (SKLauncher 4 inspired) -->
+                    <aside class="settings-nav-rail" aria-label="Kategorie nastavení">
+                        <div class="settings-search-wrap">
+                            <svg class="ui-icon-svg ui-icon-svg--xs settings-search-icon" viewBox="0 0 24 24">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="search" id="settingsSearchInput" class="settings-search-input"
+                                placeholder="Hledat nastavení..." autocomplete="off" spellcheck="false">
                         </div>
 
-                        <!-- Výběr rozlišení -->
-                        <div class="form-group setting-resolution-group">
-                            <label class="setting-section-label">Velikost herního okna</label>
-                            <div class="resolution-options">
-                                <label class="radio-label radio-label--res">
-                                    <input type="radio" name="res" value="1280x720" checked>
-                                    <div class="radio-card-content">
-                                        <span class="res-title">1280 × 720</span>
-                                        <span class="res-sub">HD okno</span>
-                                    </div>
-                                </label>
-                                <label class="radio-label radio-label--res">
-                                    <input type="radio" name="res" value="1920x1080">
-                                    <div class="radio-card-content">
-                                        <span class="res-title">1920 × 1080</span>
-                                        <span class="res-sub">Full HD okno</span>
-                                    </div>
-                                </label>
-                                <label class="radio-label radio-label--res">
-                                    <input type="radio" name="res" value="fullscreen">
-                                    <div class="radio-card-content">
-                                        <span class="res-title">Celá obrazovka</span>
-                                        <span class="res-sub">Nativní monitor</span>
-                                    </div>
-                                </label>
-                            </div>
+                        <nav class="settings-nav-list" role="tablist" aria-orientation="vertical">
+                            <button type="button" class="settings-nav-btn is-active" data-settings-cat="general"
+                                role="tab" aria-selected="true">
+                                <span class="settings-nav-icon">
+                                    <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                                    </svg>
+                                </span>
+                                <span class="settings-nav-text">
+                                    <span class="settings-nav-title">Obecné</span>
+                                    <span class="settings-nav-sub">Obrazovka a herní funkce</span>
+                                </span>
+                            </button>
+
+                            <button type="button" class="settings-nav-btn" data-settings-cat="performance"
+                                role="tab" aria-selected="false">
+                                <span class="settings-nav-icon">
+                                    <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                        <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                                        <rect x="9" y="9" width="6" height="6"></rect>
+                                        <line x1="9" y1="1" x2="9" y2="4"></line>
+                                        <line x1="15" y1="1" x2="15" y2="4"></line>
+                                        <line x1="9" y1="20" x2="9" y2="23"></line>
+                                        <line x1="15" y1="20" x2="15" y2="23"></line>
+                                        <line x1="20" y1="9" x2="23" y2="9"></line>
+                                        <line x1="20" y1="14" x2="23" y2="14"></line>
+                                        <line x1="1" y1="9" x2="4" y2="9"></line>
+                                        <line x1="1" y1="14" x2="4" y2="14"></line>
+                                    </svg>
+                                </span>
+                                <span class="settings-nav-text">
+                                    <span class="settings-nav-title">Výkon a grafika</span>
+                                    <span class="settings-nav-sub">Paměť RAM, GPU a Render API</span>
+                                </span>
+                            </button>
+
+                            <button type="button" class="settings-nav-btn" data-settings-cat="java"
+                                role="tab" aria-selected="false">
+                                <span class="settings-nav-icon">
+                                    <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                        <polyline points="16 18 22 12 16 6"></polyline>
+                                        <polyline points="8 6 2 12 8 18"></polyline>
+                                    </svg>
+                                </span>
+                                <span class="settings-nav-text">
+                                    <span class="settings-nav-title">Java a JVM</span>
+                                    <span class="settings-nav-sub">Runtime, GC a proměnné</span>
+                                </span>
+                            </button>
+
+                            <button type="button" class="settings-nav-btn" data-settings-cat="system"
+                                role="tab" aria-selected="false">
+                                <span class="settings-nav-icon">
+                                    <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                    </svg>
+                                </span>
+                                <span class="settings-nav-text">
+                                    <span class="settings-nav-title">Systém (OS)</span>
+                                    <span class="settings-nav-sub">Windows a Linux tweaky</span>
+                                </span>
+                            </button>
+
+                            <button type="button" class="settings-nav-btn" data-settings-cat="maintenance"
+                                role="tab" aria-selected="false">
+                                <span class="settings-nav-icon">
+                                    <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                                    </svg>
+                                </span>
+                                <span class="settings-nav-text">
+                                    <span class="settings-nav-title">Údržba a logy</span>
+                                    <span class="settings-nav-sub">Aktualizace, cache a konzole</span>
+                                </span>
+                            </button>
+                        </nav>
+
+                        <div class="settings-nav-footer">
+                            <span class="settings-autosave-hint">Změny se ukládají automaticky</span>
+                        </div>
+                    </aside>
+
+                    <!-- Right Scrollable Settings Panels -->
+                    <div class="settings-panels-scroll" id="settingsPanelsScroll">
+                        <div class="settings-search-empty" id="settingsSearchEmpty" style="display: none;">
+                            Žádné nastavení neodpovídá hledanému výrazu.
                         </div>
 
-                        <!-- Bezokrajové okno (Borderless Fullscreen) BETA -->
-                        <div class="form-group setting-borderless-group">
-                            <label class="perf-toggle-card perf-toggle-card--highlight">
-                                <input type="checkbox" id="checkBorderlessFullscreen">
-                                <div class="perf-toggle-info">
-                                    <div class="perf-toggle-title-row">
-                                        <span class="perf-toggle-title">Bezokrajové okno (Borderless Fullscreen)</span>
-                                        <span class="badge-beta">Beta</span>
+                        <!-- KATEGORIE 1: OBECNÉ -->
+                        <div class="settings-category-panel is-active" data-settings-panel="general">
+                            <div class="settings-group-card">
+                                <div class="settings-group-header">
+                                    <span class="group-icon-wrap">
+                                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                            <line x1="8" y1="21" x2="16" y2="21"></line>
+                                            <line x1="12" y1="17" x2="12" y2="21"></line>
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <h3 class="settings-group-title">Herní obrazovka a zobrazení</h3>
+                                        <p class="settings-group-desc">Zvol velikost herního okna a režim zobrazení na monitoru.</p>
                                     </div>
-                                    <span class="perf-toggle-desc">Hra běží přes celou obrazovku bez rámečků – při přepnutí do Discordu či prohlížeče (Alt+Tab) nezčerná monitor a hra se nezmenší.</span>
                                 </div>
-                            </label>
+
+                                <!-- Výběr rozlišení -->
+                                <div class="form-group setting-resolution-group">
+                                    <label class="setting-section-label">Velikost herního okna</label>
+                                    <div class="resolution-options">
+                                        <label class="radio-label radio-label--res">
+                                            <input type="radio" name="res" value="1280x720" checked>
+                                            <div class="radio-card-content">
+                                                <span class="res-title">1280 × 720</span>
+                                                <span class="res-sub">HD okno</span>
+                                            </div>
+                                        </label>
+                                        <label class="radio-label radio-label--res">
+                                            <input type="radio" name="res" value="1920x1080">
+                                            <div class="radio-card-content">
+                                                <span class="res-title">1920 × 1080</span>
+                                                <span class="res-sub">Full HD okno</span>
+                                            </div>
+                                        </label>
+                                        <label class="radio-label radio-label--res">
+                                            <input type="radio" name="res" value="fullscreen">
+                                            <div class="radio-card-content">
+                                                <span class="res-title">Celá obrazovka</span>
+                                                <span class="res-sub">Nativní monitor</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Bezokrajové okno (Borderless Fullscreen) BETA -->
+                                <div class="form-group setting-borderless-group">
+                                    <label class="perf-toggle-card perf-toggle-card--highlight">
+                                        <input type="checkbox" id="checkBorderlessFullscreen">
+                                        <div class="perf-toggle-info">
+                                            <div class="perf-toggle-title-row">
+                                                <span class="perf-toggle-title">Bezokrajové okno (Borderless Fullscreen)</span>
+                                                <span class="badge-beta">Beta</span>
+                                            </div>
+                                            <span class="perf-toggle-desc">Hra běží přes celou obrazovku bez rámečků – při přepnutí do Discordu či prohlížeče (Alt+Tab) nezčerná monitor a hra se nezmenší.</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="settings-group-card">
+                                <div class="settings-group-header">
+                                    <span class="group-icon-wrap">
+                                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <h3 class="settings-group-title">Herní vylepšení a integrace</h3>
+                                        <p class="settings-group-desc">Automatické funkce pro pohodlné hraní a napojení na Discord.</p>
+                                    </div>
+                                </div>
+
+                                <div class="perf-settings-grid" id="universalPerfGroup">
+                                    <label class="perf-toggle-card">
+                                        <input type="checkbox" id="checkAutoUpdateMods" checked>
+                                        <div class="perf-toggle-info">
+                                            <span class="perf-toggle-title">Automatická aktualizace módů</span>
+                                            <span class="perf-toggle-desc">Při spuštění hry zkontrolovat a stáhnout novější verze módů pro server.</span>
+                                        </div>
+                                    </label>
+
+                                    <label class="perf-toggle-card">
+                                        <input type="checkbox" id="checkDiscordRpc" checked>
+                                        <div class="perf-toggle-info">
+                                            <span class="perf-toggle-title">Discord Rich Presence</span>
+                                            <span class="perf-toggle-desc">Zobrazovat přátelům na Discordu, že právě hraješ na serveru MYCHAL SMP.</span>
+                                        </div>
+                                    </label>
+
+                                    <label class="perf-toggle-card">
+                                        <input type="checkbox" id="checkScreenshotClipboard" checked>
+                                        <div class="perf-toggle-info">
+                                            <span class="perf-toggle-title">Screenshot do schránky (Ctrl+V)</span>
+                                            <span class="perf-toggle-desc">Po stisku F2 ve hře se snímek automaticky zkopíruje do schránky pro vložení na Discord.</span>
+                                        </div>
+                                    </label>
+
+                                    <label class="perf-toggle-card" for="checkShowFpsCounter">
+                                        <input type="checkbox" id="checkShowFpsCounter">
+                                        <div class="perf-toggle-info">
+                                            <span class="perf-toggle-title">Diagnostický FPS čítač UI</span>
+                                            <span class="perf-toggle-desc">Zobrazí snímkovou frekvenci rozhraní launcheru v horní liště.</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- Detekovaná GPU a Grafický backend -->
-                        <div class="settings-gpu-row">
-                            <div class="form-group" id="gpuInfoGroup" style="margin-bottom: 0;">
-                                <label class="setting-section-label">Grafická karta</label>
-                                <div class="gpu-detected-card">
-                                    <div class="gpu-detected-left">
-                                        <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
+                        <!-- KATEGORIE 2: VÝKON A GRAFIKA -->
+                        <div class="settings-category-panel" data-settings-panel="performance">
+                            <div class="settings-group-card">
+                                <div class="settings-group-header">
+                                    <span class="group-icon-wrap">
+                                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                                            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                                            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <h3 class="settings-group-title">Paměť RAM pro Minecraft</h3>
+                                        <p class="settings-group-desc">Kolik operační paměti počítače dostane hra pro plynulé načítání světa a chunků.</p>
+                                    </div>
+                                </div>
+
+                                <div class="form-group setting-ram-group" style="margin-bottom: 0;">
+                                    <div class="setting-title-row">
+                                        <div class="ram-quick-buttons">
+                                            <button type="button" class="btn-ram-preset" data-ram="4">4 GB (Základ)</button>
+                                            <button type="button" class="btn-ram-preset btn-ram-preset--recommended" id="btnApplyRecommendedRam" style="display: none;">
+                                                <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24">
+                                                    <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path>
+                                                </svg>
+                                                <span>Doporučeno: <strong id="ramRecommendedVal">8 GB</strong></span>
+                                            </button>
+                                            <button type="button" class="btn-ram-preset" data-ram="16">16 GB (Shadery)</button>
+                                        </div>
+                                        <div class="ram-title-right">
+                                            <span class="ram-detected-text" id="ramDetectedText">V počítači: <strong id="ramTotalText">-- GB RAM</strong></span>
+                                            <span class="setting-value-badge" id="ramValueBadge">4 GB</span>
+                                        </div>
+                                    </div>
+                                    <input type="range" id="ramSlider" min="2" max="16" step="any" value="4" class="slider">
+                                    <div class="slider-marks" id="ramSliderMarks"></div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group-card">
+                                <div class="settings-group-header">
+                                    <span class="group-icon-wrap">
+                                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
                                             <rect x="4" y="4" width="16" height="16" rx="2"></rect>
                                             <rect x="9" y="9" width="6" height="6"></rect>
                                             <line x1="9" y1="1" x2="9" y2="4"></line>
@@ -1320,509 +1523,460 @@
                                             <line x1="1" y1="9" x2="4" y2="9"></line>
                                             <line x1="1" y1="14" x2="4" y2="14"></line>
                                         </svg>
-                                        <span class="gpu-name-text" id="gpuNameText">Detekuji grafickou kartu...</span>
-                                    </div>
-                                    <span class="badge-status badge-success" id="gpuDedicatedBadge"
-                                        style="display: none;">Diskrétní GPU</span>
-                                </div>
-                                <div class="gpu-spec-bar" id="gpuCapabilityBar" aria-live="polite"></div>
-                            </div>
-
-                            <div class="form-group" id="graphicsBackendGroup" style="margin-bottom: 0;">
-                                <div class="setting-section-header">
-                                    <label class="setting-section-label">Grafický režim (Render API)</label>
-                                    <span class="setting-section-hint" id="graphicsBackendHint">Minecraft 26.2+</span>
-                                </div>
-                                <div class="backend-options">
-                                    <label class="radio-label radio-label--backend">
-                                        <input type="radio" name="graphicsBackend" value="default" checked>
-                                        <span>Výchozí</span>
-                                    </label>
-                                    <label class="radio-label radio-label--backend" id="labelBackendVulkan">
-                                        <input type="radio" name="graphicsBackend" id="radioBackendVulkan" value="vulkan">
-                                        <span class="backend-vulkan-label">
-                                            <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                                <polygon points="12 2 2 7 12 12 22 7 12 2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                <polyline points="2 17 12 22 22 17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                <polyline points="2 12 12 17 22 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                            </svg>
-                                            Vulkan
-                                        </span>
-                                    </label>
-                                    <label class="radio-label radio-label--backend">
-                                        <input type="radio" name="graphicsBackend" value="opengl">
-                                        <span>OpenGL</span>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 2. KARTA: PAMĚŤ RAM PRO MINECRAFT -->
-                    <div class="settings-group-card">
-                        <div class="settings-group-header">
-                            <span class="group-icon-wrap">
-                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
-                                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-                                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-                                    <line x1="6" y1="6" x2="6.01" y2="6"></line>
-                                    <line x1="6" y1="18" x2="6.01" y2="18"></line>
-                                </svg>
-                            </span>
-                            <div>
-                                <h3 class="settings-group-title">Paměť RAM pro Minecraft</h3>
-                                <p class="settings-group-desc">Kolik operační paměti počítače dostane hra pro plynulé načítání světa a chunků.</p>
-                            </div>
-                        </div>
-
-                        <div class="form-group setting-ram-group" style="margin-bottom: 0;">
-                            <div class="setting-title-row">
-                                <div class="ram-quick-buttons">
-                                    <button type="button" class="btn-ram-preset" data-ram="4">4 GB (Základ)</button>
-                                    <button type="button" class="btn-ram-preset btn-ram-preset--recommended" id="btnApplyRecommendedRam" style="display: none;">
-                                        <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24">
-                                            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path>
-                                        </svg>
-                                        <span>Doporučeno: <strong id="ramRecommendedVal">8 GB</strong></span>
-                                    </button>
-                                    <button type="button" class="btn-ram-preset" data-ram="16">16 GB (Shadery)</button>
-                                </div>
-                                <div class="ram-title-right">
-                                    <span class="ram-detected-text" id="ramDetectedText">V počítači: <strong id="ramTotalText">-- GB RAM</strong></span>
-                                    <span class="setting-value-badge" id="ramValueBadge">4 GB</span>
-                                </div>
-                            </div>
-                            <input type="range" id="ramSlider" min="2" max="16" step="any" value="4" class="slider">
-                            <div class="slider-marks" id="ramSliderMarks"></div>
-                        </div>
-                    </div>
-
-                    <!-- 3. KARTA: HERNÍ VYLEPŠENÍ -->
-                    <div class="settings-group-card">
-                        <div class="settings-group-header">
-                            <span class="group-icon-wrap">
-                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
-                                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                                </svg>
-                            </span>
-                            <div>
-                                <h3 class="settings-group-title">Herní vylepšení</h3>
-                                <p class="settings-group-desc">Automatické funkce usnadňující hraní a propojení se sociálními sítěmi.</p>
-                            </div>
-                        </div>
-
-                        <div class="perf-settings-grid" id="universalPerfGroup">
-                            <label class="perf-toggle-card">
-                                <input type="checkbox" id="checkAutoUpdateMods" checked>
-                                <div class="perf-toggle-info">
-                                    <span class="perf-toggle-title">Automatická aktualizace módů</span>
-                                    <span class="perf-toggle-desc">Při spuštění hry zkontrolovat a stáhnout novější verze módů pro server.</span>
-                                </div>
-                            </label>
-
-                            <label class="perf-toggle-card">
-                                <input type="checkbox" id="checkDiscordRpc" checked>
-                                <div class="perf-toggle-info">
-                                    <span class="perf-toggle-title">Discord Rich Presence</span>
-                                    <span class="perf-toggle-desc">Zobrazovat přátelům na Discordu, že právě hraješ na serveru MYCHAL SMP.</span>
-                                </div>
-                            </label>
-
-                            <label class="perf-toggle-card">
-                                <input type="checkbox" id="checkScreenshotClipboard" checked>
-                                <div class="perf-toggle-info">
-                                    <span class="perf-toggle-title">Screenshot do schránky (Ctrl+V)</span>
-                                    <span class="perf-toggle-desc">Po stisku F2 ve hře se snímek automaticky zkopíruje do schránky pro vložení na Discord.</span>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- 4. KARTA: SPRÁVA A ÚDRŽBA LAUNCHERU -->
-                    <div class="settings-group-card">
-                        <div class="settings-group-header">
-                            <span class="group-icon-wrap">
-                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
-                                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
-                                </svg>
-                            </span>
-                            <div>
-                                <h3 class="settings-group-title">Správa a údržba launcheru</h3>
-                                <p class="settings-group-desc">Aktualizace na nejnovější verzi a uvolnění místa na pevném disku.</p>
-                            </div>
-                        </div>
-
-                        <div class="settings-tools-row">
-                            <div class="update-checker-card">
-                                <div class="tool-card-header">
-                                    <span class="ui-icon-wrap">
-                                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
-                                            <path d="M21 2v6h-6"></path>
-                                            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
-                                            <path d="M3 22v-6h6"></path>
-                                            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
-                                        </svg>
                                     </span>
                                     <div>
-                                        <strong class="tool-card-title">Aktualizace aplikace</strong>
-                                        <p class="tool-card-desc" id="launcherVersionStatus">Verze: <strong>v1.7.24</strong>
-                                        </p>
+                                        <h3 class="settings-group-title">Grafická karta a Render API</h3>
+                                        <p class="settings-group-desc">Detekovaný grafický adaptér a volba vykreslovacího backendu hry.</p>
                                     </div>
                                 </div>
-                                <div class="tool-card-actions">
-                                    <button type="button" class="mc-btn mc-btn-primary" id="btnManualCheckUpdate">
-                                        <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
-                                            <polyline points="23 4 23 10 17 10"></polyline>
-                                            <polyline points="1 20 1 14 7 14"></polyline>
-                                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15">
-                                            </path>
-                                        </svg>
-                                        <span>Zkontrolovat</span>
-                                    </button>
-                                </div>
-                            </div>
 
-                            <div class="cache-cleaner-card">
-                                <div class="tool-card-header">
-                                    <span class="ui-icon-wrap">
-                                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
-                                            <line x1="22" y1="12" x2="2" y2="12"></line>
-                                            <path
-                                                d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z">
-                                            </path>
-                                            <line x1="6" y1="16" x2="6.01" y2="16"></line>
-                                            <line x1="10" y1="16" x2="10.01" y2="16"></line>
-                                        </svg>
-                                    </span>
-                                    <div>
-                                        <strong class="tool-card-title">Údržba disku</strong>
-                                        <p class="tool-card-desc">Promaže staré logy a crash reporty.</p>
-                                    </div>
-                                </div>
-                                <div class="tool-card-actions">
-                                    <span id="cacheCleanerSummary" class="tool-status-text">Připraveno.</span>
-                                    <div class="btn-group-sm">
-                                        <button type="button" class="mc-btn mc-btn-secondary btn-sm"
-                                            id="btnScanCache">Analyzovat</button>
-                                        <button type="button" class="mc-btn mc-btn-green btn-sm"
-                                            id="btnCleanCache">Vyčistit</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 5. KARTA: POKROČILÁ NASTAVENÍ A SYSTÉMOVÉ TWEAKY (Sbalitelný panel) -->
-                    <details class="settings-group-card settings-advanced-details">
-                        <summary class="settings-advanced-summary">
-                            <div class="settings-group-header" style="margin-bottom: 0;">
-                                <span class="group-icon-wrap">
-                                    <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
-                                        <circle cx="12" cy="12" r="3"></circle>
-                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                                    </svg>
-                                </span>
-                                <div>
-                                    <h3 class="settings-group-title">Pokročilé nastavení systému</h3>
-                                    <p class="settings-group-desc">Cesta k Java Runtime, argumenty JVM a specifické optimalizace pro Windows a Linux.</p>
-                                </div>
-                            </div>
-                            <div class="settings-os-summary-right">
-                                <span class="badge-advanced">Pokročilé</span>
-                                <svg class="settings-os-chevron ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg>
-                            </div>
-                        </summary>
-
-                        <div class="settings-advanced-body">
-                            <!-- Java Runtime -->
-                            <div class="form-group" style="margin-top: 6px;">
-                                <label for="javaPathInput" class="setting-section-label">Java Runtime (Verze Javy)</label>
-                                <div class="input-with-button">
-                                    <input type="text" id="javaPathInput" class="input-text"
-                                        placeholder="Výchozí: Java 25...">
-                                    <button type="button" class="mc-btn mc-btn-secondary"
-                                        id="btnDetectJava">Detekovat</button>
-                                </div>
-                                <div class="java-detected-pills" id="javaDetectedList"></div>
-                            </div>
-
-                            <!-- Argumenty Javy -->
-                            <div class="form-group" style="margin-top: 14px;">
-                                <label for="jvmArgsInput" class="setting-section-label">Argumenty Javy (JVM Flags)</label>
-                                <input type="text" id="jvmArgsInput" class="input-text"
-                                    placeholder="-XX:+UseZGC -XX:+UnlockExperimentalVMOptions...">
-                                <div class="jvm-args-actions">
-                                    <button type="button" class="btn-pill-small" id="btnPresetZgc">
-                                        <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24"
-                                            fill="currentColor">
-                                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
-                                                fill="currentColor"></polygon>
-                                        </svg>
-                                        ZGC (Java 25)
-                                    </button>
-                                    <button type="button" class="btn-pill-small" id="btnPresetG1gc">Standardní
-                                        G1GC</button>
-                                </div>
-                            </div>
-
-                            <!-- Vlastní proměnné prostředí -->
-                            <div class="form-group" style="margin-top: 14px;">
-                                <label for="customEnvVarsInput" class="setting-section-label">Vlastní proměnné prostředí</label>
-                                <textarea id="customEnvVarsInput" class="input-text" rows="2"
-                                    style="font-family: var(--font-mono); font-size: 11px; resize: vertical;"
-                                    placeholder="KEY=VALUE (jeden záznam na řádek)"></textarea>
-                            </div>
-
-                            <!-- Sekce OS Optimalizace: Windows & Linux rozdělení -->
-                            <div class="settings-os-section" style="margin-top: 16px;">
-                                <label class="setting-section-label">Optimalizace specifické pro operační systém</label>
-
-                                <!-- Windows Sekce -->
-                                <details class="settings-os-details" id="detailsWindowsSettings">
-                                    <summary class="settings-os-summary">
-                                        <div class="settings-os-summary-left">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.401H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.949-1.801"/>
-                                            </svg>
-                                            <span class="settings-os-title">Optimalizace pro Windows</span>
-                                        </div>
-                                        <div class="settings-os-summary-right">
-                                            <span class="badge-os" id="badgeOsWindows">Windows</span>
-                                            <svg class="settings-os-chevron ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                                <polyline points="6 9 12 15 18 9"></polyline>
-                                            </svg>
-                                        </div>
-                                    </summary>
-                                    <div class="settings-os-body">
-                                        <div class="os-inactive-notice" id="noticeOsWindows" style="display: none;">
-                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <circle cx="12" cy="12" r="10"></circle>
-                                                <line x1="12" y1="8" x2="12" y2="12"></line>
-                                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                                            </svg>
-                                            <span>Tato nastavení jsou dostupná pouze na operačním systému Windows.</span>
-                                        </div>
-                                        <div class="perf-settings-grid">
-                                            <label class="perf-toggle-card" id="cardWinHighPriority">
-                                                <input type="checkbox" id="checkWinHighPriority" checked>
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Vysoká priorita procesu</span>
-                                                    <span class="perf-toggle-desc">Spustí proces Minecraftu s prioritou HIGH_PRIORITY_CLASS pro stabilní frame time.</span>
-                                                </div>
-                                            </label>
-
-                                            <label class="perf-toggle-card" id="cardWinDedicatedGpu">
-                                                <input type="checkbox" id="checkWinDedicatedGpu" checked>
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Vynucení dedikované GPU</span>
-                                                    <span class="perf-toggle-desc">Nastaví SHIM_MCCOMPAT (0xD4000000) pro preference výkonného GPU akcelerátoru.</span>
-                                                    <span class="perf-toggle-reason" id="reasonWinDedicatedGpu" style="display: none;"></span>
-                                                </div>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </details>
-
-                                <!-- Linux Sekce -->
-                                <details class="settings-os-details" id="detailsLinuxSettings">
-                                    <summary class="settings-os-summary">
-                                        <div class="settings-os-summary-left">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <polyline points="4 17 10 11 4 5"></polyline>
-                                                <line x1="12" y1="19" x2="20" y2="19"></line>
-                                            </svg>
-                                            <span class="settings-os-title">Optimalizace pro Linux</span>
-                                        </div>
-                                        <div class="settings-os-summary-right">
-                                            <span class="badge-os" id="badgeOsLinux">Linux</span>
-                                            <svg class="settings-os-chevron ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                                <polyline points="6 9 12 15 18 9"></polyline>
-                                            </svg>
-                                        </div>
-                                    </summary>
-                                    <div class="settings-os-body">
-                                        <div class="os-inactive-notice" id="noticeOsLinux" style="display: none;">
-                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <circle cx="12" cy="12" r="10"></circle>
-                                                <line x1="12" y1="8" x2="12" y2="12"></line>
-                                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                                            </svg>
-                                            <span>Tato nastavení jsou dostupná pouze na operačním systému Linux.</span>
-                                        </div>
-                                        <div class="perf-settings-grid">
-                                            <label class="perf-toggle-card" id="cardGameMode">
-                                                <input type="checkbox" id="checkGameMode" checked>
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Herní režim (GameMode)</span>
-                                                    <span class="perf-toggle-desc">Spustí hru přes gamemoderun pro výkonný CPU governor a I/O prioritu.</span>
-                                                    <span class="perf-toggle-reason" id="reasonGameMode" style="display: none;"></span>
-                                                </div>
-                                            </label>
-
-                                            <label class="perf-toggle-card" id="cardDiscreteGpu">
-                                                <input type="checkbox" id="checkDiscreteGpu" checked>
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Dedikovaná GPU (PRIME Offload)</span>
-                                                    <span class="perf-toggle-desc" id="descDiscreteGpu">Přepne hybridní grafiku na diskrétní GPU místo integrovaného čipu.</span>
-                                                    <span class="perf-toggle-reason" id="reasonDiscreteGpu" style="display: none;"></span>
-                                                </div>
-                                            </label>
-
-                                            <label class="perf-toggle-card" id="cardDisableVsync">
-                                                <input type="checkbox" id="checkDisableVsync">
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Nízká odezva (V-Sync ovladače)</span>
-                                                    <span class="perf-toggle-desc">Potlačí V-Sync na úrovni OpenGL ovladače pro nižší input lag.</span>
-                                                    <span class="perf-toggle-reason" id="reasonDisableVsync" style="display: none;"></span>
-                                                </div>
-                                            </label>
-
-                                            <label class="perf-toggle-card" id="cardNativeWayland">
-                                                <input type="checkbox" id="checkNativeWayland">
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Nativní Wayland okno (GLFW)</span>
-                                                    <span class="perf-toggle-desc">Spustí hru přímo na Waylandu bez XWayland mezivrstvy.</span>
-                                                    <span class="perf-toggle-reason" id="reasonNativeWayland" style="display: none;"></span>
-                                                </div>
-                                            </label>
-
-                                            <label class="perf-toggle-card" id="cardSystemGlfw">
-                                                <input type="checkbox" id="checkSystemGlfw">
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Systémová knihovna GLFW</span>
-                                                    <span class="perf-toggle-desc">Předá LWJGL systémovou knihovnu libglfw.so (např. glfw-wayland-minecraft).</span>
-                                                    <span class="perf-toggle-reason" id="reasonSystemGlfw" style="display: none;"></span>
-                                                </div>
-                                            </label>
-
-                                            <label class="perf-toggle-card" id="cardZink">
-                                                <input type="checkbox" id="checkZink">
-                                                <div class="perf-toggle-info">
-                                                    <span class="perf-toggle-title">Zink (OpenGL přes Vulkan)</span>
-                                                    <span class="perf-toggle-desc">Mesa ovladač převádějící OpenGL volání do Vulkan API.</span>
-                                                    <span class="perf-toggle-reason" id="reasonZink" style="display: none;"></span>
-                                                </div>
-                                            </label>
-                                        </div>
-
-                                        <!-- Podmíněná sekce pro NVIDIA OpenGL (skrytá bez NVIDIA GPU) -->
-                                        <div class="perf-subsection" id="nvidiaOpenGlSection" style="display: none;">
-                                            <div class="perf-subsection-header">
-                                                <span class="perf-subsection-title">NVIDIA OpenGL akcelerace</span>
-                                                <span class="perf-subsection-hint" id="nvidiaDriverBadgeHint">Proprietární ovladač</span>
+                                <div class="settings-gpu-row settings-gpu-row--standalone">
+                                    <div class="form-group" id="gpuInfoGroup" style="margin-bottom: 0;">
+                                        <label class="setting-section-label">Grafická karta</label>
+                                        <div class="gpu-detected-card">
+                                            <div class="gpu-detected-left">
+                                                <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
+                                                    <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                                                    <rect x="9" y="9" width="6" height="6"></rect>
+                                                    <line x1="9" y1="1" x2="9" y2="4"></line>
+                                                    <line x1="15" y1="1" x2="15" y2="4"></line>
+                                                    <line x1="9" y1="20" x2="9" y2="23"></line>
+                                                    <line x1="15" y1="20" x2="15" y2="23"></line>
+                                                    <line x1="20" y1="9" x2="23" y2="9"></line>
+                                                    <line x1="20" y1="14" x2="23" y2="14"></line>
+                                                    <line x1="1" y1="9" x2="4" y2="9"></line>
+                                                    <line x1="1" y1="14" x2="4" y2="14"></line>
+                                                </svg>
+                                                <span class="gpu-name-text" id="gpuNameText">Detekuji grafickou kartu...</span>
                                             </div>
-                                            <div class="os-inactive-notice" id="noticeNvidiaUnavailable" style="display: none;">
+                                            <span class="badge-status badge-success" id="gpuDedicatedBadge"
+                                                style="display: none;">Diskrétní GPU</span>
+                                        </div>
+                                        <div class="gpu-spec-bar" id="gpuCapabilityBar" aria-live="polite"></div>
+                                    </div>
+
+                                    <div class="form-group" id="graphicsBackendGroup" style="margin-bottom: 0;">
+                                        <div class="setting-section-header">
+                                            <label class="setting-section-label">Grafický režim (Render API)</label>
+                                            <span class="setting-section-hint" id="graphicsBackendHint">Minecraft 26.2+</span>
+                                        </div>
+                                        <div class="backend-options">
+                                            <label class="radio-label radio-label--backend">
+                                                <input type="radio" name="graphicsBackend" value="default" checked>
+                                                <span>Výchozí</span>
+                                            </label>
+                                            <label class="radio-label radio-label--backend" id="labelBackendVulkan">
+                                                <input type="radio" name="graphicsBackend" id="radioBackendVulkan" value="vulkan">
+                                                <span class="backend-vulkan-label">
+                                                    <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                                        <polygon points="12 2 2 7 12 12 22 7 12 2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <polyline points="2 17 12 22 22 17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <polyline points="2 12 12 17 22 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    </svg>
+                                                    Vulkan
+                                                </span>
+                                            </label>
+                                            <label class="radio-label radio-label--backend">
+                                                <input type="radio" name="graphicsBackend" value="opengl">
+                                                <span>OpenGL</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KATEGORIE 3: JAVA A JVM -->
+                        <div class="settings-category-panel" data-settings-panel="java">
+                            <div class="settings-group-card">
+                                <div class="settings-group-header">
+                                    <span class="group-icon-wrap">
+                                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <polyline points="16 18 22 12 16 6"></polyline>
+                                            <polyline points="8 6 2 12 8 18"></polyline>
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <h3 class="settings-group-title">Java Runtime a argumenty JVM</h3>
+                                        <p class="settings-group-desc">Cesta k binárce Javy, Garbage Collector a vlastní proměnné prostředí při spuštění.</p>
+                                    </div>
+                                </div>
+
+                                <!-- Java Runtime -->
+                                <div class="form-group">
+                                    <label for="javaPathInput" class="setting-section-label">Java Runtime (Verze Javy)</label>
+                                    <div class="input-with-button">
+                                        <input type="text" id="javaPathInput" class="input-text"
+                                            placeholder="Výchozí: Java 25...">
+                                        <button type="button" class="mc-btn mc-btn-secondary"
+                                            id="btnDetectJava">Detekovat</button>
+                                    </div>
+                                    <div class="java-detected-pills" id="javaDetectedList"></div>
+                                </div>
+
+                                <!-- Argumenty Javy -->
+                                <div class="form-group" style="margin-top: 16px;">
+                                    <label for="jvmArgsInput" class="setting-section-label">Argumenty Javy (JVM Flags)</label>
+                                    <input type="text" id="jvmArgsInput" class="input-text"
+                                        placeholder="-XX:+UseZGC -XX:+UnlockExperimentalVMOptions...">
+                                    <div class="jvm-args-actions">
+                                        <button type="button" class="btn-pill-small" id="btnPresetZgc">
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24"
+                                                fill="currentColor">
+                                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                                                    fill="currentColor"></polygon>
+                                            </svg>
+                                            ZGC (Java 25)
+                                        </button>
+                                        <button type="button" class="btn-pill-small" id="btnPresetG1gc">Standardní
+                                            G1GC</button>
+                                    </div>
+                                </div>
+
+                                <!-- Vlastní proměnné prostředí -->
+                                <div class="form-group" style="margin-top: 16px; margin-bottom: 0;">
+                                    <label for="customEnvVarsInput" class="setting-section-label">Vlastní proměnné prostředí</label>
+                                    <textarea id="customEnvVarsInput" class="input-text" rows="3"
+                                        style="font-family: var(--font-mono); font-size: 11.5px; resize: vertical;"
+                                        placeholder="KEY=VALUE (jeden záznam na řádek)"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KATEGORIE 4: SYSTÉM (OS) -->
+                        <div class="settings-category-panel" data-settings-panel="system">
+                            <div class="settings-group-card">
+                                <div class="settings-group-header">
+                                    <span class="group-icon-wrap">
+                                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <h3 class="settings-group-title">Optimalizace operačního systému</h3>
+                                        <p class="settings-group-desc">Nativní ladění procesu, GPU a grafického serveru pro Windows a Linux.</p>
+                                    </div>
+                                </div>
+
+                                <div class="settings-os-section">
+                                    <!-- Windows Sekce -->
+                                    <details class="settings-os-details" id="detailsWindowsSettings">
+                                        <summary class="settings-os-summary">
+                                            <div class="settings-os-summary-left">
+                                                <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.401H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.949-1.801"/>
+                                                </svg>
+                                                <span class="settings-os-title">Optimalizace pro Windows</span>
+                                            </div>
+                                            <div class="settings-os-summary-right">
+                                                <span class="badge-os" id="badgeOsWindows">Windows</span>
+                                                <svg class="settings-os-chevron ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                                </svg>
+                                            </div>
+                                        </summary>
+                                        <div class="settings-os-body">
+                                            <div class="os-inactive-notice" id="noticeOsWindows" style="display: none;">
                                                 <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                     <circle cx="12" cy="12" r="10"></circle>
                                                     <line x1="12" y1="8" x2="12" y2="12"></line>
                                                     <line x1="12" y1="16" x2="12.01" y2="16"></line>
                                                 </svg>
-                                                <span id="textNvidiaUnavailable">Proprietární NVIDIA OpenGL volby nejsou dostupné.</span>
+                                                <span>Tato nastavení jsou dostupná pouze na operačním systému Windows.</span>
                                             </div>
                                             <div class="perf-settings-grid">
-                                                <label class="perf-toggle-card" id="cardNvidiaThreadedOpt">
-                                                    <input type="checkbox" id="checkNvidiaThreadedOpt" checked>
+                                                <label class="perf-toggle-card" id="cardWinHighPriority">
+                                                    <input type="checkbox" id="checkWinHighPriority" checked>
                                                     <div class="perf-toggle-info">
-                                                        <span class="perf-toggle-title">OpenGL Threaded Optimization</span>
-                                                        <span class="perf-toggle-desc">Zapne vícevláknové zpracování draw callů (__GL_THREADED_OPTIMIZATIONS=1).</span>
-                                                        <span class="perf-toggle-reason" id="reasonNvidiaThreadedOpt" style="display: none;"></span>
+                                                        <span class="perf-toggle-title">Vysoká priorita procesu</span>
+                                                        <span class="perf-toggle-desc">Spustí proces Minecraftu s prioritou HIGH_PRIORITY_CLASS pro stabilní frame time.</span>
                                                     </div>
                                                 </label>
 
-                                                <label class="perf-toggle-card" id="cardNvidiaBusyWait">
-                                                    <input type="checkbox" id="checkNvidiaBusyWait">
+                                                <label class="perf-toggle-card" id="cardWinDedicatedGpu">
+                                                    <input type="checkbox" id="checkWinDedicatedGpu" checked>
                                                     <div class="perf-toggle-info">
-                                                        <span class="perf-toggle-title">Aktivní čekání vlákna (__GL_YIELD)</span>
-                                                        <span class="perf-toggle-desc">Nastaví __GL_YIELD=NOTHING pro nižší latenci kamery na úkor vyššího odběru CPU.</span>
-                                                        <span class="perf-toggle-warning" id="warnNvidiaBusyWaitBattery" style="display: none;">Detekována baterie — aktivní čekání zvyšuje spotřebu a zkracuje výdrž.</span>
-                                                        <span class="perf-toggle-reason" id="reasonNvidiaBusyWait" style="display: none;"></span>
+                                                        <span class="perf-toggle-title">Vynucení dedikované GPU</span>
+                                                        <span class="perf-toggle-desc">Nastaví SHIM_MCCOMPAT (0xD4000000) pro preference výkonného GPU akcelerátoru.</span>
+                                                        <span class="perf-toggle-reason" id="reasonWinDedicatedGpu" style="display: none;"></span>
                                                     </div>
                                                 </label>
                                             </div>
                                         </div>
+                                    </details>
+
+                                    <!-- Linux Sekce -->
+                                    <details class="settings-os-details" id="detailsLinuxSettings">
+                                        <summary class="settings-os-summary">
+                                            <div class="settings-os-summary-left">
+                                                <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <polyline points="4 17 10 11 4 5"></polyline>
+                                                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                                                </svg>
+                                                <span class="settings-os-title">Optimalizace pro Linux</span>
+                                            </div>
+                                            <div class="settings-os-summary-right">
+                                                <span class="badge-os" id="badgeOsLinux">Linux</span>
+                                                <svg class="settings-os-chevron ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                                </svg>
+                                            </div>
+                                        </summary>
+                                        <div class="settings-os-body">
+                                            <div class="os-inactive-notice" id="noticeOsLinux" style="display: none;">
+                                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <circle cx="12" cy="12" r="10"></circle>
+                                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                                </svg>
+                                                <span>Tato nastavení jsou dostupná pouze na operačním systému Linux.</span>
+                                            </div>
+                                            <div class="perf-settings-grid">
+                                                <label class="perf-toggle-card" id="cardGameMode">
+                                                    <input type="checkbox" id="checkGameMode" checked>
+                                                    <div class="perf-toggle-info">
+                                                        <span class="perf-toggle-title">Herní režim (GameMode)</span>
+                                                        <span class="perf-toggle-desc">Spustí hru přes gamemoderun pro výkonný CPU governor a I/O prioritu.</span>
+                                                        <span class="perf-toggle-reason" id="reasonGameMode" style="display: none;"></span>
+                                                    </div>
+                                                </label>
+
+                                                <label class="perf-toggle-card" id="cardDiscreteGpu">
+                                                    <input type="checkbox" id="checkDiscreteGpu" checked>
+                                                    <div class="perf-toggle-info">
+                                                        <span class="perf-toggle-title">Dedikovaná GPU (PRIME Offload)</span>
+                                                        <span class="perf-toggle-desc" id="descDiscreteGpu">Přepne hybridní grafiku na diskrétní GPU místo integrovaného čipu.</span>
+                                                        <span class="perf-toggle-reason" id="reasonDiscreteGpu" style="display: none;"></span>
+                                                    </div>
+                                                </label>
+
+                                                <label class="perf-toggle-card" id="cardDisableVsync">
+                                                    <input type="checkbox" id="checkDisableVsync">
+                                                    <div class="perf-toggle-info">
+                                                        <span class="perf-toggle-title">Nízká odezva (V-Sync ovladače)</span>
+                                                        <span class="perf-toggle-desc">Potlačí V-Sync na úrovni OpenGL ovladače pro nižší input lag.</span>
+                                                        <span class="perf-toggle-reason" id="reasonDisableVsync" style="display: none;"></span>
+                                                    </div>
+                                                </label>
+
+                                                <label class="perf-toggle-card" id="cardNativeWayland">
+                                                    <input type="checkbox" id="checkNativeWayland">
+                                                    <div class="perf-toggle-info">
+                                                        <span class="perf-toggle-title">Nativní Wayland okno (GLFW)</span>
+                                                        <span class="perf-toggle-desc">Spustí hru přímo na Waylandu bez XWayland mezivrstvy.</span>
+                                                        <span class="perf-toggle-reason" id="reasonNativeWayland" style="display: none;"></span>
+                                                    </div>
+                                                </label>
+
+                                                <label class="perf-toggle-card" id="cardSystemGlfw">
+                                                    <input type="checkbox" id="checkSystemGlfw">
+                                                    <div class="perf-toggle-info">
+                                                        <span class="perf-toggle-title">Systémová knihovna GLFW</span>
+                                                        <span class="perf-toggle-desc">Předá LWJGL systémovou knihovnu libglfw.so (např. glfw-wayland-minecraft).</span>
+                                                        <span class="perf-toggle-reason" id="reasonSystemGlfw" style="display: none;"></span>
+                                                    </div>
+                                                </label>
+
+                                                <label class="perf-toggle-card" id="cardZink">
+                                                    <input type="checkbox" id="checkZink">
+                                                    <div class="perf-toggle-info">
+                                                        <span class="perf-toggle-title">Zink (OpenGL přes Vulkan)</span>
+                                                        <span class="perf-toggle-desc">Mesa ovladač převádějící OpenGL volání do Vulkan API.</span>
+                                                        <span class="perf-toggle-reason" id="reasonZink" style="display: none;"></span>
+                                                    </div>
+                                                </label>
+                                            </div>
+
+                                            <!-- Podmíněná sekce pro NVIDIA OpenGL (skrytá bez NVIDIA GPU) -->
+                                            <div class="perf-subsection" id="nvidiaOpenGlSection" style="display: none;">
+                                                <div class="perf-subsection-header">
+                                                    <span class="perf-subsection-title">NVIDIA OpenGL akcelerace</span>
+                                                    <span class="perf-subsection-hint" id="nvidiaDriverBadgeHint">Proprietární ovladač</span>
+                                                </div>
+                                                <div class="os-inactive-notice" id="noticeNvidiaUnavailable" style="display: none;">
+                                                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <circle cx="12" cy="12" r="10"></circle>
+                                                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                                                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                                    </svg>
+                                                    <span id="textNvidiaUnavailable">Proprietární NVIDIA OpenGL volby nejsou dostupné.</span>
+                                                </div>
+                                                <div class="perf-settings-grid">
+                                                    <label class="perf-toggle-card" id="cardNvidiaThreadedOpt">
+                                                        <input type="checkbox" id="checkNvidiaThreadedOpt" checked>
+                                                        <div class="perf-toggle-info">
+                                                            <span class="perf-toggle-title">OpenGL Threaded Optimization</span>
+                                                            <span class="perf-toggle-desc">Zapne vícevláknové zpracování draw callů (__GL_THREADED_OPTIMIZATIONS=1).</span>
+                                                            <span class="perf-toggle-reason" id="reasonNvidiaThreadedOpt" style="display: none;"></span>
+                                                        </div>
+                                                    </label>
+
+                                                    <label class="perf-toggle-card" id="cardNvidiaBusyWait">
+                                                        <input type="checkbox" id="checkNvidiaBusyWait">
+                                                        <div class="perf-toggle-info">
+                                                            <span class="perf-toggle-title">Aktivní čekání vlákna (__GL_YIELD)</span>
+                                                            <span class="perf-toggle-desc">Nastaví __GL_YIELD=NOTHING pro nižší latenci kamery na úkor vyššího odběru CPU.</span>
+                                                            <span class="perf-toggle-warning" id="warnNvidiaBusyWaitBattery" style="display: none;">Detekována baterie — aktivní čekání zvyšuje spotřebu a zkracuje výdrž.</span>
+                                                            <span class="perf-toggle-reason" id="reasonNvidiaBusyWait" style="display: none;"></span>
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </details>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KATEGORIE 5: ÚDRŽBA A LOGY -->
+                        <div class="settings-category-panel" data-settings-panel="maintenance">
+                            <div class="settings-group-card">
+                                <div class="settings-group-header">
+                                    <span class="group-icon-wrap">
+                                        <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <h3 class="settings-group-title">Správa a údržba launcheru</h3>
+                                        <p class="settings-group-desc">Aktualizace na nejnovější verzi a uvolnění místa na pevném disku.</p>
                                     </div>
-                                </details>
+                                </div>
+
+                                <div class="settings-tools-row">
+                                    <div class="update-checker-card">
+                                        <div class="tool-card-header">
+                                            <span class="ui-icon-wrap">
+                                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                                    <path d="M21 2v6h-6"></path>
+                                                    <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                                                    <path d="M3 22v-6h6"></path>
+                                                    <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                                                </svg>
+                                            </span>
+                                            <div>
+                                                <strong class="tool-card-title">Aktualizace aplikace</strong>
+                                                <p class="tool-card-desc" id="launcherVersionStatus">Verze: <strong>v1.7.26</strong>
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="tool-card-actions">
+                                            <button type="button" class="mc-btn mc-btn-primary" id="btnManualCheckUpdate">
+                                                <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
+                                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15">
+                                                    </path>
+                                                </svg>
+                                                <span>Zkontrolovat</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="cache-cleaner-card">
+                                        <div class="tool-card-header">
+                                            <span class="ui-icon-wrap">
+                                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                                    <line x1="22" y1="12" x2="2" y2="12"></line>
+                                                    <path
+                                                        d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z">
+                                                    </path>
+                                                    <line x1="6" y1="16" x2="6.01" y2="16"></line>
+                                                    <line x1="10" y1="16" x2="10.01" y2="16"></line>
+                                                </svg>
+                                            </span>
+                                            <div>
+                                                <strong class="tool-card-title">Údržba disku</strong>
+                                                <p class="tool-card-desc">Promaže staré logy a crash reporty.</p>
+                                            </div>
+                                        </div>
+                                        <div class="tool-card-actions">
+                                            <span id="cacheCleanerSummary" class="tool-status-text">Připraveno.</span>
+                                            <div class="btn-group-sm">
+                                                <button type="button" class="mc-btn mc-btn-secondary btn-sm"
+                                                    id="btnScanCache">Analyzovat</button>
+                                                <button type="button" class="mc-btn mc-btn-green btn-sm"
+                                                    id="btnCleanCache">Vyčistit</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <!-- Diskrétní přepínač FPS čítače launcheru (skrytý v pokročilém submenu) -->
-                            <label class="settings-subtle-toggle" for="checkShowFpsCounter">
-                                <input type="checkbox" id="checkShowFpsCounter">
-                                <span>Zobrazovat diagnostický FPS čítač launcheru v horní liště</span>
-                            </label>
+                            <!-- Live Game Console -->
+                            <div class="console-card">
+                                <div class="console-header">
+                                    <span>Herní konzole & Logy</span>
+                                    <div class="console-actions">
+                                        <button type="button" class="btn-mini" id="btnCopyLog"
+                                            title="Zkopírovat celý log do schránky">
+                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                            </svg>
+                                            <span>Kopírovat log</span>
+                                        </button>
+                                        <button type="button" class="btn-mini" id="btnOpenLogEditor"
+                                            title="Otevřít dekomprimovaný log ve výchozím textovém editoru (Poznámkový blok)">
+                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                                <polyline points="15 3 21 3 21 9"></polyline>
+                                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                                            </svg>
+                                            <span>Otevřít log</span>
+                                        </button>
+                                        <button type="button" class="btn-mini" id="btnDownloadLog"
+                                            title="Stáhnout Mychal Log (.mog) pro Poznámkový blok nebo AI">
+                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="7 10 12 15 17 10"></polyline>
+                                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                                            </svg>
+                                            <span>Stáhnout .mog</span>
+                                        </button>
+                                        <button type="button" class="btn-mini" id="btnOpenLogFolder"
+                                            title="Procházet složku s logy v průzkumníku souborů">
+                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                            </svg>
+                                            <span>Procházet složku</span>
+                                        </button>
+                                        <button type="button" class="btn-mini" id="btnClearLog">Vymazat log</button>
+                                    </div>
+                                </div>
+                                <pre class="console-body" id="consoleOutput">Čekám na spuštění hry...</pre>
+                            </div>
 
                             <!-- Danger Zone: Reset launcher data -->
-                            <div class="danger-zone-card" style="margin-top: 20px;">
-                                <div class="danger-zone-info">
-                                    <span class="danger-zone-title">
+                            <div class="settings-group-card">
+                                <div class="danger-zone-card" style="margin-top: 0;">
+                                    <div class="danger-zone-info">
+                                        <span class="danger-zone-title">
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24">
+                                                <path
+                                                    d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
+                                                </path>
+                                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                            </svg>
+                                            Reset dat
+                                        </span>
+                                        <span class="danger-zone-desc">Smaže uložené profily, stažená data a obnoví výchozí nastavení.</span>
+                                    </div>
+                                    <button class="btn-danger-reset" id="btnResetLauncherData">
                                         <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
                                             <path
-                                                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
+                                                d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
                                             </path>
-                                            <line x1="12" y1="9" x2="12" y2="13"></line>
-                                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
                                         </svg>
-                                        Reset dat
-                                    </span>
-                                    <span class="danger-zone-desc">Smaže uložené profily, stažená data a obnoví výchozí nastavení.</span>
+                                        Smazat data launcheru
+                                    </button>
                                 </div>
-                                <button class="btn-danger-reset" id="btnResetLauncherData">
-                                    <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path
-                                            d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                                        </path>
-                                    </svg>
-                                    Smazat data launcheru
-                                </button>
                             </div>
                         </div>
-                    </details>
-                </div>
-
-                <!-- Live Game Console -->
-                <div class="console-card">
-                    <div class="console-header">
-                        <span>Herní konzole & Logy</span>
-                        <div class="console-actions">
-                            <button type="button" class="btn-mini" id="btnCopyLog"
-                                title="Zkopírovat celý log do schránky">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                </svg>
-                                <span>Kopírovat log</span>
-                            </button>
-                            <button type="button" class="btn-mini" id="btnOpenLogEditor"
-                                title="Otevřít dekomprimovaný log ve výchozím textovém editoru (Poznámkový blok)">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                                    <polyline points="15 3 21 3 21 9"></polyline>
-                                    <line x1="10" y1="14" x2="21" y2="3"></line>
-                                </svg>
-                                <span>Otevřít log</span>
-                            </button>
-                            <button type="button" class="btn-mini" id="btnDownloadLog"
-                                title="Stáhnout Mychal Log (.mog) pro Poznámkový blok nebo AI">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                                <span>Stáhnout .mog</span>
-                            </button>
-                            <button type="button" class="btn-mini" id="btnOpenLogFolder"
-                                title="Procházet složku s logy v průzkumníku souborů">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                                </svg>
-                                <span>Procházet složku</span>
-                            </button>
-                            <button type="button" class="btn-mini" id="btnClearLog">Vymazat log</button>
-                        </div>
                     </div>
-                    <pre class="console-body" id="consoleOutput">Čekám na spuštění hry...</pre>
                 </div>
             </section>
         </main>
@@ -3390,8 +3544,8 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <script src="js/lib/skinview3d.bundle.js"></script>
-    <script src="js/tauri-bridge.js?v=1.6.1"></script>
-    <script src="js/app.js?v=1.7.1"></script>
+    <script src="js/tauri-bridge.js?v=1.6.2"></script>
+    <script src="js/app.js?v=1.7.3"></script>
 </body>
 
 </html>

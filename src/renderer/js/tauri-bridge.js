@@ -96,6 +96,7 @@
       return (res && Array.isArray(res.hits)) ? res.hits : res;
     },
     downloadModOrPack: (options) => invoke('download_mod_or_pack', { options }),
+    installModpack: (options) => invoke('install_modrinth_modpack', { options }),
     checkProfileModUpdates: (profileId) => invoke('check_profile_mod_updates', { profileId: profileId ?? null }),
     onModDownloadProgress: (callback) => on('mod-download-progress', callback),
     toggleMod: (modId) => invoke('toggle_mod', { modId }),

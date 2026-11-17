@@ -5436,7 +5436,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Subtabs: Mody, Resource Packy, Shadery
+    // Subtabs: Mody, Resource Packy, Shadery, Modpacky
+    const CATALOG_SEARCH_PLACEHOLDERS = {
+        mod: 'Hledat módy (Sodium, Iris, Lithium...)...',
+        resourcepack: 'Hledat resource packy (Faithful, Fresh Animations...)...',
+        shader: 'Hledat shadery (Complementary, BSL, IterationT...)...',
+        modpack: 'Hledat modpacky (Fabulously Optimized, Simply Optimized...)...'
+    };
+    let prevCatalogType = currentModFilter.projectType || 'mod';
+
     modTabButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             modTabButtons.forEach(b => b.classList.remove('active'));
@@ -5444,6 +5452,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateSlidingIndicator('.catalog-subtabs', '#catalogTabIndicator', btn);
             const modType = btn.dataset.modType || 'mod';
             currentModFilter.projectType = modType;
+            if (modSearchInput) {
+                modSearchInput.placeholder = CATALOG_SEARCH_PLACEHOLDERS[modType] || CATALOG_SEARCH_PLACEHOLDERS.mod;
+            }
+            if (modType === 'modpack' && prevCatalogType !== 'modpack') {
+                currentModFilter.version = 'all';
+                const allVerRadio = document.querySelector('input[name="filterVersion"][value="all"]');
+                if (allVerRadio) allVerRadio.checked = true;
+            } else if (modType === 'mod' && prevCatalogType === 'modpack') {
+                syncModFilterToProfile(selectedModsProfileId || currentConfig.activeProfileId);
+            }
+            prevCatalogType = modType;
             loadModrinthMods();
         });
     });
@@ -5830,16 +5849,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         const { targetMcVersion, activeInstalledList } = ctx;
         const projType = currentModFilter.projectType || 'mod';
         const isModProject = projType === 'mod';
-        const installedMod = findInstalledModForCatalog(m, activeInstalledList);
-        const isInstalled = !!installedMod;
-        const currentVer = installedMod ? (installedMod.version || '') : '';
+        const isModpack = projType === 'modpack';
+        const installedModpackProfile = isModpack
+            ? (currentConfig.profiles || []).find(p => p.modpackProjectId === m.id)
+            : null;
+        const installedMod = isModpack ? null : findInstalledModForCatalog(m, activeInstalledList);
+        const isInstalled = isModpack ? !!installedModpackProfile : !!installedMod;
+        const currentVer = installedMod ? (installedMod.version || '') : (installedModpackProfile?.modpackVersionNumber || '');
         const latestVer = m.latest_version_number || '';
         const latestSupportsOurMc = !isModProject || !m.latest_game_versions || m.latest_game_versions.length === 0 || m.latest_game_versions.includes(targetMcVersion);
-        const isCompatibleWithTarget = latestSupportsOurMc;
+        const modpackLoaders = Array.isArray(m.loaders) ? m.loaders.map(x => String(x).toLowerCase()) : [];
+        const modpackSupportsFabric = !isModpack || modpackLoaders.length === 0 || modpackLoaders.includes('fabric') || modpackLoaders.includes('minecraft') || modpackLoaders.includes('vanilla');
+        const isCompatibleWithTarget = isModpack ? modpackSupportsFabric : latestSupportsOurMc;
         const displayVersionTag = (m.latest_game_versions && m.latest_game_versions.length > 0)
             ? (m.latest_game_versions.includes(targetMcVersion) ? targetMcVersion : m.latest_game_versions[m.latest_game_versions.length - 1])
-            : (currentModFilter.version || targetMcVersion);
-        const hasUpdate = isInstalled && isModVersionNewer(latestVer, currentVer) && latestSupportsOurMc;
+            : (currentModFilter.version && currentModFilter.version !== 'all' ? currentModFilter.version : targetMcVersion);
+        const hasUpdate = !isModpack && isInstalled && isModVersionNewer(latestVer, currentVer) && latestSupportsOurMc;
 
         const downloadsFormatted = m.downloads > 1000000
             ? (m.downloads / 1000000).toFixed(1) + 'M'
@@ -5848,7 +5873,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         let btnHtml = '';
         let statusPill = '';
 
-        if (hasUpdate) {
+        if (isModpack && installedModpackProfile) {
+            statusPill = `<span class="mod-status-pill mod-status-installed"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Profil připraven (MC ${escapeHtml(installedModpackProfile.version || targetMcVersion)})</span>`;
+            btnHtml = `
+                <div class="mod-card-actions">
+                    <button class="mc-btn mc-btn-primary btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="open-modpack-profile" data-profile-id="${escapeHtml(installedModpackProfile.id)}" title="Přepnout na profil tohoto modpacku">
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Otevřít profil</span>
+                    </button>
+                    <button class="mc-btn mc-btn-green btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="install-modpack" title="Nainstalovat novou kopii modpacku jako další profil">
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></span>
+                    </button>
+                </div>
+            `;
+        } else if (hasUpdate) {
             statusPill = `<span class="mod-status-pill mod-status-update"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> Nová verze v${escapeHtml(latestVer)}</span>`;
             btnHtml = `
                 <div class="mod-card-actions">
@@ -5873,10 +5910,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                 </div>
             `;
         } else if (!isCompatibleWithTarget) {
-            statusPill = `<span class="mod-status-pill mod-status-incompatible"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Nekompatibilní (MC ${escapeHtml(displayVersionTag)})</span>`;
+            if (isModpack) {
+                const loaderTag = modpackLoaders.map(l => l.toUpperCase()).join(' / ') || 'FORGE';
+                statusPill = `<span class="mod-status-pill mod-status-incompatible"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Pouze ${escapeHtml(loaderTag)}</span>`;
+                btnHtml = `
+                    <button class="mc-btn btn-incompatible-mod" disabled title="Tento modpack vyžaduje zavaděč ${escapeHtml(loaderTag)} (launcher podporuje Fabric a Vanilla).">
+                        <span>Nepodporováno</span>
+                    </button>
+                `;
+            } else {
+                statusPill = `<span class="mod-status-pill mod-status-incompatible"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Nekompatibilní (MC ${escapeHtml(displayVersionTag)})</span>`;
+                btnHtml = `
+                    <button class="mc-btn btn-incompatible-mod" disabled title="Mód není dostupný pro Minecraft ${escapeHtml(targetMcVersion)} (dostupné pro: MC ${escapeHtml(displayVersionTag)})">
+                        <span>Nekompatibilní</span>
+                    </button>
+                `;
+            }
+        } else if (isModpack) {
             btnHtml = `
-                <button class="mc-btn btn-incompatible-mod" disabled title="Mód není dostupný pro Minecraft ${escapeHtml(targetMcVersion)} (dostupné pro: MC ${escapeHtml(displayVersionTag)})">
-                    <span>Nekompatibilní</span>
+                <button class="mc-btn mc-btn-green btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="install-modpack" title="Nainstalovat modpack jako nový izolovaný profil">
+                    <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Instalovat</span>
                 </button>
             `;
         } else {
@@ -5944,7 +5997,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     function updateUpdateAllCatalogButton() {
         const ctx = resolveCatalogRenderContext(lastLoadedCatalogMods);
         const displayMods = filterCatalogModsList(ctx.rawList, ctx.activeFilterVer);
-        const isModProject = (currentModFilter.projectType || 'mod') === 'mod';
+        const projType = currentModFilter.projectType || 'mod';
+        const isModProject = projType === 'mod';
+        const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
+        const updateAllCountEl = document.getElementById('updateAllCount');
+        if (!btnUpdateAll || !updateAllCountEl) return;
+        if (projType === 'modpack') {
+            btnUpdateAll.style.display = 'none';
+            return;
+        }
         const updateableMods = [];
         for (const m of displayMods) {
             const installedMod = findInstalledModForCatalog(m, ctx.activeInstalledList);
@@ -5956,10 +6017,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 updateableMods.push({ mod: m, installedMod });
             }
         }
-
-        const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
-        const updateAllCountEl = document.getElementById('updateAllCount');
-        if (!btnUpdateAll || !updateAllCountEl) return;
 
         if (updateableMods.length > 0) {
             updateAllCountEl.textContent = updateableMods.length;
@@ -6139,6 +6196,95 @@ document.addEventListener('DOMContentLoaded', async () => {
             const oldFile = btn.dataset.oldFile;
             const modItem = lastLoadedCatalogMods.find(x => x && (x.id || x.project_id || x.slug) === modId);
             const title = modItem ? modItem.title : modId;
+
+            if (action === 'open-modpack-profile') {
+                const targetPid = btn.dataset.profileId;
+                if (targetPid) {
+                    if (isRunning && runningProfileId && targetPid !== runningProfileId) {
+                        showToast('Hra již běží. Před výběrem jiného profilu nejprve ukonči běžící hru.', 'info');
+                        return;
+                    }
+                    selectActiveProfile(targetPid);
+                    switchTab('profiles');
+                }
+                return;
+            }
+
+            if (action === 'install-modpack') {
+                btn.disabled = true;
+                btn.classList.add('btn-downloading');
+                btn.innerHTML = `<span class="spinner-inline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span> <span>Instaluji...</span>`;
+
+                const avatarBox = btn.closest('.mod-card-row')?.querySelector('.mod-avatar-box') || modsCardsList.querySelector(`.mod-avatar-box[data-mod-id="${CSS.escape(modId)}"]`);
+                if (avatarBox) {
+                    const ov = avatarBox.querySelector('.apple-progress-overlay');
+                    const bar = avatarBox.querySelector('.apple-progress-bar');
+                    if (ov && bar) {
+                        ov.classList.remove('success');
+                        ov.classList.add('active');
+                        bar.style.strokeDashoffset = '87.96';
+                    }
+                }
+
+                try {
+                    const res = await window.api.installModpack({
+                        id: modId,
+                        title: title,
+                        iconUrl: modItem?.icon_url || '',
+                        version: currentModFilter.version || 'all',
+                        loader: 'fabric'
+                    });
+
+                    if (res && res.success) {
+                        if (avatarBox) {
+                            const ov = avatarBox.querySelector('.apple-progress-overlay');
+                            const bar = avatarBox.querySelector('.apple-progress-bar');
+                            if (ov && bar) {
+                                bar.style.strokeDashoffset = '0';
+                                ov.classList.add('success');
+                                setTimeout(() => {
+                                    ov.classList.remove('active', 'success');
+                                    bar.style.strokeDashoffset = '87.96';
+                                }, 600);
+                            }
+                        }
+                        showToast(`Modpack "${title}" (MC ${res.mcVersion}) byl nainstalován jako nový profil.`, 'success');
+                        appendLog(`[MODPACK] Modpack "${title}" nainstalován (${res.downloadedFiles || 0} souborů, MC ${res.mcVersion}).`);
+                        await loadConfiguration();
+                        renderProfilesList();
+                        renderModsProfileDropdown();
+                        refreshVersionStatuses();
+                        refreshSingleCatalogModCard(modId);
+                    } else {
+                        if (avatarBox) {
+                            const ov = avatarBox.querySelector('.apple-progress-overlay');
+                            const bar = avatarBox.querySelector('.apple-progress-bar');
+                            if (ov && bar) {
+                                ov.classList.remove('active', 'success');
+                                bar.style.strokeDashoffset = '87.96';
+                            }
+                        }
+                        btn.classList.remove('btn-downloading');
+                        btn.innerHTML = `<span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Instalovat</span>`;
+                        btn.disabled = false;
+                        showToast(res?.error || 'Instalace modpacku selhala.', 'error');
+                    }
+                } catch (err) {
+                    if (avatarBox) {
+                        const ov = avatarBox.querySelector('.apple-progress-overlay');
+                        const bar = avatarBox.querySelector('.apple-progress-bar');
+                        if (ov && bar) {
+                            ov.classList.remove('active', 'success');
+                            bar.style.strokeDashoffset = '87.96';
+                        }
+                    }
+                    btn.classList.remove('btn-downloading');
+                    btn.innerHTML = `<span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Instalovat</span>`;
+                    btn.disabled = false;
+                    showToast(`Chyba instalace modpacku: ${err?.message || err}`, 'error');
+                }
+                return;
+            }
             const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
             const targetProfile = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
             const profileLoader = targetProfile?.loader || 'vanilla';
@@ -8880,6 +9026,80 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnOpenGameDir) {
         btnOpenGameDir.addEventListener('click', () => window.api.openGameDir());
     }
+
+    // ── Categorized Settings Navigation & Search (SKLauncher 4 Inspired) ────
+    (function initCategorizedSettings() {
+        const workbench = document.getElementById('settingsWorkbench');
+        const scrollPane = document.getElementById('settingsPanelsScroll');
+        const searchInput = document.getElementById('settingsSearchInput');
+        const emptyState = document.getElementById('settingsSearchEmpty');
+        const navBtns = Array.from(document.querySelectorAll('.settings-nav-btn[data-settings-cat]'));
+        const panels = Array.from(document.querySelectorAll('.settings-category-panel[data-settings-panel]'));
+        if (!workbench || navBtns.length === 0 || panels.length === 0) return;
+
+        const normalizeText = (s) => String(s || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+
+        const clearSearchState = () => {
+            if (searchInput && searchInput.value) searchInput.value = '';
+            workbench.classList.remove('is-searching');
+            if (emptyState) emptyState.style.display = 'none';
+            panels.forEach(p => {
+                p.classList.remove('is-search-hidden');
+                p.querySelectorAll('.settings-group-card, .console-card').forEach(c => c.classList.remove('is-search-hidden'));
+            });
+        };
+
+        const switchSettingsCategory = (catId) => {
+            clearSearchState();
+            navBtns.forEach(btn => {
+                const active = btn.dataset.settingsCat === catId;
+                btn.classList.toggle('is-active', active);
+                btn.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+            panels.forEach(panel => {
+                panel.classList.toggle('is-active', panel.dataset.settingsPanel === catId);
+            });
+            if (scrollPane) scrollPane.scrollTop = 0;
+            if (catId === 'performance' && ramSlider && ramValueBadge) {
+                updateSliderVisuals(ramSlider, ramValueBadge);
+            }
+        };
+
+        navBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const cat = btn.dataset.settingsCat;
+                if (cat) switchSettingsCategory(cat);
+            });
+        });
+
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                const q = normalizeText(searchInput.value.trim());
+                if (!q) {
+                    clearSearchState();
+                    return;
+                }
+                workbench.classList.add('is-searching');
+                let totalMatches = 0;
+                panels.forEach(panel => {
+                    let panelMatches = 0;
+                    panel.querySelectorAll('.settings-group-card, .console-card').forEach(card => {
+                        const hit = normalizeText(card.textContent).includes(q);
+                        card.classList.toggle('is-search-hidden', !hit);
+                        if (hit) panelMatches++;
+                    });
+                    panel.classList.toggle('is-search-hidden', panelMatches === 0);
+                    totalMatches += panelMatches;
+                });
+                if (emptyState) {
+                    emptyState.style.display = totalMatches === 0 ? 'block' : 'none';
+                }
+            });
+        }
+    })();
 
     // Auto-save listeners on all checkboxes & controls
     document.querySelectorAll('input[name="graphicsBackend"]').forEach(radio => {

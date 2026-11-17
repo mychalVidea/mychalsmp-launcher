@@ -1101,6 +1101,9 @@ pub fn get_required_java_version(game_version: &str) -> u32 {
     {
         return 17;
     }
+    if trimmed.starts_with("1.20") || trimmed.starts_with("1.21") {
+        return 21;
+    }
     if trimmed.starts_with("1.") && !trimmed.starts_with("1.2") {
         return 8;
     }
@@ -1494,6 +1497,47 @@ where
     Ok(final_java)
 }
 
+pub fn detect_java_path_exact(target_major: u32) -> Option<PathBuf> {
+    if target_major >= 25 {
+        return detect_java_path(target_major);
+    }
+    get_available_javas()
+        .into_iter()
+        .find(|j| j.major == target_major)
+        .map(|j| PathBuf::from(j.path))
+}
+
+pub async fn ensure_java_for_version<F>(
+    config: &Value,
+    base_dir: &Path,
+    mc_version: &str,
+    on_progress: F,
+) -> Result<PathBuf, LaunchError>
+where
+    F: Fn(u32, &str) + Send + Sync + 'static,
+{
+    let target_version = get_required_java_version(mc_version);
+
+    // 1. Check custom path in config (exact major match for legacy MC < 26.x to avoid Mixin/ASM breakage on Java 25)
+    if let Some(custom_path_str) = config.get("javaPath").and_then(|v| v.as_str()) {
+        let custom_path = PathBuf::from(custom_path_str);
+        if custom_path.exists() {
+            let major = get_java_major_version(&custom_path);
+            if (target_version >= 25 && major >= target_version) || major == target_version {
+                return Ok(custom_path);
+            }
+        }
+    }
+
+    // 2. Try local/system detection matching target version
+    if let Some(detected) = detect_java_path_exact(target_version) {
+        return Ok(detected);
+    }
+
+    // 3. Fallback: Automatically download Adoptium JRE for the required version
+    download_and_install_java(target_version, base_dir, on_progress).await
+}
+
 pub async fn ensure_java_executable<F>(
     config: &Value,
     base_dir: &Path,
@@ -1502,23 +1546,7 @@ pub async fn ensure_java_executable<F>(
 where
     F: Fn(u32, &str) + Send + Sync + 'static,
 {
-    let target_version = 25;
-
-    // 1. Check custom path in config
-    if let Some(custom_path_str) = config.get("javaPath").and_then(|v| v.as_str()) {
-        let custom_path = PathBuf::from(custom_path_str);
-        if test_java_executable(&custom_path, target_version) {
-            return Ok(custom_path);
-        }
-    }
-
-    // 2. Try detection
-    if let Some(detected) = detect_java_path(target_version) {
-        return Ok(detected);
-    }
-
-    // 3. Fallback: Automatically download Adoptium JRE
-    download_and_install_java(target_version, base_dir, on_progress).await
+    ensure_java_for_version(config, base_dir, "26.3", on_progress).await
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

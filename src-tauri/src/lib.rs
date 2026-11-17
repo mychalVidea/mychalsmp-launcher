@@ -120,9 +120,10 @@ async fn launch_game(
             "launch-progress",
             json!({ "percent": 5, "text": "Hledání běhového prostředí Java..." }),
         );
-        let java_path = match crate::launcher::ensure_java_executable(
+        let java_path = match crate::launcher::ensure_java_for_version(
             &cfg,
             &base_dir,
+            &mc_ver_owned,
             move |pct, text| {
                 let _ = app_prog.emit("launch-progress", json!({ "percent": pct, "text": text }));
             },
@@ -275,10 +276,17 @@ async fn launch_game(
             }
         }
 
+        let is_external_modpack = profile
+            .get("modpackProjectId")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
         if loader_type.eq_ignore_ascii_case("vanilla") {
             let _ = crate::mods::ensure_smpclient_vanilla_brand_jar(Some(&app_clone), &base_dir);
         } else {
-            let _ = crate::mods::ensure_core_smpclient_mods(Some(&app_clone), &prof_dir, loader_type);
+            if !is_external_modpack || mc_ver_owned.starts_with("26.") {
+                let _ = crate::mods::ensure_core_smpclient_mods(Some(&app_clone), &prof_dir, loader_type);
+            }
             let _ = crate::mods::resolve_profile_mod_collisions(Some(&pid_clone));
             let _ = crate::launcher::resolve_mod_compatibility(&prof_dir.join("mods"));
         }
@@ -488,7 +496,7 @@ async fn preload_launch_environment(_app: AppHandle, profile_id: Option<String>)
         return json!({ "success": false, "comingSoon": true });
     }
 
-    let _ = crate::launcher::ensure_java_executable(&cfg, &base_dir, |_, _| {}).await;
+    let _ = crate::launcher::ensure_java_for_version(&cfg, &base_dir, mc_ver, |_, _| {}).await;
     if let Ok(manifest) = crate::launcher::ensure_fabric_profile(&base_dir, mc_ver).await {
         let _ = crate::launcher::ensure_vanilla_client_jar(&base_dir, mc_ver, &manifest).await;
     }
@@ -535,6 +543,14 @@ async fn search_modrinth(
 #[tauri::command]
 async fn download_mod_or_pack(app: AppHandle, options: Value) -> Value {
     match crate::mods::download_mod_or_pack_with_deps(&app, &options).await {
+        Ok(v) => v,
+        Err(e) => json!({ "success": false, "error": e }),
+    }
+}
+
+#[tauri::command]
+async fn install_modrinth_modpack(app: AppHandle, options: Value) -> Value {
+    match crate::mods::install_modrinth_modpack(Some(&app), &options).await {
         Ok(v) => v,
         Err(e) => json!({ "success": false, "error": e }),
     }
@@ -1417,6 +1433,7 @@ pub fn run() {
             preload_launch_environment,
             search_modrinth,
             download_mod_or_pack,
+            install_modrinth_modpack,
             check_profile_mod_updates,
             toggle_mod,
             get_profile_mods,
