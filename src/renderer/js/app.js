@@ -10136,4 +10136,2189 @@ document.addEventListener('DOMContentLoaded', async () => {
                             ${escapeHtml(getKeyDisplay(action.key))}
                         </button>
                         <button type="button" class="key-unbind-btn" title="Zrušit bind">
-... [truncated for diff preview]
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    </div>
+                `;
+
+                const recordBtn = row.querySelector('.key-record-btn');
+                const unbindBtn = row.querySelector('.key-unbind-btn');
+
+                recordBtn.addEventListener('click', () => {
+                    startRecordingKeybind(action.id);
+                });
+
+                unbindBtn.addEventListener('click', async () => {
+                    action.key = 'key.keyboard.unknown';
+                    recalculateKeybindStats();
+                    renderKeyboardStage();
+                    renderKeybindListView();
+                    if (keybindSelectedKey) renderKeyInspector(keybindSelectedKey);
+                    await autoSaveKeybinds();
+                });
+
+                body.appendChild(row);
+            });
+
+            card.appendChild(body);
+            keybindCategoriesContainer.appendChild(card);
+        });
+
+        if (keybindCategoriesContainer.children.length === 0) {
+            keybindCategoriesContainer.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+                    Žádné klávesy neodpovídají zadanému filtru.
+                </div>
+            `;
+        }
+    }
+
+    function convertBrowserCodeToMcKey(code) {
+        if (!code) return 'key.keyboard.unknown';
+        const directMap = {
+            'Space': 'key.keyboard.space',
+            'ShiftLeft': 'key.keyboard.left.shift',
+            'ShiftRight': 'key.keyboard.right.shift',
+            'ControlLeft': 'key.keyboard.left.control',
+            'ControlRight': 'key.keyboard.right.control',
+            'AltLeft': 'key.keyboard.left.alt',
+            'AltRight': 'key.keyboard.right.alt',
+            'MetaLeft': 'key.keyboard.left.win',
+            'MetaRight': 'key.keyboard.right.win',
+            'Tab': 'key.keyboard.tab',
+            'CapsLock': 'key.keyboard.caps.lock',
+            'Enter': 'key.keyboard.enter',
+            'Backspace': 'key.keyboard.backspace',
+            'Escape': 'key.keyboard.escape',
+            'ArrowUp': 'key.keyboard.up',
+            'ArrowDown': 'key.keyboard.down',
+            'ArrowLeft': 'key.keyboard.left',
+            'ArrowRight': 'key.keyboard.right',
+            'Insert': 'key.keyboard.insert',
+            'Delete': 'key.keyboard.delete',
+            'Home': 'key.keyboard.home',
+            'End': 'key.keyboard.end',
+            'PageUp': 'key.keyboard.page.up',
+            'PageDown': 'key.keyboard.page.down',
+            'PrintScreen': 'key.keyboard.print.screen',
+            'ScrollLock': 'key.keyboard.scroll.lock',
+            'Pause': 'key.keyboard.pause',
+            'Backquote': 'key.keyboard.grave.accent',
+            'Minus': 'key.keyboard.minus',
+            'Equal': 'key.keyboard.equal',
+            'BracketLeft': 'key.keyboard.left.bracket',
+            'BracketRight': 'key.keyboard.right.bracket',
+            'Backslash': 'key.keyboard.backslash',
+            'Semicolon': 'key.keyboard.semicolon',
+            'Quote': 'key.keyboard.apostrophe',
+            'Comma': 'key.keyboard.comma',
+            'Period': 'key.keyboard.period',
+            'Slash': 'key.keyboard.slash'
+        };
+        if (directMap[code]) return directMap[code];
+        if (code.startsWith('Key')) {
+            return `key.keyboard.${code.slice(3).toLowerCase()}`;
+        }
+        if (code.startsWith('Digit')) {
+            return `key.keyboard.${code.slice(5)}`;
+        }
+        if (code.startsWith('F') && /^F\d+$/.test(code)) {
+            return `key.keyboard.${code.toLowerCase()}`;
+        }
+        if (code.startsWith('Numpad')) {
+            return `key.keyboard.keypad.${code.slice(6).toLowerCase()}`;
+        }
+        return 'key.keyboard.unknown';
+    }
+
+    function convertMouseButtonToMcKey(button) {
+        if (button === 0) return 'key.mouse.left';
+        if (button === 1) return 'key.mouse.middle';
+        if (button === 2) return 'key.mouse.right';
+        if (button === 3) return 'key.mouse.4';
+        if (button === 4) return 'key.mouse.5';
+        return 'key.keyboard.unknown';
+    }
+
+    function startRecordingKeybind(actionId) {
+        keybindRecordingActionId = actionId;
+        const action = keybindState.binds.find(b => b.id === actionId);
+        if (!action) return;
+
+        recorderActionTitle.textContent = `Přiřazení klávesy: ${action.label}`;
+        recorderActionSubtitle.textContent = action.modName
+            ? `Mód: ${action.modName}`
+            : `Minecraft akce (${action.id})`;
+        recorderKeyPreview.textContent = '[ Stiskni klávesu nebo tlačítko myši ]';
+        modalKeybindRecorder.style.display = 'flex';
+
+        window.addEventListener('keydown', onRecordingKeyDown, { capture: true });
+        window.addEventListener('mousedown', onRecordingMouseDown, { capture: true });
+    }
+
+    function stopRecordingKeybind() {
+        modalKeybindRecorder.style.display = 'none';
+        keybindRecordingActionId = null;
+        window.removeEventListener('keydown', onRecordingKeyDown, { capture: true });
+        window.removeEventListener('mousedown', onRecordingMouseDown, { capture: true });
+    }
+
+    async function applyRecordedKey(mcKey) {
+        if (!keybindRecordingActionId) return;
+        const action = keybindState.binds.find(b => b.id === keybindRecordingActionId);
+        if (action) {
+            action.key = mcKey;
+            stopRecordingKeybind();
+            recalculateKeybindStats();
+            renderKeyboardStage();
+            renderKeybindListView();
+            if (keybindSelectedKey) renderKeyInspector(keybindSelectedKey);
+            await autoSaveKeybinds();
+            showToast(`Klávesa ${getKeyDisplay(mcKey)} přiřazena k "${action.label}".`, 'success');
+        } else {
+            stopRecordingKeybind();
+        }
+    }
+
+    function onRecordingKeyDown(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (e.code === 'Escape') {
+            stopRecordingKeybind();
+            return;
+        }
+
+        const mcKey = convertBrowserCodeToMcKey(e.code);
+        applyRecordedKey(mcKey);
+    }
+
+    function onRecordingMouseDown(e) {
+        // Zkontrolujeme zda nekliká na zrušení nebo unbind
+        if (btnRecorderCancel && btnRecorderCancel.contains(e.target)) return;
+        if (btnRecorderUnbind && btnRecorderUnbind.contains(e.target)) return;
+
+        // Jinak zachytíme tlačítko myši jako bind!
+        e.preventDefault();
+        e.stopPropagation();
+
+        const mcKey = convertMouseButtonToMcKey(e.button);
+        applyRecordedKey(mcKey);
+    }
+
+    if (btnRecorderCancel) {
+        btnRecorderCancel.addEventListener('click', stopRecordingKeybind);
+    }
+    if (btnRecorderUnbind) {
+        btnRecorderUnbind.addEventListener('click', () => {
+            applyRecordedKey('key.keyboard.unknown');
+        });
+    }
+
+    // Modal switch view buttons
+    if (btnKeybindToggleKeyboard) {
+        btnKeybindToggleKeyboard.addEventListener('click', () => {
+            btnKeybindToggleKeyboard.classList.add('active');
+            btnKeybindToggleList.classList.remove('active');
+            updateSlidingIndicator('.keybind-view-toggle', '#keybindTabIndicator', btnKeybindToggleKeyboard);
+            keybindKeyboardView.style.display = 'flex';
+            keybindListView.style.display = 'none';
+        });
+    }
+    if (btnKeybindToggleList) {
+        btnKeybindToggleList.addEventListener('click', () => {
+            btnKeybindToggleList.classList.add('active');
+            btnKeybindToggleKeyboard.classList.remove('active');
+            updateSlidingIndicator('.keybind-view-toggle', '#keybindTabIndicator', btnKeybindToggleList);
+            keybindKeyboardView.style.display = 'none';
+            keybindListView.style.display = 'block';
+            renderKeybindListView();
+        });
+    }
+
+    // Category chips
+    if (keybindCategoryChips) {
+        keybindCategoryChips.addEventListener('click', (e) => {
+            const chip = e.target.closest('.cat-chip');
+            if (!chip) return;
+            keybindActiveCategory = chip.dataset.category;
+            updateCategoryChipsUI();
+            renderKeybindListView();
+        });
+    }
+
+    // Search bar
+    if (keybindSearchInput) {
+        keybindSearchInput.addEventListener('input', (e) => {
+            keybindSearchQuery = e.target.value;
+            if (btnClearKeybindSearch) {
+                btnClearKeybindSearch.style.display = keybindSearchQuery ? 'block' : 'none';
+            }
+            renderKeybindListView();
+        });
+    }
+    if (btnClearKeybindSearch) {
+        btnClearKeybindSearch.addEventListener('click', () => {
+            keybindSearchInput.value = '';
+            keybindSearchQuery = '';
+            btnClearKeybindSearch.style.display = 'none';
+            renderKeybindListView();
+        });
+    }
+
+    // Modal open / close controller & reset logic
+    async function openKeybindEditorModal() {
+        if (!modalKeybindEditor) return;
+        try {
+            const activeProfileId = (typeof resolveLaunchProfileId === 'function')
+                ? resolveLaunchProfileId()
+                : (currentConfig?.activeProfileId || null);
+
+            if (window.api && window.api.getKeybinds) {
+                const bindsData = await window.api.getKeybinds(activeProfileId);
+                if (bindsData && Array.isArray(bindsData.binds)) {
+                    keybindState.binds = bindsData.binds;
+                    keybindState.keyDefinitions = bindsData.keyDefinitions || {};
+                }
+            }
+
+            keybindSelectedKey = null;
+            keybindActiveCategory = 'all';
+            keybindSearchQuery = '';
+            if (keybindSearchInput) keybindSearchInput.value = '';
+            if (btnClearKeybindSearch) btnClearKeybindSearch.style.display = 'none';
+
+            recalculateKeybindStats();
+            updateCategoryChipsUI();
+            renderKeyboardStage();
+            renderKeybindListView();
+            renderKeyInspector(null);
+
+            // Výchozí zobrazení virtuální klávesnice
+            if (btnKeybindToggleKeyboard) btnKeybindToggleKeyboard.classList.add('active');
+            if (btnKeybindToggleList) btnKeybindToggleList.classList.remove('active');
+            if (keybindKeyboardView) keybindKeyboardView.style.display = 'flex';
+            if (keybindListView) keybindListView.style.display = 'none';
+
+            modalKeybindEditor.style.display = 'flex';
+            setTimeout(() => {
+                updateSlidingIndicator('.keybind-view-toggle', '#keybindTabIndicator', btnKeybindToggleKeyboard);
+            }, 30);
+        } catch (err) {
+            console.error('[KEYBINDS] Chyba při otevírání editoru kláves:', err);
+            showToast('Nepodařilo se načíst konfiguraci kláves.', 'error');
+            if (modalKeybindEditor) modalKeybindEditor.style.display = 'flex';
+        }
+    }
+
+    function closeKeybindEditorModal() {
+        if (!modalKeybindEditor) return;
+        modalKeybindEditor.style.display = 'none';
+        stopRecordingKeybind();
+    }
+
+    if (btnCloseKeybindEditorModal) {
+        btnCloseKeybindEditorModal.addEventListener('click', closeKeybindEditorModal);
+    }
+
+    if (modalKeybindEditor) {
+        modalKeybindEditor.addEventListener('click', (e) => {
+            if (e.target === modalKeybindEditor) {
+                closeKeybindEditorModal();
+            }
+        });
+    }
+
+    if (btnResetKeybinds) {
+        btnResetKeybinds.addEventListener('click', async () => {
+            const confirmed = confirm('Opravdu chceš resetovat všechny herní klávesy na výchozí nastavení Minecraftu?');
+            if (!confirmed) return;
+            try {
+                if (window.api && window.api.resetKeybindsDefault) {
+                    const res = await window.api.resetKeybindsDefault();
+                    if (res && Array.isArray(res.binds)) {
+                        keybindState.binds = res.binds;
+                    }
+                    recalculateKeybindStats();
+                    renderKeyboardStage();
+                    renderKeybindListView();
+                    renderKeyInspector(keybindSelectedKey);
+                    showToast('Klávesy byly resetovány na výchozí hodnoty.', 'success');
+                }
+            } catch (err) {
+                console.error('[KEYBINDS] Chyba při resetu kláves:', err);
+                showToast('Resetování kláves selhalo.', 'error');
+            }
+        });
+    }
+
+    window.openKeybindEditorModal = openKeybindEditorModal;
+    window.closeKeybindEditorModal = closeKeybindEditorModal;
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modalKeybindEditor && modalKeybindEditor.style.display === 'flex') {
+            if (modalKeybindRecorder && modalKeybindRecorder.style.display === 'flex') {
+                stopRecordingKeybind();
+            } else {
+                closeKeybindEditorModal();
+            }
+        }
+    });
+
+    // ==========================================
+    // CRASH ANALYZER & AUTONOMOUS REPAIR
+    // ==========================================
+    const modalCrashAnalyzer = document.getElementById('modalCrashAnalyzer');
+    const btnCloseCrashModal = document.getElementById('btnCloseCrashModal');
+    const btnDismissCrashModal = document.getElementById('btnDismissCrashModal');
+    const btnApplyCrashFix = document.getElementById('btnApplyCrashFix');
+    const btnOpenCrashFullReport = document.getElementById('btnOpenCrashFullReport');
+
+    let currentCrashData = null;
+    let activeCrashFixPromise = null;
+    let userAcknowledgedWhileFixing = false;
+
+    function closeCrashModal() {
+        if (modalCrashAnalyzer) modalCrashAnalyzer.style.display = 'none';
+        currentCrashData = null;
+    }
+
+    if (btnCloseCrashModal) btnCloseCrashModal.addEventListener('click', closeCrashModal);
+    if (btnDismissCrashModal) btnDismissCrashModal.addEventListener('click', closeCrashModal);
+
+    let autoRelaunchAttempts = 0;
+
+    if (window.api && window.api.onCrash) {
+        window.api.onCrash((crashData) => {
+            setHeroLaunchCelebration(false);
+            if (!crashData || !modalCrashAnalyzer) return;
+            if (userRequestedGameStop || crashData.isCleanShutdown || crashData.hasCrash === false) {
+                console.log('[CRASH ANALYZER] Ignoruji pád – hra byla ukončena záměrně uživatelem nebo systémem.');
+                return;
+            }
+            currentCrashData = crashData;
+            activeCrashFixPromise = null;
+            userAcknowledgedWhileFixing = false;
+
+            const isAlreadyFixed = !!(crashData.fixed || crashData.autoFixed);
+
+            // Automatické znovuspuštění bez obtěžování hráče dialogem, pokud byl pád automaticky opraven (např. nekompatibilní mód vyřazen)
+            if (isAlreadyFixed && autoRelaunchAttempts < 2) {
+                autoRelaunchAttempts++;
+                const disabledNames = Array.isArray(crashData.disabledMods)
+                    ? crashData.disabledMods.map(m => m.name || m.id).join(', ')
+                    : '';
+                const reasonMsg = disabledNames
+                    ? `Nekompatibilní mód (${disabledNames}) byl automaticky vyřazen (.disabled). Spouštím hru...`
+                    : 'Pád hry byl automaticky opraven. Spouštím hru znovu...';
+
+                showToast(reasonMsg, 'warning');
+                appendLog(`[CRASH AUTO-RECOVER] ${reasonMsg}`);
+
+                setTimeout(() => {
+                    if (sidebarPlayBtn && !sidebarPlayBtn.disabled) {
+                        sidebarPlayBtn.click();
+                    } else if (typeof startLaunch === 'function') {
+                        const targetProfileId = resolveLaunchProfileId();
+                        startLaunch(targetProfileId, null);
+                    }
+                }, 800);
+                return;
+            }
+
+            const titleElem = document.getElementById('crashAnalyzerTitle');
+            const subElem = document.getElementById('crashAnalyzerSubtitle');
+            const badgeElem = document.getElementById('crashExitCodeBadge');
+            const headElem = document.getElementById('crashCauseHead');
+            const descElem = document.getElementById('crashCauseDesc');
+            const recElem = document.getElementById('crashRecommendation');
+            const logElem = document.getElementById('crashLogExcerpt');
+            const fixTextElem = document.getElementById('btnApplyCrashFixText');
+            const repairBanner = document.getElementById('crashAutoRepairBanner');
+            const repairTitle = document.getElementById('crashAutoRepairTitle');
+            const repairDesc = document.getElementById('crashAutoRepairDesc');
+            const repairIcon = document.getElementById('crashAutoRepairIcon');
+            const diagCard = document.getElementById('crashDiagCard');
+            const modalIconSvg = document.getElementById('crashModalIconSvg');
+
+            const hasActionableFix = !!(crashData.autoFix && !isAlreadyFixed);
+
+            if (descElem) {
+                descElem.textContent = crashData.description || 'Neznámá chyba.';
+                descElem.style.color = '#94a3b8';
+            }
+            if (logElem) {
+                logElem.textContent = crashData.stackExcerpt || crashData.rawLog || 'Žádné podrobnosti k dispozici.';
+                logElem.style.color = '#94a3b8';
+            }
+
+            if (isAlreadyFixed) {
+                if (titleElem) {
+                    titleElem.textContent = crashData.title || 'Hra opravena';
+                    titleElem.style.color = '#21DE00';
+                }
+                if (subElem) {
+                    subElem.textContent = 'Automatická oprava dokončena';
+                    subElem.style.color = '#94a3b8';
+                }
+                if (badgeElem) {
+                    badgeElem.textContent = 'Opraveno';
+                    badgeElem.style.background = '#21DE00';
+                    badgeElem.style.color = '#0a0a0c';
+                }
+                if (headElem) {
+                    headElem.textContent = crashData.title || 'Vyřešeno';
+                    headElem.style.color = '#21DE00';
+                }
+                if (diagCard) {
+                    diagCard.style.background = 'rgba(33, 222, 0, 0.08)';
+                    diagCard.style.border = '1px solid rgba(33, 222, 0, 0.3)';
+                }
+                if (modalIconSvg) {
+                    modalIconSvg.className = 'ui-icon-svg ui-icon-svg--lg ui-icon-svg--green';
+                    modalIconSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+                }
+                if (repairBanner) {
+                    repairBanner.style.display = 'flex';
+                    repairBanner.style.background = 'rgba(33, 222, 0, 0.12)';
+                    repairBanner.style.border = '1px solid rgba(33, 222, 0, 0.35)';
+                    if (repairTitle) {
+                        repairTitle.textContent = 'Automaticky opraveno';
+                        repairTitle.style.color = '#21DE00';
+                    }
+                    if (repairDesc) {
+                        repairDesc.textContent = crashData.recommendation || 'Opravy byly úspěšně aplikovány.';
+                        repairDesc.style.color = '#94a3b8';
+                    }
+                    if (repairIcon) {
+                        repairIcon.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                    }
+                }
+                if (recElem) {
+                    recElem.textContent = crashData.recommendation || 'Můžeš hru ihned spustit znovu.';
+                    recElem.style.color = '#21DE00';
+                }
+                if (typeof loadInstalledMods === 'function') {
+                    loadInstalledMods();
+                }
+                if (btnApplyCrashFix) {
+                    btnApplyCrashFix.style.display = 'inline-flex';
+                    btnApplyCrashFix.className = 'mc-btn mc-btn-green';
+                    if (fixTextElem) {
+                        fixTextElem.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>Rozumím (Spustit hru)</span>';
+                    }
+                }
+            } else if (hasActionableFix) {
+                if (titleElem) {
+                    titleElem.textContent = crashData.title || 'Pád hry';
+                    titleElem.style.color = '#f51515';
+                }
+                if (subElem) {
+                    subElem.textContent = 'Automatická oprava probíhá';
+                    subElem.style.color = '#94a3b8';
+                }
+                if (badgeElem) {
+                    badgeElem.textContent = 'Opravuji...';
+                    badgeElem.style.background = '#0a67e5';
+                    badgeElem.style.color = '#ffffff';
+                }
+                if (headElem) {
+                    headElem.textContent = 'Příčina: ' + (crashData.title || 'Neznámá chyba');
+                    headElem.style.color = '#f51515';
+                }
+                if (diagCard) {
+                    diagCard.style.background = 'rgba(245, 21, 21, 0.08)';
+                    diagCard.style.border = '1px solid rgba(245, 21, 21, 0.25)';
+                }
+                if (modalIconSvg) {
+                    modalIconSvg.className = 'ui-icon-svg ui-icon-svg--lg ui-icon-svg--red';
+                    modalIconSvg.innerHTML = '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>';
+                }
+                if (repairBanner) {
+                    repairBanner.style.display = 'flex';
+                    repairBanner.style.background = 'rgba(10, 103, 229, 0.12)';
+                    repairBanner.style.border = '1px solid rgba(10, 103, 229, 0.3)';
+                    if (repairTitle) {
+                        repairTitle.textContent = 'Automatická oprava probíhá';
+                        repairTitle.style.color = '#0a67e5';
+                    }
+                    if (repairDesc) {
+                        repairDesc.textContent = 'Aplikuji opravy...';
+                        repairDesc.style.color = '#94a3b8';
+                    }
+                    if (repairIcon) {
+                        repairIcon.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" style="color: #0a67e5;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg>';
+                    }
+                }
+                if (recElem) {
+                    recElem.textContent = crashData.recommendation || 'Probíhá automatické řešení chyby...';
+                    recElem.style.color = '#0a67e5';
+                }
+                if (btnApplyCrashFix) {
+                    btnApplyCrashFix.style.display = 'inline-flex';
+                    btnApplyCrashFix.className = 'mc-btn mc-btn-secondary';
+                    if (fixTextElem) {
+                        fixTextElem.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Opravuji... (OK)</span>';
+                    }
+                }
+
+                // Autonomously start applying the fix right now while user looks at modal
+                appendLog(`[AUTOPILOT OPRAV] [OPRAVA] Spouštím automatickou opravu v pozadí: ${crashData.autoFix.id}`);
+                activeCrashFixPromise = window.api.applyCrashFix(crashData.autoFix, currentConfig.activeProfileId)
+                    .then(async (res) => {
+                        activeCrashFixPromise = null;
+                        if (res && res.success) {
+                            if (currentCrashData) {
+                                currentCrashData.fixed = true;
+                                currentCrashData.autoFixed = true;
+                            }
+                            if (titleElem) {
+                                titleElem.textContent = 'Hra opravena';
+                                titleElem.style.color = '#21DE00';
+                            }
+                            if (subElem) {
+                                subElem.textContent = 'Automatická oprava dokončena';
+                                subElem.style.color = '#94a3b8';
+                            }
+                            if (badgeElem) {
+                                badgeElem.textContent = 'Opraveno';
+                                badgeElem.style.background = '#21DE00';
+                                badgeElem.style.color = '#0a0a0c';
+                            }
+                            if (headElem) {
+                                headElem.textContent = 'Problém byl vyřešen';
+                                headElem.style.color = '#21DE00';
+                            }
+                            if (diagCard) {
+                                diagCard.style.background = 'rgba(33, 222, 0, 0.08)';
+                                diagCard.style.border = '1px solid rgba(33, 222, 0, 0.3)';
+                            }
+                            if (modalIconSvg) {
+                                modalIconSvg.className = 'ui-icon-svg ui-icon-svg--lg ui-icon-svg--green';
+                                modalIconSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+                            }
+                            if (repairBanner) {
+                                repairBanner.style.background = 'rgba(33, 222, 0, 0.12)';
+                                repairBanner.style.border = '1px solid rgba(33, 222, 0, 0.35)';
+                                if (repairTitle) {
+                                    repairTitle.textContent = 'Automaticky opraveno';
+                                    repairTitle.style.color = '#21DE00';
+                                }
+                                if (repairDesc) {
+                                    repairDesc.textContent = res.message || 'Opravy byly úspěšně aplikovány.';
+                                    repairDesc.style.color = '#94a3b8';
+                                }
+                                if (repairIcon) {
+                                    repairIcon.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                                }
+                            }
+                            if (recElem) {
+                                recElem.textContent = res.message || 'Hra je opravena a připravena ke spuštění.';
+                                recElem.style.color = '#21DE00';
+                            }
+                            if (btnApplyCrashFix) {
+                                btnApplyCrashFix.className = 'mc-btn mc-btn-green';
+                                if (fixTextElem) {
+                                    fixTextElem.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> <span>Rozumím (Spustit hru)</span>';
+                                }
+                            }
+
+                            if (typeof loadInstalledMods === 'function') loadInstalledMods();
+                            const updatedCfg = await window.api.getConfig();
+                            if (updatedCfg) {
+                                currentConfig = updatedCfg;
+                                if (ramSlider && updatedCfg.ramMax) {
+                                    if (ramSliderController) {
+                                        ramSliderController.setValue(updatedCfg.ramMax, true);
+                                    } else {
+                                        ramSlider.value = updatedCfg.ramMax;
+                                        updateSliderVisuals(ramSlider, ramValueBadge);
+                                    }
+                                }
+                                if (javaPathInput && updatedCfg.javaPath) {
+                                    javaPathInput.value = updatedCfg.javaPath;
+                                }
+                            }
+
+                            appendLog(`[AUTOPILOT OPRAV] ${res.message}`);
+                            showToast(String(res.message).replace(/^[✓⚡\s]+/u, ''), 'success');
+
+                            if (userAcknowledgedWhileFixing) {
+                                closeCrashModal();
+                                setTimeout(() => {
+                                    if (sidebarPlayBtn && !sidebarPlayBtn.disabled) {
+                                        sidebarPlayBtn.click();
+                                    } else if (typeof startLaunch === 'function') {
+                                        const targetProfileId = resolveLaunchProfileId();
+                                        startLaunch(targetProfileId, null);
+                                    }
+                                }, 300);
+                            }
+                        } else {
+                            if (repairBanner) {
+                                repairBanner.style.background = 'rgba(245, 21, 21, 0.12)';
+                                repairBanner.style.border = '1px solid rgba(245, 21, 21, 0.35)';
+                                if (repairTitle) {
+                                    repairTitle.textContent = 'Opravu se nepodařilo dokončit';
+                                    repairTitle.style.color = '#f51515';
+                                }
+                                if (repairDesc) {
+                                    repairDesc.textContent = res?.error || 'Zkontroluj podrobnosti níže nebo otevři report.';
+                                    repairDesc.style.color = '#94a3b8';
+                                }
+                                if (repairIcon) {
+                                    repairIcon.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+                                }
+                            }
+                            if (btnApplyCrashFix) {
+                                btnApplyCrashFix.className = 'mc-btn mc-btn-secondary';
+                                if (fixTextElem) fixTextElem.innerHTML = '<span>Rozumím (Zavřít)</span>';
+                            }
+                        }
+                    })
+                    .catch((err) => {
+                        activeCrashFixPromise = null;
+                        console.error('Chyba při automatické opravě pádu v pozadí:', err);
+                        if (btnApplyCrashFix) {
+                            btnApplyCrashFix.className = 'mc-btn mc-btn-secondary';
+                            if (fixTextElem) fixTextElem.innerHTML = '<span>Rozumím</span>';
+                        }
+                    });
+            } else {
+                if (titleElem) {
+                    titleElem.textContent = crashData.title || 'Pád hry';
+                    titleElem.style.color = '#f51515';
+                }
+                if (subElem) {
+                    subElem.textContent = `Chyba při běhu (kód: ${crashData.exitCode || 1})`;
+                    subElem.style.color = '#94a3b8';
+                }
+                if (badgeElem) {
+                    badgeElem.textContent = `Kód ${crashData.exitCode || 1}`;
+                    badgeElem.style.background = '#f51515';
+                    badgeElem.style.color = '#ffffff';
+                }
+                if (headElem) {
+                    headElem.textContent = `Příčina: ${crashData.title || 'Neznámá chyba'}`;
+                    headElem.style.color = '#f51515';
+                }
+                if (recElem) {
+                    recElem.textContent = crashData.recommendation || '';
+                    recElem.style.color = '#0a67e5';
+                }
+                if (repairBanner) {
+                    repairBanner.style.display = 'none';
+                }
+                if (btnApplyCrashFix) {
+                    btnApplyCrashFix.style.display = 'inline-flex';
+                    btnApplyCrashFix.className = 'mc-btn mc-btn-primary';
+                    if (fixTextElem) fixTextElem.innerHTML = '<span>Rozumím</span>';
+                }
+            }
+
+            if (btnOpenCrashFullReport) {
+                btnOpenCrashFullReport.style.display = crashData.reportPath ? 'inline-flex' : 'none';
+            }
+
+            modalCrashAnalyzer.style.display = 'flex';
+            appendLog(`[CRASH ANALYZER] ${isAlreadyFixed ? 'Automaticky vyřešeno' : 'Zjištěna příčina pádu'}: ${crashData.title}`);
+        });
+    }
+
+    if (btnApplyCrashFix) {
+        btnApplyCrashFix.addEventListener('click', () => {
+            if (activeCrashFixPromise) {
+                userAcknowledgedWhileFixing = true;
+                showToast('Dokončuji opravu... Hra se za okamžik spustí.', 'info');
+                closeCrashModal();
+                return;
+            }
+            const shouldRelaunch = !!(
+                currentCrashData?.fixed ||
+                currentCrashData?.autoFixed ||
+                currentCrashData?.autoFix?.id === 'RELAUNCH_GAME'
+            );
+            closeCrashModal();
+            if (shouldRelaunch) {
+                setTimeout(() => {
+                    if (sidebarPlayBtn && !sidebarPlayBtn.disabled) {
+                        sidebarPlayBtn.click();
+                    } else if (typeof startLaunch === 'function') {
+                        const targetProfileId = resolveLaunchProfileId();
+                        startLaunch(targetProfileId, null);
+                    }
+                }, 300);
+            }
+        });
+    }
+
+    if (btnOpenCrashFullReport) {
+        btnOpenCrashFullReport.addEventListener('click', async () => {
+            if (!currentCrashData || !currentCrashData.reportPath) return;
+            try {
+                await window.api.applyCrashFix({ id: 'OPEN_CRASH_REPORT', reportPath: currentCrashData.reportPath }, currentConfig.activeProfileId);
+            } catch (e) {
+                showToast('Nelze otevřít report: ' + e.message, 'error');
+            }
+        });
+    }
+
+    // ── Java & Cache Cleaner UI ─────────────────────────────────────────────
+    const btnScanCache = document.getElementById('btnScanCache');
+    const btnCleanCache = document.getElementById('btnCleanCache');
+    const cacheCleanerSummary = document.getElementById('cacheCleanerSummary');
+
+    if (btnScanCache) {
+        btnScanCache.addEventListener('click', async () => {
+            btnScanCache.disabled = true;
+            if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Probíhá skenování disku a cache...';
+            try {
+                const res = await window.api.scanLauncherCache();
+                if (cacheCleanerSummary) {
+                    cacheCleanerSummary.textContent = `Nalezeno ${res.fileCount} souborů k vyčištění (${res.formattedSize}). Staré logy: ${res.breakdown?.logs?.formatted || '0 B'}, Dočasná data: ${res.breakdown?.temps?.formatted || '0 B'}.`;
+                }
+                showToast(`Analýza dokončena: ${res.formattedSize} volného místa lze uvolnit.`, 'info');
+            } catch (err) {
+                if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Chyba při analýze: ' + err.message;
+            } finally {
+                btnScanCache.disabled = false;
+            }
+        });
+    }
+
+    if (btnCleanCache) {
+        btnCleanCache.addEventListener('click', async () => {
+            btnCleanCache.disabled = true;
+            if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Probíhá bezpečné promazávání starých logů a cache...';
+            try {
+                const res = await window.api.cleanLauncherCache();
+                const msg = (res && res.message) || (res && res.formattedFreed ? `Vyčištěno (uvolněno ${res.formattedFreed})` : 'Cache byla úspěšně vyčištěna.');
+                if (cacheCleanerSummary) {
+                    cacheCleanerSummary.textContent = msg;
+                }
+                showToast(msg, 'success');
+                appendLog(`[ČIŠTĚNÍ CACHE] ${msg}`);
+            } catch (err) {
+                if (cacheCleanerSummary) cacheCleanerSummary.textContent = 'Chyba při čištění: ' + err.message;
+                showToast('Chyba při čištění: ' + err.message, 'error');
+            } finally {
+                btnCleanCache.disabled = false;
+            }
+        });
+    }
+
+    // ── Custom Dropdown Helper ──────────────────────────────────────────────
+    function setupCustomDropdown(containerId, onSelect) {
+        const container = document.getElementById(containerId);
+        if (!container) return null;
+
+        const trigger = container.querySelector('.custom-dropdown-trigger');
+        const selectedText = container.querySelector('.custom-dropdown-selected-text') || container.querySelector('.custom-dropdown-selected span:last-child');
+        const selectedIcon = container.querySelector('.custom-dropdown-selected-icon');
+        const options = container.querySelectorAll('.custom-dropdown-option');
+
+        const closeDropdown = () => {
+            container.classList.remove('open');
+        };
+
+        if (trigger) {
+            trigger.onclick = (e) => {
+                e.stopPropagation();
+                document.querySelectorAll('.custom-dropdown.open').forEach(d => {
+                    if (d !== container) d.classList.remove('open');
+                });
+                container.classList.toggle('open');
+            };
+        }
+
+        options.forEach(opt => {
+            opt.onclick = (e) => {
+                e.stopPropagation();
+                const val = opt.dataset.value;
+                const icon = opt.dataset.icon || '';
+                const title = opt.querySelector('.custom-option-title')?.textContent || val;
+
+                container.dataset.value = val;
+                if (selectedText) selectedText.textContent = title;
+                if (selectedIcon) {
+                    const optIconEl = opt.querySelector('.custom-option-icon');
+                    if (optIconEl && optIconEl.innerHTML.trim()) {
+                        selectedIcon.innerHTML = optIconEl.innerHTML;
+                    } else if (typeof getIconSvg === 'function' && icon) {
+                        selectedIcon.innerHTML = getIconSvg(icon);
+                    } else {
+                        selectedIcon.innerHTML = '';
+                    }
+                }
+
+                options.forEach(o => {
+                    o.classList.remove('active');
+                    const check = o.querySelector('.custom-option-check');
+                    if (check) check.innerHTML = '';
+                });
+                opt.classList.add('active');
+                const check = opt.querySelector('.custom-option-check');
+                if (check) {
+                    check.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+                }
+
+                closeDropdown();
+                if (typeof onSelect === 'function') onSelect(val);
+            };
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!container.contains(e.target)) {
+                closeDropdown();
+            }
+        });
+
+        return {
+            setValue: (val) => {
+                const matched = Array.from(options).find(o => o.dataset.value === val);
+                if (matched) {
+                    matched.click();
+                }
+            },
+            getValue: () => container.dataset.value
+        };
+    }
+
+    // ── Create Profile Modal Handlers ───────────────────────────────────────
+    const modalCreateProfile = document.getElementById('modalCreateProfile');
+    const btnOpenCreateProfileModal = document.getElementById('btnOpenCreateProfileModal');
+    const btnCloseCreateProfileModal = document.getElementById('btnCloseCreateProfileModal');
+    const btnCancelCreateProfile = document.getElementById('btnCancelCreateProfile');
+    const btnConfirmCreateProfile = document.getElementById('btnConfirmCreateProfile');
+    const newProfileNameInput = document.getElementById('newProfileNameInput');
+    const newProfileRamSlider = document.getElementById('newProfileRamSlider');
+    const newProfileRamValueBadge = document.getElementById('newProfileRamValueBadge');
+    let newProfileSelectedIcon = 'sword';
+
+    const dropdownNewLoader = setupCustomDropdown('dropdownNewProfileLoader');
+
+    function syncNewProfileVersionState(selectedVersion) {
+        const isCs = isComingSoonVersion(selectedVersion);
+        const loaderContainer = document.getElementById('dropdownNewProfileLoader');
+        const hintEl = document.getElementById('newProfileComingSoonLoaderHint');
+        if (isCs) {
+            dropdownNewLoader?.setValue('vanilla');
+        }
+        if (loaderContainer) {
+            loaderContainer.classList.toggle('is-locked', isCs);
+        }
+        if (hintEl) {
+            hintEl.style.display = isCs ? 'flex' : 'none';
+        }
+    }
+
+    const dropdownNewVersion = setupCustomDropdown('dropdownNewProfileVersion', syncNewProfileVersionState);
+
+    if (newProfileRamSlider && newProfileRamValueBadge) {
+        newProfileRamSliderController = setupSmoothSnapSlider(newProfileRamSlider, newProfileRamValueBadge);
+    }
+
+    const iconButtons = document.querySelectorAll('#newProfileIconPicker .icon-picker-item');
+    iconButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            iconButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            newProfileSelectedIcon = btn.dataset.icon || 'sword';
+        });
+    });
+
+    const btnToggleNewProfileJvm = document.getElementById('btnToggleNewProfileJvm');
+    const newProfileJvmCollapse = document.getElementById('newProfileJvmCollapse');
+    function setNewProfileJvmExpanded(expanded) {
+        if (btnToggleNewProfileJvm) {
+            btnToggleNewProfileJvm.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        }
+        if (newProfileJvmCollapse) {
+            newProfileJvmCollapse.classList.toggle('is-open', !!expanded);
+        }
+    }
+    if (btnToggleNewProfileJvm) {
+        btnToggleNewProfileJvm.addEventListener('click', () => {
+            const isOpen = btnToggleNewProfileJvm.getAttribute('aria-expanded') === 'true';
+            setNewProfileJvmExpanded(!isOpen);
+        });
+    }
+
+    function openCreateProfileModal() {
+        if (!modalCreateProfile) return;
+        const count = currentConfig.profiles?.length ? currentConfig.profiles.length + 1 : 1;
+        if (newProfileNameInput) {
+            newProfileNameInput.value = `Nový profil ${count}`;
+        }
+        if (newProfileRamSliderController) {
+            newProfileRamSliderController.setValue(4, true);
+        } else if (newProfileRamSlider && newProfileRamValueBadge) {
+            newProfileRamSlider.value = 4;
+            updateSliderVisuals(newProfileRamSlider, newProfileRamValueBadge);
+        }
+        dropdownNewVersion?.setValue('26.3');
+        dropdownNewLoader?.setValue('vanilla');
+        syncNewProfileVersionState('26.3');
+        const newJvmInput = document.getElementById('newProfileJvmArgsInput');
+        if (newJvmInput) newJvmInput.value = '';
+        setNewProfileJvmExpanded(false);
+        newProfileSelectedIcon = 'sword';
+        iconButtons.forEach(b => b.classList.toggle('active', b.dataset.icon === 'sword'));
+        modalCreateProfile.style.display = 'flex';
+        requestAnimationFrame(() => {
+            if (newProfileNameInput) {
+                newProfileNameInput.focus();
+                newProfileNameInput.select();
+            }
+        });
+    }
+
+    function closeCreateProfileModal() {
+        if (modalCreateProfile) modalCreateProfile.style.display = 'none';
+    }
+
+    if (modalCreateProfile) {
+        modalCreateProfile.addEventListener('click', (e) => {
+            if (e.target === modalCreateProfile) closeCreateProfileModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modalCreateProfile.style.display !== 'none') {
+                closeCreateProfileModal();
+            }
+        });
+    }
+    if (newProfileNameInput) {
+        newProfileNameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && btnConfirmCreateProfile) {
+                e.preventDefault();
+                btnConfirmCreateProfile.click();
+            }
+        });
+    }
+
+    if (btnOpenCreateProfileModal) btnOpenCreateProfileModal.addEventListener('click', openCreateProfileModal);
+    const btnCreateProfileFromProfilesTab = document.getElementById('btnCreateProfileFromProfilesTab');
+    if (btnCreateProfileFromProfilesTab) btnCreateProfileFromProfilesTab.addEventListener('click', openCreateProfileModal);
+
+    const btnGoToProfilesTab = document.getElementById('btnGoToProfilesTab');
+    if (btnGoToProfilesTab) {
+        btnGoToProfilesTab.addEventListener('click', () => switchTab('profiles'));
+    }
+
+    const btnImportProfileFromProfilesTab = document.getElementById('btnImportProfileFromProfilesTab');
+    if (btnImportProfileFromProfilesTab) {
+        btnImportProfileFromProfilesTab.addEventListener('click', () => {
+            const impBtn = document.getElementById('btnActionImportProfile') || document.getElementById('btnOpenImportModal');
+            if (impBtn) impBtn.click();
+        });
+    }
+    if (btnCloseCreateProfileModal) btnCloseCreateProfileModal.addEventListener('click', closeCreateProfileModal);
+    if (btnCancelCreateProfile) btnCancelCreateProfile.addEventListener('click', closeCreateProfileModal);
+
+    if (btnConfirmCreateProfile) {
+        btnConfirmCreateProfile.addEventListener('click', async () => {
+            const rawName = newProfileNameInput?.value?.trim() || '';
+            if (!rawName) {
+                showToast('Zadej název profilu.', 'error');
+                return;
+            }
+
+            const ver = dropdownNewVersion ? dropdownNewVersion.getValue() : '26.3';
+            const isCs = isComingSoonVersion(ver);
+            const ldr = isCs ? 'vanilla' : (dropdownNewLoader ? dropdownNewLoader.getValue() : 'vanilla');
+            const ram = newProfileRamSliderController ? newProfileRamSliderController.getTarget() : parseInt(newProfileRamSlider?.value || '4', 10);
+            const rawJvm = document.getElementById('newProfileJvmArgsInput')?.value?.trim() || '';
+            const newId = 'profile-' + Date.now();
+
+            const newProf = {
+                id: newId,
+                name: rawName,
+                version: ver,
+                loader: ldr,
+                comingSoon: isCs,
+                optimizedChosen: ldr === 'fabric' ? 'optimized' : 'vanilla',
+                desc: isCs
+                    ? `Připravovaná verze Minecraft ${ver} — Coming Soon.`
+                    : `${rawName} (${ver}${ldr !== 'vanilla' ? ' • ' + ldr : ''})`,
+                icon: newProfileSelectedIcon,
+                ramMax: ram,
+                jvmArgs: rawJvm,
+                customJvmArgs: rawJvm,
+                lastPlayed: null,
+                playtimeSeconds: 0
+            };
+
+            const existing = currentConfig.profiles || [];
+            currentConfig.profiles = [newProf, ...existing];
+            selectActiveProfile(newId, true);
+
+            await window.api.saveConfig({
+                profiles: currentConfig.profiles,
+                activeProfileId: newId
+            });
+
+            closeCreateProfileModal();
+            renderProfilesList();
+            showToast(
+                isCs
+                    ? `Profil "${rawName}" (${ver} • Coming Soon) byl vytvořen.`
+                    : `Profil "${rawName}" vytvořen.`,
+                'success'
+            );
+        });
+    }
+
+    // ── Import Profile Modal Handlers ───────────────────────────────────────
+    const modalImportProfile = document.getElementById('modalImportProfile');
+    const btnImportProfileModalOpen = document.getElementById('btnImportProfileModalOpen');
+    const btnCloseImportModal = document.getElementById('btnCloseImportModal');
+    const btnCancelImport = document.getElementById('btnCancelImport');
+    const btnSelectImportFolder = document.getElementById('btnSelectImportFolder');
+    const importPathLabel = document.getElementById('importPathLabel');
+    const scannedInstancePreview = document.getElementById('scannedInstancePreview');
+    const importProfileNameInput = document.getElementById('importProfileNameInput');
+    const importVersionSelect = document.getElementById('importVersionSelect');
+    const importLoaderSelect = document.getElementById('importLoaderSelect');
+    const scannedStatsPills = document.getElementById('scannedStatsPills');
+    const btnConfirmImport = document.getElementById('btnConfirmImport');
+
+    let currentScannedData = null;
+    let discoveredProfilesCache = [];
+
+    async function loadDiscoveredProfiles() {
+        const discoveredSection = document.getElementById('discoveredProfilesSection');
+        const discoveredList = document.getElementById('discoveredProfilesList');
+        if (!discoveredSection || !discoveredList) return;
+
+        discoveredSection.style.display = 'block';
+        discoveredList.innerHTML = '<div style="font-size: 11.5px; color: #94a3b8; padding: 12px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Hledám nainstalované profily (.minecraft, Lunar, Prism, Modrinth...)...</div>';
+
+        try {
+            const discovered = await window.api.discoverInstalledProfiles();
+            discoveredProfilesCache = discovered || [];
+            if (!discovered || discovered.length === 0) {
+                discoveredSection.style.display = 'none';
+                return;
+            }
+
+            discoveredSection.style.display = 'block';
+            discoveredList.innerHTML = discovered.map((p, idx) => `
+                <div class="discovered-profile-card" data-idx="${idx}">
+                    <div class="discovered-profile-top">
+                        <span class="discovered-profile-name">${escapeHtml(p.name)}</span>
+                        <span class="discovered-profile-badge">${escapeHtml(p.source)}</span>
+                    </div>
+                    <div class="discovered-profile-meta">
+                        <span>Verze ${escapeHtml(p.version)}</span>
+                        <span>•</span>
+                        <span>${escapeHtml(p.loader.toUpperCase())}</span>
+                        ${p.modCount > 0 ? `<span>•</span><span>${p.modCount} módů</span>` : ''}
+                        <span>•</span>
+                        <span>Naposledy: ${escapeHtml(p.lastPlayedFormatted)}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            discoveredList.querySelectorAll('.discovered-profile-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    discoveredList.querySelectorAll('.discovered-profile-card').forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    const idx = Number(card.dataset.idx);
+                    const p = discoveredProfilesCache[idx];
+                    if (!p) return;
+
+                    currentScannedData = {
+                        originalDir: p.gameDir,
+                        effectiveGameDir: p.gameDir,
+                        name: p.name,
+                        detectedVersion: p.version,
+                        detectedLoader: p.loader,
+                        modCount: p.modCount,
+                        rpCount: 0,
+                        hasConfig: true,
+                        hasOptions: true
+                    };
+
+                    if (importPathLabel) importPathLabel.textContent = p.gameDir;
+                    if (importProfileNameInput) importProfileNameInput.value = p.name;
+                    if (importVersionSelect) {
+                        if (['26.2', '26.3', '26.1.2', '1.21.11'].includes(p.version)) {
+                            importVersionSelect.value = p.version;
+                        } else {
+                            importVersionSelect.value = '26.3';
+                        }
+                    }
+                    if (importLoaderSelect) {
+                        importLoaderSelect.value = p.loader || 'fabric';
+                    }
+
+                    if (scannedStatsPills) {
+                        scannedStatsPills.innerHTML = `
+                            <span class="stat-pill stat-good"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg> Nalezeno módů: ${p.modCount}</span>
+                            <span class="stat-pill stat-good"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Zdroj: ${escapeHtml(p.source)}</span>
+                            <span class="stat-pill stat-good"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Naposledy: ${escapeHtml(p.lastPlayedFormatted)}</span>
+                        `;
+                    }
+
+                    if (scannedInstancePreview) scannedInstancePreview.style.display = 'block';
+                    if (btnConfirmImport) btnConfirmImport.disabled = false;
+                });
+            });
+        } catch (e) {
+            console.warn('[IMPORT] Chyba při načítání nalezených profilů:', e);
+            if (discoveredSection) discoveredSection.style.display = 'none';
+        }
+    }
+
+    if (btnImportProfileModalOpen) {
+        btnImportProfileModalOpen.addEventListener('click', () => {
+            if (modalImportProfile) {
+                modalImportProfile.style.display = 'flex';
+                currentScannedData = null;
+                if (scannedInstancePreview) scannedInstancePreview.style.display = 'none';
+                if (importPathLabel) importPathLabel.textContent = 'Zatím nebyla vybrána žádná složka';
+                if (btnConfirmImport) btnConfirmImport.disabled = true;
+                loadDiscoveredProfiles();
+            }
+        });
+    }
+
+    function closeImportModal() {
+        if (modalImportProfile) modalImportProfile.style.display = 'none';
+        currentScannedData = null;
+    }
+
+    if (btnCloseImportModal) btnCloseImportModal.addEventListener('click', closeImportModal);
+    if (btnCancelImport) btnCancelImport.addEventListener('click', closeImportModal);
+
+    if (btnSelectImportFolder) {
+        btnSelectImportFolder.addEventListener('click', async () => {
+            appendLog('[IMPORT] Otevírám dialog výběru složky instance...');
+            try {
+                btnSelectImportFolder.disabled = true;
+                const res = await window.api.importProfileDialog();
+                btnSelectImportFolder.disabled = false;
+                if (!res || res.canceled) {
+                    appendLog('[IMPORT] Výběr složky zrušen.');
+                    return;
+                }
+
+                if (res.error) {
+                    showToast('Chyba při čtení složky: ' + res.error, 'error');
+                    appendLog('[IMPORT] Chyba: ' + res.error);
+                    return;
+                }
+
+                const scan = res.scan;
+                if (!scan) return;
+                currentScannedData = scan;
+
+                if (importPathLabel) importPathLabel.textContent = scan.originalDir;
+                if (importProfileNameInput) importProfileNameInput.value = scan.name;
+                if (importVersionSelect) {
+                    if (['26.2', '26.3', '26.1.2', '1.21.11'].includes(scan.detectedVersion)) {
+                        importVersionSelect.value = scan.detectedVersion;
+                    } else {
+                        importVersionSelect.value = '26.3';
+                    }
+                }
+                if (importLoaderSelect) {
+                    importLoaderSelect.value = scan.detectedLoader || 'fabric';
+                }
+
+                if (scannedStatsPills) {
+                    scannedStatsPills.innerHTML = `
+                    <span class="stat-pill stat-good"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg> Nalezeno módů: ${scan.modCount}</span>
+                    <span class="stat-pill"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.563-2.512 5.563-5.563C22 6.5 17.5 2 12 2Z"/></svg> Texture packů: ${scan.rpCount}</span>
+                    <span class="stat-pill ${scan.hasConfig ? 'stat-good' : ''}"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Nastavení módů: ${scan.hasConfig ? 'Ano' : 'Ne'}</span>
+                    <span class="stat-pill ${scan.hasOptions ? 'stat-good' : ''}"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg> Herní options.txt: ${scan.hasOptions ? 'Ano' : 'Ne'}</span>
+                `;
+                }
+
+                if (scannedInstancePreview) scannedInstancePreview.style.display = 'block';
+                if (btnConfirmImport) btnConfirmImport.disabled = false;
+            } catch (err) {
+                btnSelectImportFolder.disabled = false;
+                showToast('Chyba dialogu výběru složky: ' + err.message, 'error');
+            }
+        });
+    }
+
+    if (btnConfirmImport) {
+        btnConfirmImport.addEventListener('click', async () => {
+            if (!currentScannedData) return;
+            btnConfirmImport.disabled = true;
+            btnConfirmImport.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Importuji data instance...</span>';
+
+            try {
+                const importPayload = {
+                    sourceDir: currentScannedData.originalDir,
+                    effectiveDir: currentScannedData.effectiveGameDir,
+                    name: (importProfileNameInput ? importProfileNameInput.value.trim() : '') || currentScannedData.name,
+                    version: importVersionSelect ? importVersionSelect.value : '26.3',
+                    loader: importLoaderSelect ? importLoaderSelect.value : 'fabric'
+                };
+
+                const res = await window.api.confirmImportProfile(importPayload);
+                if (res.success) {
+                    appendLog(`[IMPORT] Profil ${res.profile.name} byl importován (${res.importedModCount} módů).`);
+                    closeImportModal();
+                    await loadConfiguration();
+                    renderProfilesList();
+                    alert(`Profil byl importován (${res.importedModCount} módů).`);
+                } else {
+                    alert('Chyba při importu: ' + res.error);
+                }
+            } catch (e) {
+                alert('Chyba: ' + e.message);
+            } finally {
+                btnConfirmImport.disabled = false;
+                btnConfirmImport.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Dokončit import profilu</span>';
+            }
+        });
+    }
+
+    // ── Upgrade Profile Modal Handlers ───────────────────────────────────────
+    const modalUpgradeProfile = document.getElementById('modalUpgradeProfile');
+    const btnCloseUpgradeModal = document.getElementById('btnCloseUpgradeModal');
+    const btnCancelUpgrade = document.getElementById('btnCancelUpgrade');
+    const upgradeSourceProfileName = document.getElementById('upgradeSourceProfileName');
+    const upgradeTargetVersionSelect = document.getElementById('upgradeTargetVersionSelect');
+    const upgradeProgressArea = document.getElementById('upgradeProgressArea');
+    const upgradeStatusText = document.getElementById('upgradeStatusText');
+    const btnConfirmUpgrade = document.getElementById('btnConfirmUpgrade');
+
+    // Result modal
+    const modalUpgradeResult = document.getElementById('modalUpgradeResult');
+    const btnCloseResultModal = document.getElementById('btnCloseResultModal');
+    const btnFinishUpgradeResult = document.getElementById('btnFinishUpgradeResult');
+    const upgradeResultSummaryText = document.getElementById('upgradeResultSummaryText');
+    const upgradeResultModsList = document.getElementById('upgradeResultModsList');
+
+    let activeUpgradeSourceProfileId = null;
+
+    function openUpgradeModal(profileId) {
+        if (isRunning || isLaunching) {
+            showToast(isRunning ? 'Nelze provádět upgrade profilu během běhu hry.' : 'Nelze provádět upgrade během stahování / spouštění.', 'warning');
+            return;
+        }
+        activeUpgradeSourceProfileId = profileId;
+        const profile = (currentConfig.profiles || []).find(p => p.id === profileId) || currentConfig.profiles[0];
+
+        if (upgradeSourceProfileName) {
+            upgradeSourceProfileName.textContent = `Zdrojový profil: ${profile.name} (${profile.version || '26.2'})`;
+        }
+
+        if (upgradeTargetVersionSelect) {
+            upgradeTargetVersionSelect.value = profile.version === '26.3' ? '26.2' : '26.3';
+        }
+
+        if (upgradeProgressArea) upgradeProgressArea.style.display = 'none';
+        if (btnConfirmUpgrade) {
+            btnConfirmUpgrade.disabled = false;
+            btnConfirmUpgrade.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="16 12 12 8 8 12"></polyline><line x1="12" y1="16" x2="12" y2="8"></line></svg> Spustit upgrade</span>';
+        }
+
+        if (modalUpgradeProfile) modalUpgradeProfile.style.display = 'flex';
+    }
+
+    function closeUpgradeModal() {
+        if (modalUpgradeProfile) modalUpgradeProfile.style.display = 'none';
+        activeUpgradeSourceProfileId = null;
+    }
+
+    if (btnCloseUpgradeModal) btnCloseUpgradeModal.addEventListener('click', closeUpgradeModal);
+    if (btnCancelUpgrade) btnCancelUpgrade.addEventListener('click', closeUpgradeModal);
+
+    window.api.onUpgradeProgress((data) => {
+        if (upgradeStatusText && data.status) {
+            upgradeStatusText.textContent = data.status;
+        }
+        appendLog(`[UPGRADE] ${data.status}`);
+    });
+
+    if (btnConfirmUpgrade) {
+        btnConfirmUpgrade.addEventListener('click', async () => {
+            if (!activeUpgradeSourceProfileId) return;
+            if (isRunning || isLaunching) {
+                showToast(isRunning ? 'Nelze provádět upgrade profilu během běhu hry.' : 'Nelze provádět upgrade během stahování / spouštění.', 'warning');
+                return;
+            }
+
+            const targetVer = upgradeTargetVersionSelect ? upgradeTargetVersionSelect.value : '26.3';
+            btnConfirmUpgrade.disabled = true;
+            btnConfirmUpgrade.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Probíhá upgrade...</span>';
+            if (upgradeProgressArea) upgradeProgressArea.style.display = 'block';
+
+            try {
+                const res = await window.api.upgradeProfile(activeUpgradeSourceProfileId, targetVer);
+                if (res && res.success) {
+                    closeUpgradeModal();
+                    await loadConfiguration();
+                    renderProfilesList();
+
+                    // Show result modal
+                    if (modalUpgradeResult) {
+                        if (upgradeResultSummaryText) {
+                            const disabledCount = (res.disabledMods || res.missingMods || []).length;
+                            upgradeResultSummaryText.innerHTML = `
+                                <strong>Vytvořen nový profil:</strong> ${escapeHtml(res.profile.name)}<br>
+                                <strong>Převedeno:</strong> Herní options.txt, konfigurace módů (config/) a texture packy.<br>
+                                <strong>Aktualizováno:</strong> Staženo ${res.upgradedMods ? res.upgradedMods.length : 0} kompatibilních módů pro verzi ${targetVer}.<br>
+                                ${disabledCount > 0 ? `<strong style="color:#f87171;">Deaktivováno:</strong> ${disabledCount} módů bylo bezpečně zakázáno (.disabled), protože pro verzi ${targetVer} zatím nevyšly.` : ''}
+                            `;
+                        }
+
+                        if (upgradeResultModsList) {
+                            let html = '';
+                            if (res.upgradedMods && res.upgradedMods.length > 0) {
+                                html += `<div style="display:flex; align-items:center; gap:6px; font-weight:700; color:#86efac; margin-top:8px;"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Aktualizované módy (${res.upgradedMods.length}):</div>`;
+                                html += res.upgradedMods.map(m => `
+                                    <div class="result-mod-tag" style="display:flex; align-items:center; gap:6px; background:#132a1e; color:#86efac;">
+                                        <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> ${escapeHtml(m.newFile || m.oldFile)} (v${escapeHtml(m.version || 'nová')})
+                                    </div>
+                                `).join('');
+                            }
+
+                            const disabledList = res.disabledMods || (res.missingMods ? res.missingMods.map(m => ({ name: m, file: m })) : []);
+                            if (disabledList && disabledList.length > 0) {
+                                html += `<div style="display:flex; align-items:center; gap:6px; font-weight:700; color:#f87171; margin-top:12px;"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Zakázané módy – nepodporují verzi ${escapeHtml(targetVer)} (${disabledList.length}):</div>`;
+                                html += `<div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Tyto módy byly v novém profilu automaticky deaktivovány (.disabled), aby hra nespadla:</div>`;
+                                html += disabledList.map(m => {
+                                    const modTitle = typeof m === 'object' ? (m.name || m.file) : m;
+                                    return `
+                                    <div class="result-mod-tag" style="display:flex; align-items:center; justify-content:space-between; gap:8px; background:#291415; border:1px solid rgba(248,113,113,0.25); color:#fca5a5; padding:6px 10px; border-radius:6px; margin-bottom:4px;">
+                                        <div style="display:flex; align-items:center; gap:6px; font-weight:600;">
+                                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                            ${escapeHtml(modTitle)}
+                                        </div>
+                                        <span style="font-size:11px; opacity:0.85; font-weight:400;">(Zakázán • čeká na aktualizaci pro ${escapeHtml(targetVer)})</span>
+                                    </div>
+                                    `;
+                                }).join('');
+                            }
+                            upgradeResultModsList.innerHTML = html;
+                        }
+
+                        modalUpgradeResult.style.display = 'flex';
+                    }
+                } else {
+                    alert('Chyba při upgradu: ' + (res ? res.error : 'Neznámá chyba'));
+                }
+            } catch (e) {
+                alert('Chyba při upgradu: ' + e.message);
+            } finally {
+                btnConfirmUpgrade.disabled = false;
+                btnConfirmUpgrade.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="16 12 12 8 8 12"></polyline><line x1="12" y1="16" x2="12" y2="8"></line></svg> Spustit upgrade</span>';
+            }
+        });
+    }
+
+    function closeResultModal() {
+        if (modalUpgradeResult) modalUpgradeResult.style.display = 'none';
+    }
+    if (btnCloseResultModal) btnCloseResultModal.addEventListener('click', closeResultModal);
+    if (btnFinishUpgradeResult) btnFinishUpgradeResult.addEventListener('click', closeResultModal);
+
+    // ── Profile Settings Modal Handlers ─────────────────────────────────────
+    let activeSettingsProfileId = null;
+    const modalProfileSettings = document.getElementById('modalProfileSettings');
+    const btnCloseProfileSettingsModal = document.getElementById('btnCloseProfileSettingsModal');
+    const btnCancelProfileSettings = document.getElementById('btnCancelProfileSettings');
+    const btnSaveProfileSettings = document.getElementById('btnSaveProfileSettings');
+    const profileRamSlider = document.getElementById('profileRamSlider');
+    const profileRamValueBadge = document.getElementById('profileRamValueBadge');
+    const btnDeleteCurrentProfile = document.getElementById('btnDeleteCurrentProfile');
+    const DEFAULT_DELETE_PROFILE_HTML = btnDeleteCurrentProfile ? btnDeleteCurrentProfile.innerHTML : '<span>Smazat</span>';
+
+    function resetDeleteProfileButton() {
+        if (!btnDeleteCurrentProfile) return;
+        btnDeleteCurrentProfile.disabled = false;
+        btnDeleteCurrentProfile.innerHTML = DEFAULT_DELETE_PROFILE_HTML;
+    }
+
+    if (profileRamSlider && profileRamValueBadge) {
+        profileRamSliderController = setupSmoothSnapSlider(profileRamSlider, profileRamValueBadge);
+    }
+
+    function openProfileSettingsModal(pid) {
+        const profile = (currentConfig.profiles || []).find(p => p.id === pid) || currentConfig.profiles[0];
+        if (!profile) return;
+        activeSettingsProfileId = pid;
+        resetDeleteProfileButton();
+
+        const isImported = Boolean(
+            profile.isImported ||
+            (profile.id && profile.id.startsWith('imported-')) ||
+            profile.icon === 'import' ||
+            (profile.desc && profile.desc.includes('Importováno')) ||
+            (profile.gameDir && (profile.gameDir.includes('instances') || profile.gameDir.includes('profiles')) && profile.id.includes('import'))
+        );
+        const isComingSoon = isComingSoonProfile(profile);
+
+        const titleEl = document.getElementById('profileSettingsModalTitle');
+        const nameInput = document.getElementById('profileSettingsNameInput');
+        const loaderSelect = document.getElementById('profileSettingsLoaderSelect');
+        const deleteSec = document.getElementById('profileDeleteSection');
+        const loaderCardsContainer = document.getElementById('loaderCardsContainer');
+        const importedLoaderNotice = document.getElementById('profileImportedLoaderNotice');
+        const importedLoaderLabel = document.getElementById('profileImportedLoaderLabel');
+        const loaderLockReasonEl = document.getElementById('profileLoaderLockReason');
+        const quickOptBanner = document.getElementById('profileQuickOptBanner');
+
+        // Banner optimalizace ve výchozím stavu schováme, aby nezpůsoboval žádný UI šum
+        if (quickOptBanner) quickOptBanner.style.display = 'none';
+
+        if (titleEl) titleEl.textContent = `Nastavení profilu: ${profile.name}`;
+        if (nameInput) nameInput.value = profile.name;
+
+        const curLoader = isComingSoon ? 'vanilla' : (profile.loader || 'fabric');
+        if (loaderSelect) loaderSelect.value = curLoader;
+
+        // U importovaných a Coming Soon profilů nezobrazujeme přepínač loaderů,
+        // ale čistou uzamčenou informaci o zavaděči
+        if (isImported || isComingSoon) {
+            if (loaderCardsContainer) loaderCardsContainer.style.display = 'none';
+            if (importedLoaderNotice) {
+                importedLoaderNotice.style.display = 'flex';
+                if (importedLoaderLabel) {
+                    const loaderNames = {
+                        fabric: 'Fabric',
+                        vanilla: 'Vanilla',
+                        neoforge: 'NeoForge',
+                        forge: 'Forge',
+                        quilt: 'Quilt'
+                    };
+                    importedLoaderLabel.textContent = loaderNames[curLoader.toLowerCase()] || curLoader;
+                }
+                if (loaderLockReasonEl) {
+                    loaderLockReasonEl.textContent = isComingSoon
+                        ? '(Coming Soon — zatím dostupná pouze čistá hra)'
+                        : '(uzamčeno pro importovaný profil)';
+                }
+            }
+        } else {
+            if (loaderCardsContainer) loaderCardsContainer.style.display = 'grid';
+            if (importedLoaderNotice) importedLoaderNotice.style.display = 'none';
+
+            // Synchronizace vizuálních karet loaderů
+            document.querySelectorAll('#loaderCardsContainer .loader-card').forEach(card => {
+                if (card.dataset.loader === curLoader) {
+                    card.classList.add('active');
+                } else {
+                    card.classList.remove('active');
+                }
+            });
+        }
+
+        const pRam = profile.ramMax || currentConfig.ramMax || 4;
+        if (profileRamSliderController) {
+            profileRamSliderController.setValue(pRam, true);
+        } else if (profileRamSlider && profileRamValueBadge) {
+            profileRamSlider.value = pRam;
+            updateSliderVisuals(profileRamSlider, profileRamValueBadge);
+        }
+
+        const settingsJvmInput = document.getElementById('profileSettingsJvmArgsInput');
+        if (settingsJvmInput) {
+            settingsJvmInput.value = profile.jvmArgs || profile.customJvmArgs || '';
+        }
+
+        activeSettingsProfileIcon = profile.icon || 'sword';
+        document.querySelectorAll('#profileSettingsIconPicker .icon-picker-item').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.icon === activeSettingsProfileIcon);
+        });
+
+        const deleteContainer = document.getElementById('profileDeleteContainer');
+        if (deleteContainer) {
+            deleteContainer.style.display = ((currentConfig.profiles || []).length <= 1) ? 'none' : 'block';
+        }
+        if (deleteSec) {
+            deleteSec.style.display = ((currentConfig.profiles || []).length <= 1) ? 'none' : 'flex';
+        }
+
+        const upgradeBanner = document.getElementById('profileQuickUpgradeBanner');
+        const v = String(profile.version || '').trim().toLowerCase();
+        const canUpgrade = v && !v.includes('26.3') && !v.includes('26.4') && v !== 'latest';
+        if (upgradeBanner) {
+            if (canUpgrade) {
+                upgradeBanner.style.display = 'flex';
+                const bannerTitle = document.getElementById('profileUpgradeBannerTitle');
+                const bannerDesc = document.getElementById('profileUpgradeBannerDesc');
+                if (bannerTitle) bannerTitle.textContent = `Dostupný upgrade (Verze ${profile.version || 'starší'})`;
+                if (bannerDesc) bannerDesc.textContent = `Tento profil běží na starší verzi Minecraftu. Můžeš ho jedním kliknutím upgradovat na novější doporučenou verzi a stáhnout kompatibilní módy.`;
+            } else {
+                upgradeBanner.style.display = 'none';
+            }
+        }
+
+        if (modalProfileSettings) modalProfileSettings.style.display = 'flex';
+
+        // Kontrola optimalizace: Pokud už profil Sodium/Lithium má (nebo jde o importovaný profil),
+        // banner vůbec nezobrazujeme (žádný text "Optimalizováno" ani zelený pruh v UI).
+        // Zobrazí se výhradně tehdy, pokud profil optimalizovaný NENÍ a lze ho optimalizovat.
+        (async () => {
+            try {
+                if (isImported || isComingSoon) {
+                    if (quickOptBanner) quickOptBanner.style.display = 'none';
+                    return;
+                }
+
+                const optStatus = await window.api.checkOptimizationStatus(pid);
+                const isAlreadyOptimized = Boolean(optStatus && (optStatus.hasSodium || optStatus.hasLithium));
+
+                if (isAlreadyOptimized) {
+                    // Už je to optimalizováno -> schovat banner, žádný UI šum!
+                    if (quickOptBanner) quickOptBanner.style.display = 'none';
+                } else {
+                    // Profil ještě není optimalizován -> nabídnout 1-klik optimalizaci
+                    if (quickOptBanner) quickOptBanner.style.display = 'flex';
+                    const btnApplyOpt = document.getElementById('btnApplyProfileOptimization');
+                    const profileQuickOptDesc = document.getElementById('profileQuickOptDesc');
+                    if (btnApplyOpt) {
+                        btnApplyOpt.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Optimalizovat</span>';
+                        btnApplyOpt.classList.remove('btn-opt-done');
+                        btnApplyOpt.classList.add('mc-btn-green');
+                        btnApplyOpt.title = 'Nainstaluje doporučené optimalizační módy';
+                    }
+                    if (profileQuickOptDesc) {
+                        profileQuickOptDesc.textContent = 'Nainstaluje Sodium, Lithium a Iris pro maximální FPS a plynulost.';
+                    }
+                }
+            } catch (e) {
+                console.warn('Nelze ověřit stav optimalizace:', e);
+                if (quickOptBanner) quickOptBanner.style.display = 'none';
+            }
+        })();
+    }
+
+    // Interaktivní klikání na karty loaderu v nastavení profilu
+    document.querySelectorAll('#loaderCardsContainer .loader-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const ldr = card.dataset.loader;
+            document.querySelectorAll('#loaderCardsContainer .loader-card').forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+            const loaderSelect = document.getElementById('profileSettingsLoaderSelect');
+            if (loaderSelect) loaderSelect.value = ldr;
+        });
+    });
+
+    // Tlačítko pro aplikaci doporučené optimalizace v nastavení profilu
+    const btnApplyOpt = document.getElementById('btnApplyProfileOptimization');
+    if (btnApplyOpt) {
+        btnApplyOpt.addEventListener('click', async () => {
+            if (!activeSettingsProfileId) return;
+            const quickOptBanner = document.getElementById('profileQuickOptBanner');
+            btnApplyOpt.disabled = true;
+            btnApplyOpt.innerHTML = '<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> Optimalizuji...</span>';
+            try {
+                const res = await window.api.applyProfileOptimization(activeSettingsProfileId);
+                if (res && res.success) {
+                    showToast('Profil byl úspěšně optimalizován.', 'success');
+                    const loaderSelect = document.getElementById('profileSettingsLoaderSelect');
+                    if (loaderSelect) loaderSelect.value = 'fabric';
+                    document.querySelectorAll('#loaderCardsContainer .loader-card').forEach(c => {
+                        if (c.dataset.loader === 'fabric') c.classList.add('active');
+                        else c.classList.remove('active');
+                    });
+                    // Po úspěšné optimalizaci banner okamžitě schováme (žádný zbytečný UI šum "Optimalizováno")
+                    if (quickOptBanner) quickOptBanner.style.display = 'none';
+                } else {
+                    showToast(res?.error || 'Optimalizace selhala.', 'error');
+                    btnApplyOpt.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Optimalizovat</span>';
+                }
+            } catch (e) {
+                showToast('Chyba: ' + e.message, 'error');
+                btnApplyOpt.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Optimalizovat</span>';
+            } finally {
+                btnApplyOpt.disabled = false;
+                await loadConfiguration();
+                renderProfilesList();
+            }
+        });
+    }
+
+    function closeProfileSettingsModal() {
+        if (modalProfileSettings) modalProfileSettings.style.display = 'none';
+        const quickOptBanner = document.getElementById('profileQuickOptBanner');
+        if (quickOptBanner) quickOptBanner.style.display = 'none';
+        resetDeleteProfileButton();
+        activeSettingsProfileId = null;
+    }
+
+    if (btnCloseProfileSettingsModal) btnCloseProfileSettingsModal.addEventListener('click', closeProfileSettingsModal);
+    if (btnCancelProfileSettings) btnCancelProfileSettings.addEventListener('click', closeProfileSettingsModal);
+
+    // Quick profile subfolders
+    document.querySelectorAll('.btn-open-profile-subfolder').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!activeSettingsProfileId) return;
+            const sub = btn.dataset.subfolder || '';
+            await window.api.openProfileFolder(activeSettingsProfileId, sub);
+        });
+    });
+
+    if (btnSaveProfileSettings) {
+        btnSaveProfileSettings.addEventListener('click', async () => {
+            if (!activeSettingsProfileId) return;
+            const profile = (currentConfig.profiles || []).find(p => p.id === activeSettingsProfileId);
+            const isImported = Boolean(
+                profile && (
+                    profile.isImported ||
+                    (profile.id && profile.id.startsWith('imported-')) ||
+                    profile.icon === 'import' ||
+                    (profile.desc && profile.desc.includes('Importováno')) ||
+                    (profile.gameDir && (profile.gameDir.includes('instances') || profile.gameDir.includes('profiles')) && profile.id.includes('import'))
+                )
+            );
+
+            const isComingSoon = isComingSoonProfile(profile);
+            const nameInput = document.getElementById('profileSettingsNameInput');
+            const loaderSelect = document.getElementById('profileSettingsLoaderSelect');
+            const newName = nameInput ? nameInput.value.trim() : '';
+            const newRam = profileRamSliderController ? profileRamSliderController.getTarget() : (profileRamSlider ? parseInt(profileRamSlider.value, 10) : 4);
+            // U importovaných a Coming Soon profilů se zavaděč nemění ani nepřepisuje
+            const newLoader = (isImported || isComingSoon) ? ((profile && profile.loader) || (isComingSoon ? 'vanilla' : 'fabric')) : (loaderSelect ? loaderSelect.value : 'fabric');
+
+            const newJvm = document.getElementById('profileSettingsJvmArgsInput')?.value?.trim() || '';
+
+            await window.api.updateProfileSettings(activeSettingsProfileId, {
+                name: newName || 'Profil',
+                ramMax: newRam,
+                loader: newLoader,
+                jvmArgs: newJvm,
+                customJvmArgs: newJvm,
+                icon: activeSettingsProfileIcon
+            });
+
+            showToast('Nastavení profilu uloženo.', 'success');
+            closeProfileSettingsModal();
+            await loadConfiguration();
+            renderProfilesList();
+        });
+    }
+
+    let activeSettingsProfileIcon = 'sword';
+    document.querySelectorAll('#profileSettingsIconPicker .icon-picker-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            activeSettingsProfileIcon = btn.dataset.icon || 'sword';
+            document.querySelectorAll('#profileSettingsIconPicker .icon-picker-item').forEach(b => {
+                b.classList.toggle('active', b === btn);
+            });
+        });
+    });
+
+    let isDuplicatingProfile = false;
+
+    async function executeProfileDuplicate(pid) {
+        if (!pid || isDuplicatingProfile) return;
+        if (isRunning && runningProfileId === pid) {
+            showToast('Nelze duplikovat profil, který právě běží.', 'warning');
+            return;
+        }
+
+        isDuplicatingProfile = true;
+        const btnModalDup = document.getElementById('btnDuplicateCurrentProfile');
+        if (btnModalDup) {
+            btnModalDup.disabled = true;
+            btnModalDup.classList.add('mc-btn-disabled');
+        }
+        document.querySelectorAll('.btn-profile-duplicate').forEach(b => {
+            b.disabled = true;
+            b.classList.add('mc-btn-disabled');
+        });
+
+        try {
+            const res = await window.api.duplicateProfile(pid);
+            if (res && res.success) {
+                showToast(`Profil "${res.profile?.name || 'Kopie'}" byl úspěšně vytvořen.`, 'success');
+                await loadConfiguration();
+                if (res.activeProfileId) {
+                    currentConfig.activeProfileId = res.activeProfileId;
+                }
+                renderProfilesList();
+            } else {
+                showToast(res?.error || 'Duplikace profilu selhala.', 'error');
+            }
+        } catch (err) {
+            showToast('Chyba při duplikování profilu: ' + err.message, 'error');
+        } finally {
+            isDuplicatingProfile = false;
+            if (btnModalDup) {
+                btnModalDup.disabled = false;
+                btnModalDup.classList.remove('mc-btn-disabled');
+            }
+            document.querySelectorAll('.btn-profile-duplicate').forEach(b => {
+                b.disabled = false;
+                b.classList.remove('mc-btn-disabled');
+            });
+        }
+    }
+
+    const btnDuplicateCurrentProfile = document.getElementById('btnDuplicateCurrentProfile');
+    if (btnDuplicateCurrentProfile) {
+        btnDuplicateCurrentProfile.addEventListener('click', async () => {
+            if (!activeSettingsProfileId || isDuplicatingProfile) return;
+            const targetId = activeSettingsProfileId;
+            closeProfileSettingsModal();
+            await executeProfileDuplicate(targetId);
+        });
+    }
+
+    const btnShareProfileSeedFromSettings = document.getElementById('btnShareProfileSeedFromSettings');
+    if (btnShareProfileSeedFromSettings) {
+        btnShareProfileSeedFromSettings.addEventListener('click', () => {
+            if (!activeSettingsProfileId) return;
+            const targetId = activeSettingsProfileId;
+            closeProfileSettingsModal();
+            openProfileSeedModal(targetId);
+        });
+    }
+
+    if (btnDeleteCurrentProfile) {
+        btnDeleteCurrentProfile.addEventListener('click', async () => {
+            if (!activeSettingsProfileId) return;
+            const profile = (currentConfig.profiles || []).find(p => p.id === activeSettingsProfileId);
+            const pName = profile ? profile.name : activeSettingsProfileId;
+            if ((currentConfig.profiles || []).length <= 1) {
+                showToast('V launcheru musí zůstat alespoň jeden profil.', 'warning');
+                return;
+            }
+            if (isRunning && runningProfileId === activeSettingsProfileId) {
+                showToast('Nelze smazat profil, který právě běží. Nejprve ukonči hru.', 'warning');
+                return;
+            }
+            if (isLaunching && launchingProfileId === activeSettingsProfileId) {
+                showToast('Nelze smazat profil během stahování nebo spouštění.', 'warning');
+                return;
+            }
+            if (!confirm(`Opravdu chceš smazat a odinstalovat profil "${pName}"?\n\nTato akce profil trvale odstraní a odinstaluje soubory verze, které nepoužívá žádný jiný profil.`)) return;
+
+            btnDeleteCurrentProfile.disabled = true;
+            btnDeleteCurrentProfile.innerHTML = '<span>Probíhá mazání...</span>';
+
+            try {
+                const targetId = activeSettingsProfileId;
+                const res = await window.api.deleteProfile(targetId);
+                if (res && res.success) {
+                    showToast(`Profil "${pName}" byl smazán a odinstalován.`, 'success');
+                    // Okamžité pročištění profilu z paměti v rendereru
+                    currentConfig.profiles = (currentConfig.profiles || []).filter(p => p.id !== targetId);
+                    if (currentConfig.activeProfileId === targetId) {
+                        currentConfig.activeProfileId = res.activeProfileId || currentConfig.profiles[0]?.id || 'minecraft-26.3';
+                        hasUserManuallySelectedProfile = false;
+                    }
+                    closeProfileSettingsModal();
+                    await loadConfiguration();
+                    renderProfilesList();
+                } else {
+                    showToast(res?.error || 'Profil se nepodařilo smazat.', 'error');
+                }
+            } catch (err) {
+                showToast('Chyba při mazání profilu: ' + err.message, 'error');
+            } finally {
+                resetDeleteProfileButton();
+            }
+        });
+    }
+
+    const btnModalUpgradeProfile = document.getElementById('btnModalUpgradeProfile');
+    if (btnModalUpgradeProfile) {
+        btnModalUpgradeProfile.addEventListener('click', () => {
+            if (!activeSettingsProfileId) return;
+            const targetId = activeSettingsProfileId;
+            closeProfileSettingsModal();
+            openUpgradeModal(targetId);
+        });
+    }
+
+    // ── Danger Zone: Reset Launcher Data ────────────────────────────────────
+    const btnResetLauncherData = document.getElementById('btnResetLauncherData');
+    if (btnResetLauncherData) {
+        btnResetLauncherData.addEventListener('click', async () => {
+            const confirmReset = confirm(
+                'VAROVÁNÍ: Opravdu chceš smazat veškerá data launcheru?\n\n' +
+                'Tato akce vymaže všechny stažené verze, instance, konfigurace a vrátí launcher do výchozího stavu.'
+            );
+            if (!confirmReset) return;
+
+            btnResetLauncherData.disabled = true;
+            btnResetLauncherData.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Probíhá mazání dat...</span>';
+            appendLog('[RESET] Zahájeno mazání dat launcheru...');
+
+            try {
+                const res = await window.api.resetLauncherData();
+                if (res && res.success) {
+                    showToast('Data launcheru byla smazána a launcher resetován.', 'success');
+                    appendLog('[RESET] Tovární reset launcheru dokončen.');
+                    setTimeout(async () => {
+                        await loadConfiguration();
+                        renderProfilesList();
+                        alert('Data launcheru byla smazána.');
+                    }, 500);
+                } else {
+                    alert('Chyba při mazání dat: ' + (res.error || 'Neznámá chyba'));
+                }
+            } catch (e) {
+                alert('Chyba: ' + e.message);
+            } finally {
+                btnResetLauncherData.disabled = false;
+                btnResetLauncherData.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> <span>Smazat data launcheru</span>';
+            }
+        });
+    }
+
+    // ── Toast System ────────────────────────────────────────────────────────
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+        const toast = document.createElement('div');
+        toast.className = `toast-message ${type === 'error' ? 'toast-error' : type === 'info' ? 'toast-info' : ''}`;
+
+        let iconSvg = '';
+        if (type === 'error') {
+            iconSvg = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+        } else if (type === 'success') {
+            iconSvg = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+        } else {
+            iconSvg = '<svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+        }
+
+        // Strip any leading emoji remnants if passed dynamically
+        const cleanMessage = String(message).replace(/^[✓⚠️ℹ️🚀🎮🧹📌❌⚡🟢🟡⚪⏳⬇▶]+\s*/gu, '');
+
+        toast.innerHTML = `
+            <span class="toast-icon">${iconSvg}</span>
+            <span class="toast-text">${escapeHtml(cleanMessage)}</span>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 4000);
+    }
+
+    // ── Time Formatter (Real Timestamps & Steam-style Playtime) ─────────────
+    function formatPlaytime(seconds) {
+        if (!seconds || seconds < 60) return '0 min';
+        const mins = Math.floor(seconds / 60);
+        if (mins < 60) return `${mins} min`;
+        const hours = (seconds / 3600).toFixed(1);
+        const cleanHours = hours.endsWith('.0') ? parseInt(hours, 10) : hours;
+        return `${cleanHours} hod`;
+    }
+
+    function formatLastPlayed(timestamp) {
+        if (!timestamp) return 'Zatím nehráno';
+        const num = typeof timestamp === 'number' ? timestamp : parseInt(timestamp, 10);
+        if (isNaN(num)) return 'Zatím nehráno';
+        const diff = Date.now() - num;
+        if (diff < 60000) return 'Právě teď';
+        const mins = Math.floor(diff / 60000);
+        if (mins < 60) return `Před ${mins} min`;
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) return `Před ${hours} h`;
+        const days = Math.floor(hours / 24);
+        if (days === 1) return 'Včera';
+        if (days < 7) return `Před ${days} dny`;
+        const d = new Date(num);
+        return `${d.getDate()}.${d.getMonth() + 1}.`;
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    function temporaryButtonText(btn, tempHtml, duration = 2000) {
+        if (!btn) return;
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = tempHtml;
+        setTimeout(() => {
+            btn.innerHTML = originalHtml;
+        }, duration);
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    let bootSplashHandledUpdateCheck = true;
+
+    function normalizeLauncherVersion(ver) {
+        return String(ver || '').trim().replace(/^v/i, '');
+    }
+
+    function formatUpdateSizeMb(bytes) {
+        return `${(Math.max(0, Number(bytes) || 0) / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    async function runDiscordStyleBootUpdater() {
+        const splash = document.getElementById('bootSplash');
+        const fillEl = document.getElementById('bootSplashFill');
+        const statusEl = document.getElementById('bootSplashStatus');
+        const metaEl = document.getElementById('bootSplashMeta');
+        const versionEl = document.getElementById('bootSplashVersion');
+        const skipBtn = document.getElementById('bootSplashSkip');
+        const minBtn = document.getElementById('bootSplashMin');
+        const closeBtn = document.getElementById('bootSplashClose');
+
+        if (minBtn) minBtn.addEventListener('click', () => window.api?.minimizeWindow?.());
+        if (closeBtn) closeBtn.addEventListener('click', () => window.api?.closeWindow?.());
+
+        // Start loading configuration/UI behind the splash immediately
+        const configPromise = loadConfiguration().catch((e) => {
+            console.error('Chyba při načítání konfigurace:', e);
+        });
+
+        if (!splash) {
+            await configPromise;
+            bootSplashHandledUpdateCheck = false;
+            return;
+        }
+
+        const bootStartedAt = Date.now();
+        let bootSkipped = false;
+        let isBootAutoUpdating = false;
+        let splashDismissed = false;
+        let activeTargetVersion = '';
+
+        const setSplashState = (mode) => {
+            splash.classList.remove('is-complete', 'is-error');
+            if (fillEl) fillEl.classList.remove('is-complete', 'is-error');
+            if (mode === 'complete') {
+                splash.classList.add('is-complete');
+                if (fillEl) fillEl.classList.add('is-complete');
+            } else if (mode === 'error') {
+                splash.classList.add('is-error');
+                if (fillEl) fillEl.classList.add('is-error');
+            }
+        };
+
+        const setSplashProgress = (percent, indeterminate = false) => {
+            if (!fillEl) return;
+            if (indeterminate) {
+                fillEl.classList.add('is-indeterminate');
+            } else {
+                fillEl.classList.remove('is-indeterminate');
+                const clamped = Math.max(0, Math.min(100, Number(percent) || 0));
+                fillEl.style.width = `${clamped}%`;
+            }
+        };
+
+        const dismissBootSplash = async (delayMs = 0) => {
+            if (splashDismissed) return;
+            splashDismissed = true;
+            clearTimeout(skipRevealTimer);
+            if (skipBtn) skipBtn.style.display = 'none';
+
+            await configPromise;
+
+            if (delayMs > 0) {
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+            } else {
+                const elapsed = Date.now() - bootStartedAt;
+                const minVisualMs = 340;
+                if (elapsed < minVisualMs) {
+                    await new Promise((resolve) => setTimeout(resolve, minVisualMs - elapsed));
+                }
+            }
+
+            splash.classList.add('is-exiting');
+            setTimeout(() => {
+                splash.style.display = 'none';
+                resumeLauncherBackgroundActivity();
+                if (typeof updateAllSegmentedIndicators === 'function') {
+                    updateAllSegmentedIndicators();
+                }
+            }, 280);
+        };
+
+        const skipRevealTimer = setTimeout(() => {
+            if (!isBootAutoUpdating && !splashDismissed && skipBtn) {
+                skipBtn.style.display = 'inline-flex';
+            }
+        }, 3500);
+
+        if (skipBtn) {
+            skipBtn.addEventListener('click', () => {
+                if (isBootAutoUpdating || splashDismissed) return;
+                bootSkipped = true;
+                if (statusEl) statusEl.textContent = 'Spouštím SMPClient...';
+                if (metaEl) metaEl.textContent = '';
+                setSplashProgress(100, false);
+                dismissBootSplash();
+            });
+        }
+
+        // Listen for live Tauri update-progress events while applying startup update
+        if (window.api && window.api.onUpdateProgress) {
+            window.api.onUpdateProgress((data) => {
+                if (!isBootAutoUpdating || splashDismissed || !data) return;
+                const pct = Math.max(0, Math.min(100, Math.round(Number(data.percent) || 0)));
+
+                if (data.status === 'downloading') {
+                    setSplashProgress(Math.max(4, pct), false);
+                    if (statusEl) {
+                        statusEl.textContent = activeTargetVersion
+                            ? `Stahuji aktualizaci v${activeTargetVersion}...`
+                            : 'Stahuji aktualizaci...';
+                    }
+                    if (metaEl) {
+                        const cur = formatUpdateSizeMb(data.current);
+                        if (Number(data.total) > 1) {
+                            metaEl.textContent = `${cur} / ${formatUpdateSizeMb(data.total)} · ${pct}%`;
+                        } else {
+                            metaEl.textContent = cur;
+                        }
+                    }
+                } else if (data.status === 'extracting') {
+                    setSplashProgress(94, false);
+                    if (statusEl) statusEl.textContent = 'Rozbaluji a instaluji aktualizaci...';
+                    if (metaEl) metaEl.textContent = '94%';
+                } else if (data.status === 'installing') {
+                    setSplashState('complete');
+                    setSplashProgress(100, false);
+                    if (statusEl) statusEl.textContent = 'Aktualizace je připravena! Restartuji...';
+                    if (metaEl) metaEl.textContent = activeTargetVersion ? `v${activeTargetVersion}` : '100%';
+                }
+            });
+        }
+
+        let bootFlags = null;
+        try {
+            if (window.api && window.api.getBootFlags) {
+                bootFlags = await window.api.getBootFlags();
+                if (bootFlags && bootFlags.version) {
+                    const bootVer = normalizeLauncherVersion(bootFlags.version);
+                    if (versionEl) {
+                        versionEl.textContent = `v${bootVer}`;
+                    }
+                    const versionStatus = document.getElementById('launcherVersionStatus');
+                    if (versionStatus && bootVer) {
+                        versionStatus.innerHTML = `Nainstalovaná verze: <strong>v${escapeHtml(bootVer)}</strong>`;
+                    }
+                }
+            }
+        } catch (_) { }
+
+        let update = null;
+        if (window.api && window.api.checkForUpdates) {
+            try {
+                update = await Promise.race([
+                    window.api.checkForUpdates().catch(() => null),
+                    new Promise((resolve) => setTimeout(() => resolve(null), 7500)),
+                ]);
+            } catch (_) {
+                update = null;
+            }
+        }
+
+        if (bootSkipped || splashDismissed) return;
+
+        // Sync topbar update chip state smoothly with boot check result
+        const chip = document.getElementById('updateChip');
+        const latestVer = normalizeLauncherVersion(update?.latestVersion);
+        const currentVer = normalizeLauncherVersion(update?.currentVersion || bootFlags?.version);
+        if (versionEl && currentVer && !update?.hasUpdate) {
+            versionEl.textContent = `v${currentVer}`;
+        }
+
+        const versionStatus = document.getElementById('launcherVersionStatus');
+        if (update && update.hasUpdate) {
+            pendingUpdateData = update;
+            if (chip) chip.style.display = 'flex';
+            if (versionStatus && currentVer) {
+                versionStatus.innerHTML = `Nainstalovaná verze: <strong>v${escapeHtml(currentVer)}</strong> • <span style="color:#60a5fa;">Dostupná v${escapeHtml(latestVer)}</span>`;
+            }
+        } else {
+            if (chip) chip.style.display = 'none';
+            if (versionStatus && currentVer) {
+                versionStatus.innerHTML = `Nainstalovaná verze: <strong>v${escapeHtml(currentVer)}</strong>${update ? ' • <span style="color: #94a3b8;">Aktuální</span>' : ''}`;
+            }
+        }
+
+        const postUpdateTag = normalizeLauncherVersion(bootFlags?.postUpdateTag);
+        const blockedByPostUpdateGuard = Boolean(
+            bootFlags?.isPostUpdate && (!postUpdateTag || !latestVer || postUpdateTag === latestVer)
+        );
+        const canAutoUpdate = Boolean(
+            update &&
+            update.hasUpdate &&
+            update.downloadUrl &&
+            !blockedByPostUpdateGuard
+        );
+
+        if (canAutoUpdate) {
+            isBootAutoUpdating = true;
+            isUpdatingCurrently = true;
+            activeTargetVersion = latestVer;
+            clearTimeout(skipRevealTimer);
+            if (skipBtn) skipBtn.style.display = 'none';
+
+            if (versionEl && currentVer && latestVer) {
+                versionEl.innerHTML = `
+                    <span>v${escapeHtml(currentVer)}</span>
+                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" aria-hidden="true" style="stroke:#0a67e5;">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                    <span class="smp-boot-version-new">v${escapeHtml(latestVer)}</span>
+                `;
+            }
+            if (statusEl) statusEl.textContent = `Nalezena aktualizace v${latestVer}...`;
+            if (metaEl) metaEl.textContent = 'Připravuji stahování...';
+            setSplashProgress(4, false);
+
+            try {
+                const res = await window.api.applyUpdate(update.downloadUrl);
+                if (res && res.applied) {
+                    setSplashState('complete');
+                    setSplashProgress(100, false);
+                    if (statusEl) statusEl.textContent = 'Aktualizace nainstalována! Restartuji SMPClient...';
+                    if (metaEl) metaEl.textContent = `v${latestVer}`;
+
+                    await new Promise((resolve) => setTimeout(resolve, 480));
+                    await window.api.restartLauncher(latestVer);
+                    return;
+                }
+
+                const errMsg = res?.error || 'Instalaci aktualizace se nepodařilo dokončit.';
+                setSplashState('error');
+                setSplashProgress(100, false);
+                if (statusEl) statusEl.textContent = 'Aktualizaci se nepodařilo nainstalovat';
+                if (metaEl) metaEl.textContent = 'Spouštím aktuální verzi...';
+                isUpdatingCurrently = false;
+                isBootAutoUpdating = false;
+                await dismissBootSplash(1100);
+                showToast(`Automatická aktualizace selhala: ${errMsg}`, 'error');
+                return;
+            } catch (err) {
+                setSplashState('error');
+                setSplashProgress(100, false);
+                if (statusEl) statusEl.textContent = 'Chyba při aktualizaci';
+                if (metaEl) metaEl.textContent = 'Spouštím aktuální verzi...';
+                isUpdatingCurrently = false;
+                isBootAutoUpdating = false;
+                await dismissBootSplash(1100);
+                showToast(`Chyba aktualizace: ${err?.message || err}`, 'error');
+                return;
+            }
+        }
+
+        // No update / offline / post-update pass-through
+        setSplashState('complete');
+        setSplashProgress(100, false);
+        if (statusEl) {
+            statusEl.textContent = update?.offline
+                ? 'Offline režim — spouštím SMPClient...'
+                : 'Klient je připraven';
+        }
+        if (metaEl) metaEl.textContent = '';
+
+        await dismissBootSplash(0);
+    }
+
+    // Initialize with Discord-style startup auto-update splash
+    await runDiscordStyleBootUpdater();
+});
