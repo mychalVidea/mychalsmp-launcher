@@ -138,12 +138,24 @@ pub fn get_curated_skin_catalog() -> Value {
     })
 }
 
+pub fn is_valid_png_bytes(bytes: &[u8]) -> bool {
+    const PNG_SIG: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    bytes.len() >= 24 && bytes.len() <= 5 * 1024 * 1024 && bytes.starts_with(&PNG_SIG)
+}
+
 pub fn file_to_data_url(path: &Path) -> Option<String> {
+    let meta = fs::metadata(path).ok()?;
+    if meta.len() == 0 || meta.len() > 5 * 1024 * 1024 {
+        return None;
+    }
     let bytes = fs::read(path).ok()?;
+    if !is_valid_png_bytes(&bytes) {
+        return None;
+    }
     Some(format!("data:image/png;base64,{}", BASE64.encode(bytes)))
 }
 
-fn sync_local_selfnametag_skin(skin_bytes: Option<&[u8]>, cape_bytes: Option<&[u8]>) {
+pub fn sync_local_selfnametag_skin(skin_bytes: Option<&[u8]>, cape_bytes: Option<&[u8]>) {
     let cfg = load_config();
     let base_dir = cfg
         .get("gameDirectory")
@@ -244,6 +256,9 @@ pub async fn upload_custom_skin_file(file_path: &str, variant: &str) -> Value {
         Ok(b) => b,
         Err(e) => return json!({ "success": false, "error": format!("Nelze přečíst soubor: {}", e) }),
     };
+    if !is_valid_png_bytes(&bytes) {
+        return json!({ "success": false, "error": "Vybraný soubor není platný PNG obrázek skinu (max 5 MB)." });
+    }
 
     let skins_dir = get_default_game_dir().join("skins");
     let _ = fs::create_dir_all(&skins_dir);
@@ -253,54 +268,112 @@ pub async fn upload_custom_skin_file(file_path: &str, variant: &str) -> Value {
 
     let cfg = load_config();
     let variant_norm = if variant.eq_ignore_ascii_case("slim") { "slim" } else { "classic" };
+    let data_url = format!("data:image/png;base64,{}", BASE64.encode(&bytes));
 
     if cfg.get("authType").and_then(|v| v.as_str()) == Some("microsoft") {
-        if let Ok(ms) = refresh_microsoft_session(false).await {
-            if let Some(token) = ms.get("accessToken").and_then(|v| v.as_str()) {
-                let part = match Part::bytes(bytes.clone())
-                    .file_name("skin.png")
-                    .mime_str("image/png")
-                {
-                    Ok(p) => p,
-                    Err(e) => return json!({ "success": false, "error": e.to_string() }),
-                };
-                let form = Form::new()
-                    .text("variant", variant_norm.to_string())
-                    .part("file", part);
+        let ms = match refresh_microsoft_session(false).await {
+            Ok(v) => v,
+            Err(e) => return json!({ "success": false, "error": format!("Microsoft relace vypršela: {}", e) }),
+        };
+        let Some(token) = ms.get("accessToken").and_then(|v| v.as_str()) else {
+            return json!({ "success": false, "error": "Chybí přístupový token Microsoft účtu. Přihlas se prosím znovu." });
+        };
 
-                let client = reqwest::Client::new();
-                if let Ok(resp) = client
-                    .post("https://api.minecraftservices.com/minecraft/profile/skins")
-                    .bearer_auth(token)
-                    .multipart(form)
-                    .send()
-                    .await
+        let part = match Part::bytes(bytes.clone())
+            .file_name("skin.png")
+            .mime_str("image/png")
+        {
+            Ok(p) => p,
+            Err(e) => return json!({ "success": false, "error": e.to_string() }),
+        };
+        let form = Form::new()
+            .text("variant", variant_norm.to_string())
+            .part("file", part);
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(20))
+            .build()
+            .unwrap_or_default();
+        let resp = match client
+            .post("https://api.minecraftservices.com/minecraft/profile/skins")
+            .bearer_auth(token)
+            .multipart(form)
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => return json!({ "success": false, "error": format!("Nepodařilo se spojit se servery Mojang: {}", e) }),
+        };
+
+        let status = resp.status();
+        if status.is_success() {
+            let mut resolved_url = data_url.clone();
+            if let Ok(profile) = resp.json::<Value>().await {
+                if let Some(active_url) = profile
+                    .get("skins")
+                    .and_then(|v| v.as_array())
+                    .and_then(|arr| {
+                        arr.iter()
+                            .find(|s| s.get("state").and_then(|v| v.as_str()) == Some("ACTIVE"))
+                            .or_else(|| arr.first())
+                    })
+                    .and_then(|s| s.get("url").and_then(|v| v.as_str()))
                 {
-                    if resp.status().is_success() {
-                        return json!({
-                            "success": true,
-                            "mode": "microsoft",
-                            "skinDataUrl": format!("data:image/png;base64,{}", BASE64.encode(&bytes)),
-                            "variant": variant_norm
-                        });
+                    if !active_url.is_empty() {
+                        resolved_url = active_url.to_string();
                     }
                 }
             }
+
+            let mut ms_acc = cfg.get("microsoftAccount").cloned().unwrap_or_else(|| json!({}));
+            if ms_acc.is_object() {
+                ms_acc["skinUrl"] = json!(resolved_url);
+            }
+            save_config(&json!({
+                "customSkinVariant": variant_norm,
+                "customSkinPath": Value::Null,
+                "microsoftAccount": ms_acc
+            }));
+
+            return json!({
+                "success": true,
+                "mode": "microsoft",
+                "skin": {
+                    "url": resolved_url,
+                    "variant": variant_norm
+                },
+                "skinDataUrl": data_url,
+                "variant": variant_norm
+            });
         }
+
+        let err_body = resp.text().await.unwrap_or_default();
+        return json!({
+            "success": false,
+            "error": format!("Mojang odmítl nahrání skinu (HTTP {}). Zkontroluj rozměry 64x64/64x32 PNG. {}", status.as_u16(), err_body.chars().take(120).collect::<String>())
+        });
     }
 
-    let data_url = format!("data:image/png;base64,{}", BASE64.encode(&bytes));
     let mut offline_skin = cfg.get("offlineSkin").cloned().unwrap_or_else(|| json!({}));
     offline_skin["presetId"] = json!("custom");
     offline_skin["customFilePath"] = json!(local_copy.to_string_lossy().to_string());
     offline_skin["skinUrl"] = json!(data_url);
     offline_skin["variant"] = json!(variant_norm);
     offline_skin["skinName"] = json!("Vlastní skin");
-    save_config(&json!({ "offlineSkin": offline_skin }));
+    save_config(&json!({
+        "offlineSkin": offline_skin,
+        "customSkinPath": local_copy.to_string_lossy().to_string(),
+        "customSkinVariant": variant_norm
+    }));
 
     json!({
         "success": true,
         "mode": "offline",
+        "skin": {
+            "url": data_url,
+            "variant": variant_norm
+        },
+        "customSkinPath": local_copy.to_string_lossy().to_string(),
         "skinDataUrl": data_url,
         "variant": variant_norm
     })
@@ -446,4 +519,42 @@ pub async fn set_local_offline_cape(cape_value: &str) -> Value {
 
     json!({ "success": true, "cape": cape_value })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_valid_png_bytes_accepts_valid_and_rejects_invalid() {
+        let mut valid_png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        valid_png.extend_from_slice(&[0u8; 24]);
+        assert!(is_valid_png_bytes(&valid_png));
+
+        assert!(!is_valid_png_bytes(b"not a png file at all 12345678"));
+        assert!(!is_valid_png_bytes(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+        let huge = vec![0x89u8; 5 * 1024 * 1024 + 1];
+        assert!(!is_valid_png_bytes(&huge));
+    }
+
+    #[test]
+    fn test_file_to_data_url_validates_png_signature() {
+        let tmp_dir = std::env::temp_dir().join(format!("mychalsmp_skin_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp_dir);
+        fs::create_dir_all(&tmp_dir).unwrap();
+
+        let bad_file = tmp_dir.join("bad.png");
+        fs::write(&bad_file, b"<html>error</html>12345678").unwrap();
+        assert!(file_to_data_url(&bad_file).is_none());
+
+        let good_file = tmp_dir.join("good.png");
+        let mut png_bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        png_bytes.extend_from_slice(&[1u8; 20]);
+        fs::write(&good_file, &png_bytes).unwrap();
+        let data_url = file_to_data_url(&good_file).unwrap();
+        assert!(data_url.starts_with("data:image/png;base64,"));
+
+        let _ = fs::remove_dir_all(&tmp_dir);
+    }
+}
+
 

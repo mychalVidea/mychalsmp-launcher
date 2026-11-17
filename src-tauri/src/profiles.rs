@@ -692,17 +692,24 @@ pub fn discover_installed_profiles() -> Vec<Value> {
     candidates.into_iter().take(10).collect()
 }
 
-/// Opens a directory picker dialog and scans the selected folder.
-pub fn import_profile_dialog(app: &AppHandle) -> Value {
-    if let Some(folder_path) = app.dialog().file().blocking_pick_folder() {
-        let p = folder_path.as_path().unwrap_or_else(|| Path::new(""));
-        match scan_instance_directory(p) {
-            Ok(scan) => json!({ "canceled": false, "scan": scan }),
-            Err(e) => json!({ "canceled": false, "error": e }),
+/// Opens a directory picker dialog off the main thread and scans the selected folder.
+pub async fn import_profile_dialog(app: &AppHandle) -> Value {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .pick_folder(move |folder_path| {
+            let _ = tx.send(folder_path);
+        });
+    if let Ok(Some(folder_path)) = rx.await {
+        if let Some(p) = folder_path.as_path().map(|p| p.to_path_buf()) {
+            return match tokio::task::spawn_blocking(move || scan_instance_directory(&p)).await {
+                Ok(Ok(scan)) => json!({ "canceled": false, "scan": scan }),
+                Ok(Err(e)) => json!({ "canceled": false, "error": e }),
+                Err(e) => json!({ "canceled": false, "error": format!("Chyba při skenování složky: {}", e) }),
+            };
         }
-    } else {
-        json!({ "canceled": true })
     }
+    json!({ "canceled": true })
 }
 
 /// Confirms the import of an external instance into MYCHAL SMP Launcher.
@@ -965,6 +972,22 @@ pub async fn upgrade_profile(
 
             let slug = mod_id.unwrap_or_else(|| extract_mod_slug_from_filename(&clean_jar_name));
             let display_name = mod_name.unwrap_or_else(|| slug.clone());
+            let loader = source_profile
+                .get("loader")
+                .and_then(|v| v.as_str())
+                .unwrap_or("fabric");
+
+            if slug.eq_ignore_ascii_case("selfnametag") {
+                if crate::mods::ensure_core_smpclient_mods(app, &target_game_dir, loader).is_ok() {
+                    upgraded_mods.push(json!({
+                        "oldFile": file,
+                        "newFile": crate::mods::CORE_SELFNAMETAG_FILENAME,
+                        "name": display_name,
+                        "version": "1.0.0"
+                    }));
+                }
+                continue;
+            }
 
             let percent = 30 + (idx as u32 * 60 / total.max(1) as u32);
             if let Some(a) = app {
@@ -978,10 +1001,6 @@ pub async fn upgrade_profile(
             }
 
             // Query Modrinth
-            let loader = source_profile
-                .get("loader")
-                .and_then(|v| v.as_str())
-                .unwrap_or("fabric");
             let direct_url = format!(
                 "https://api.modrinth.com/v2/project/{}/version?game_versions={}&loaders={}",
                 urlencoding::encode(&slug),
@@ -1073,6 +1092,8 @@ pub async fn upgrade_profile(
         .get("loader")
         .and_then(|v| v.as_str())
         .unwrap_or("fabric");
+
+    let _ = crate::mods::ensure_core_smpclient_mods(app, &target_game_dir, loader);
 
     let desc_text = if !disabled_mods.is_empty() {
         format!(

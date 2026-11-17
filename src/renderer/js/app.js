@@ -1062,7 +1062,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             } catch (_) { }
 
-            // Automatické pročištění starého defaultního canvas pláště z konfigurace
+            // Pročištění neplatných typů po starších verzích a defaultního canvas pláště
+            if (currentConfig && typeof currentConfig.customSkinPath !== 'string') {
+                currentConfig.customSkinPath = null;
+            }
+            if (currentConfig && typeof currentConfig.customCapePath !== 'string') {
+                currentConfig.customCapePath = null;
+            }
             if (currentConfig && currentConfig.customCapePath && (
                 currentConfig.customCapePath.startsWith('data:image') ||
                 currentConfig.customCapePath === 'default' ||
@@ -1748,13 +1754,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Labels for offline paths
         if (skinPathLabel) {
-            skinPathLabel.textContent = currentConfig.customSkinPath
-                ? currentConfig.customSkinPath.split(/[\/\\]/).pop()
+            const safeSkinPath = typeof currentConfig.customSkinPath === 'string' ? currentConfig.customSkinPath : '';
+            skinPathLabel.textContent = safeSkinPath
+                ? safeSkinPath.split(/[\/\\]/).pop()
                 : 'Výchozí skin';
         }
         if (capePathLabel) {
-            capePathLabel.textContent = currentConfig.customCapePath
-                ? (currentConfig.customCapePath.startsWith('http') ? 'Vybraný plášť' : currentConfig.customCapePath.split(/[\/\\]/).pop())
+            const safeCapePath = typeof currentConfig.customCapePath === 'string' ? currentConfig.customCapePath : '';
+            capePathLabel.textContent = safeCapePath
+                ? (safeCapePath.startsWith('http') ? 'Vybraný plášť' : safeCapePath.split(/[\/\\]/).pop())
                 : 'Žádný plášť';
         }
 
@@ -4763,7 +4771,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Load installed mods, resource packs, and shaders for selected profile
-    async function loadProfileMods(profileId) {
+    async function loadProfileMods(profileId, { skipCatalogRerender = false } = {}) {
         const listEl = document.getElementById('installedModsList');
         const countEl = document.getElementById('installedModsCount');
         const summaryEl = document.getElementById('installedModsSummary');
@@ -4775,7 +4783,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        listEl.innerHTML = `<div class="mods-loading">Načítám nainstalované položky profilu...</div>`;
+        if (!skipCatalogRerender) {
+            listEl.innerHTML = `<div class="mods-loading">Načítám nainstalované položky profilu...</div>`;
+        }
 
         try {
             const res = await window.api.getProfileMods(profId);
@@ -4849,8 +4859,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             renderFilteredInstalledItems();
-            // VŽDY aktualizujeme i karty v katalogu, aby se okamžitě projevil smazaný mód
-            if (lastLoadedCatalogMods && lastLoadedCatalogMods.length > 0) {
+            // Katalog překreslíme jen při plné synchronizaci (nikoliv u dílčího stažení/smazání, kde se karta obnoví in-place)
+            if (!skipCatalogRerender && lastLoadedCatalogMods && lastLoadedCatalogMods.length > 0) {
                 renderModCards(lastLoadedCatalogMods);
             }
         } catch (e) {
@@ -4944,16 +4954,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                     </div>
                 </div>
                 <div class="mod-row-actions">
-                    <button type="button" class="btn-mod-toggle ${m.enabled ? 'btn-disable' : 'btn-enable'}"
-                        data-filename="${escapeHtml(m.filename)}"
-                        title="${m.enabled ? 'Deaktivovat mód' : 'Aktivovat mód'}">
-                        <span>${m.enabled ? 'Vypnout' : 'Zapnout'}</span>
-                    </button>
-                    <button type="button" class="btn-mod-delete"
-                        data-filename="${escapeHtml(m.filename)}"
-                        title="Smazat soubor módu">
-                        <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Smazat</span>
-                    </button>
+                    ${m.isCore
+                    ? `<span style="color: var(--brand-gray); font-size: 12px; font-weight: 500;">Jádro SMPClient</span>`
+                    : `<button type="button" class="btn-mod-toggle ${m.enabled ? 'btn-disable' : 'btn-enable'}"
+                            data-filename="${escapeHtml(m.filename)}"
+                            title="${m.enabled ? 'Deaktivovat mód' : 'Aktivovat mód'}">
+                            <span>${m.enabled ? 'Vypnout' : 'Zapnout'}</span>
+                        </button>
+                        <button type="button" class="btn-mod-delete"
+                            data-filename="${escapeHtml(m.filename)}"
+                            title="Smazat soubor módu">
+                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Smazat</span>
+                        </button>`
+                }
                 </div>
             </div>
             `;
@@ -5372,6 +5385,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const catalogLimit = 24;
     let isCatalogLoading = false;
     let hasMoreCatalogMods = true;
+    let catalogRequestSeq = 0;
+    let hasInitialProfileInventoryLoaded = false;
+    let catalogScrollRaf = null;
+    let catalogEventsBound = false;
+    const pendingModProgressMap = new Map();
+    let modProgressFlushRaf = null;
 
     function getModCardSkeletonsHtml(count = 6) {
         let html = '';
@@ -5412,8 +5431,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function loadModrinthMods(reset = true) {
         if (!modsCardsList) return;
+        if (!reset && (isCatalogLoading || !hasMoreCatalogMods)) return;
+
+        const reqSeq = ++catalogRequestSeq;
         let infiniteSkeletonsEl = null;
 
+        isCatalogLoading = true;
         if (reset) {
             catalogOffset = 0;
             hasMoreCatalogMods = true;
@@ -5426,18 +5449,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             modsCardsList.appendChild(infiniteSkeletonsEl);
         }
 
-        if (isCatalogLoading) {
-            if (infiniteSkeletonsEl && infiniteSkeletonsEl.parentNode) {
-                infiniteSkeletonsEl.remove();
-            }
-            return;
-        }
-        isCatalogLoading = true;
-
         try {
-            // VŽDY načteme aktuální položky profilu (módy, resource packy i shadery) přímo z disku
+            // Inventář profilu načítáme jen při prvním/reset načtení, nikoliv při každém scrollu další stránky
             const profId = selectedModsProfileId || currentConfig.activeProfileId;
-            if (profId) {
+            if (profId && (reset || !hasInitialProfileInventoryLoaded)) {
                 try {
                     const pRes = await window.api.getProfileMods(profId);
                     if (pRes && pRes.success) {
@@ -5458,6 +5473,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         currentProfileShadersList = shRes.packs || [];
                     }
                 } catch (_) { }
+
+                hasInitialProfileInventoryLoaded = true;
             }
 
             const mods = await window.api.searchModrinth(
@@ -5470,6 +5487,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 catalogLimit
             );
 
+            // Zahození zastaralé odpovědi, pokud uživatel mezitím změnil filtr nebo vyhledávání
+            if (reqSeq !== catalogRequestSeq) {
+                return;
+            }
+
             const received = Array.isArray(mods)
                 ? mods
                 : (mods && Array.isArray(mods.hits) ? mods.hits : []);
@@ -5477,33 +5499,53 @@ document.addEventListener('DOMContentLoaded', async () => {
                 hasMoreCatalogMods = false;
             }
 
-            if (reset) {
-                lastLoadedCatalogMods = received;
-            } else {
-                lastLoadedCatalogMods = [...lastLoadedCatalogMods, ...received];
+            if (infiniteSkeletonsEl && infiniteSkeletonsEl.parentNode) {
+                infiniteSkeletonsEl.remove();
+                infiniteSkeletonsEl = null;
             }
 
             catalogOffset += received.length;
-            renderModCards(lastLoadedCatalogMods);
-        } catch (e) {
+
             if (reset) {
+                lastLoadedCatalogMods = received;
+                renderModCards(lastLoadedCatalogMods);
+            } else {
+                const seenIds = new Set(lastLoadedCatalogMods.map(x => x && (x.id || x.project_id || x.slug)).filter(Boolean));
+                const newlyAdded = [];
+                for (const item of received) {
+                    if (!item || typeof item !== 'object') continue;
+                    if (!item.id) item.id = item.project_id || item.slug || '';
+                    if (!item.latest_game_versions && Array.isArray(item.versions)) {
+                        item.latest_game_versions = item.versions;
+                    }
+                    if (!item.id || seenIds.has(item.id)) continue;
+                    seenIds.add(item.id);
+                    lastLoadedCatalogMods.push(item);
+                    newlyAdded.push(item);
+                }
+                appendModCards(newlyAdded);
+            }
+        } catch (e) {
+            if (reset && reqSeq === catalogRequestSeq) {
                 modsCardsList.innerHTML = `<div class="mods-loading">Nepodařilo se načíst data z katalogu.</div>`;
             }
         } finally {
             if (infiniteSkeletonsEl && infiniteSkeletonsEl.parentNode) {
                 infiniteSkeletonsEl.remove();
             }
-            isCatalogLoading = false;
+            if (reqSeq === catalogRequestSeq) {
+                isCatalogLoading = false;
+            }
         }
     }
 
     // Apple-style circular progress overlay on mod avatar & pre-launch download progress bar
     if (window.api && window.api.onModDownloadProgress) {
-        window.api.onModDownloadProgress((data) => {
-            if (!data) return;
-
-            if (data.id) {
-                const boxes = document.querySelectorAll(`.mod-avatar-box[data-mod-id="${CSS.escape(data.id)}"]`);
+        const flushPendingModProgress = () => {
+            modProgressFlushRaf = null;
+            const listRoot = modsCardsList || document;
+            pendingModProgressMap.forEach((data, modId) => {
+                const boxes = listRoot.querySelectorAll(`.mod-avatar-box[data-mod-id="${CSS.escape(modId)}"]`);
                 boxes.forEach(box => {
                     const ov = box.querySelector('.apple-progress-overlay');
                     const bar = box.querySelector('.apple-progress-bar');
@@ -5515,6 +5557,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                         bar.style.strokeDashoffset = offset;
                     }
                 });
+            });
+            pendingModProgressMap.clear();
+        };
+
+        window.api.onModDownloadProgress((data) => {
+            if (!data) return;
+
+            if (data.id) {
+                pendingModProgressMap.set(String(data.id), data);
+                if (!modProgressFlushRaf) {
+                    modProgressFlushRaf = requestAnimationFrame(flushPendingModProgress);
+                }
             }
 
             // Živá aktualizace download progress baru během stahování módů před spuštěním hry
@@ -5537,20 +5591,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    function renderModCards(mods) {
-        if (!modsCardsList) return;
+    function resolveCatalogRenderContext(mods) {
         const rawList = (Array.isArray(mods) ? mods : (mods && Array.isArray(mods.hits) ? mods.hits : [])).map(m => {
             if (!m || typeof m !== 'object') return m;
             if (!m.id) m.id = m.project_id || m.slug || '';
             if (!m.latest_game_versions && Array.isArray(m.versions)) m.latest_game_versions = m.versions;
             return m;
         });
-        if (!rawList || rawList.length === 0) {
-            modsCardsList.innerHTML = `<div class="mods-loading">Nenalezeny žádné položky odpovídající hledání.</div>`;
-            const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
-            if (btnUpdateAll) btnUpdateAll.style.display = 'none';
-            return;
-        }
 
         const targetProfile = (currentConfig.profiles || []).find(p => p.id === (selectedModsProfileId || currentConfig.activeProfileId));
         const activeFilterVer = currentModFilter.version === 'all'
@@ -5558,101 +5605,92 @@ document.addEventListener('DOMContentLoaded', async () => {
             : (currentModFilter.version || targetProfile?.version || '26.3');
         const targetMcVersion = targetProfile?.version || activeFilterVer || '26.3';
 
-        // Pokud je vybrána konkrétní verze hry, zobrazujeme v katalogu výhradně mody kompatibilní s touto verzí
-        const displayMods = !activeFilterVer
-            ? rawList
-            : rawList.filter(m => {
-                const vers = (Array.isArray(m.versions) && m.versions.length > 0)
-                    ? m.versions
-                    : m.latest_game_versions;
-                if (!vers || !Array.isArray(vers) || vers.length === 0) return false;
-                return vers.includes(activeFilterVer);
-            });
-
-        if (displayMods.length === 0) {
-            modsCardsList.innerHTML = `<div class="mods-loading">Pro verzi MC ${escapeHtml(activeFilterVer || targetMcVersion)} nebyly nalezeny žádné kompatibilní položky.</div>`;
-            const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
-            if (btnUpdateAll) btnUpdateAll.style.display = 'none';
-            return;
-        }
-
-        const updateableMods = [];
-
-        // Vybereme správný seznam nainstalovaných položek podle aktivního typu projektu
         const activeInstalledList = currentModFilter.projectType === 'shader'
             ? currentProfileShadersList
             : (currentModFilter.projectType === 'resourcepack' ? currentProfileResourcePacksList : currentProfileModsList);
 
-        modsCardsList.innerHTML = displayMods.map(m => {
-            const installedMod = findInstalledModForCatalog(m, activeInstalledList);
-            // Zásadní oprava: Zda je položka nainstalována, závisí VÝHRADNĚ na tom, zda skutečně existuje v profilu!
-            const isInstalled = !!installedMod;
-            const currentVer = installedMod ? (installedMod.version || '') : '';
-            const latestVer = m.latest_version_number || '';
+        return { rawList, targetProfile, activeFilterVer, targetMcVersion, activeInstalledList };
+    }
 
-            // Kontrola, zda nová verze podporuje stejnou verzi hry:
-            // Pokud je nová verze pro jinou verzi MC, neukazujeme aktualizaci, ale "Staženo" / "Nainstalováno"
-            const latestSupportsOurMc = !m.latest_game_versions || m.latest_game_versions.length === 0 || m.latest_game_versions.includes(targetMcVersion);
-            const isCompatibleWithTarget = latestSupportsOurMc;
-            const displayVersionTag = (m.latest_game_versions && m.latest_game_versions.length > 0)
-                ? (m.latest_game_versions.includes(targetMcVersion) ? targetMcVersion : m.latest_game_versions[m.latest_game_versions.length - 1])
-                : (currentModFilter.version || targetMcVersion);
-            const hasUpdate = isInstalled && isModVersionNewer(latestVer, currentVer) && latestSupportsOurMc;
+    function filterCatalogModsList(list, activeFilterVer) {
+        if (!activeFilterVer) return list;
+        return list.filter(m => {
+            const vers = (Array.isArray(m.versions) && m.versions.length > 0)
+                ? m.versions
+                : m.latest_game_versions;
+            if (!vers || !Array.isArray(vers) || vers.length === 0) return false;
+            return vers.includes(activeFilterVer);
+        });
+    }
 
-            if (hasUpdate) {
-                updateableMods.push({ mod: m, installedMod });
-            }
+    function buildSingleModCardHtml(m, ctx) {
+        const { targetMcVersion, activeInstalledList } = ctx;
+        const installedMod = findInstalledModForCatalog(m, activeInstalledList);
+        const isInstalled = !!installedMod;
+        const currentVer = installedMod ? (installedMod.version || '') : '';
+        const latestVer = m.latest_version_number || '';
+        const latestSupportsOurMc = !m.latest_game_versions || m.latest_game_versions.length === 0 || m.latest_game_versions.includes(targetMcVersion);
+        const isCompatibleWithTarget = latestSupportsOurMc;
+        const displayVersionTag = (m.latest_game_versions && m.latest_game_versions.length > 0)
+            ? (m.latest_game_versions.includes(targetMcVersion) ? targetMcVersion : m.latest_game_versions[m.latest_game_versions.length - 1])
+            : (currentModFilter.version || targetMcVersion);
+        const hasUpdate = isInstalled && isModVersionNewer(latestVer, currentVer) && latestSupportsOurMc;
 
-            const downloadsFormatted = m.downloads > 1000000
-                ? (m.downloads / 1000000).toFixed(1) + 'M'
-                : (m.downloads / 1000).toFixed(0) + 'k';
+        const downloadsFormatted = m.downloads > 1000000
+            ? (m.downloads / 1000000).toFixed(1) + 'M'
+            : (m.downloads / 1000).toFixed(0) + 'k';
 
-            let btnHtml = '';
-            let statusPill = '';
+        let btnHtml = '';
+        let statusPill = '';
 
-            if (hasUpdate) {
-                statusPill = `<span class="mod-status-pill mod-status-update"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> Nová verze v${escapeHtml(latestVer)}</span>`;
-                btnHtml = `
-                    <div class="mod-card-actions">
-                        <button class="mc-btn btn-update-mod btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="update" data-old-file="${escapeHtml(installedMod?.filename || '')}" title="Aktualizovat na novější verzi v${escapeHtml(latestVer)}">
-                            <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> Aktualizovat</span>
-                        </button>
-                        <button class="mc-btn btn-catalog-delete-mod" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
-                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span>
-                        </button>
-                    </div>
-                `;
-            } else if (isInstalled) {
-                statusPill = `<span class="mod-status-pill mod-status-installed"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Nainstalováno${currentVer ? ` (v${escapeHtml(currentVer)})` : ''}</span>`;
-                btnHtml = `
-                    <div class="mod-card-actions">
-                        <button class="mc-btn btn-download-success btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="installed" title="Již nainstalováno v profilu">
-                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Nainstalováno</span>
-                        </button>
-                        <button class="mc-btn btn-catalog-delete-mod" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
-                            <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span>
-                        </button>
-                    </div>
-                `;
-            } else if (!isCompatibleWithTarget) {
-                statusPill = `<span class="mod-status-pill mod-status-incompatible"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Nekompatibilní (MC ${escapeHtml(displayVersionTag)})</span>`;
-                btnHtml = `
-                    <button class="mc-btn btn-incompatible-mod" disabled title="Mód není dostupný pro Minecraft ${escapeHtml(targetMcVersion)} (dostupné pro: MC ${escapeHtml(displayVersionTag)})">
-                        <span>Nekompatibilní</span>
+        if (hasUpdate) {
+            statusPill = `<span class="mod-status-pill mod-status-update"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> Nová verze v${escapeHtml(latestVer)}</span>`;
+            btnHtml = `
+                <div class="mod-card-actions">
+                    <button class="mc-btn btn-update-mod btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="update" data-old-file="${escapeHtml(installedMod?.filename || '')}" title="Aktualizovat na novější verzi v${escapeHtml(latestVer)}">
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> Aktualizovat</span>
                     </button>
-                `;
-            } else {
-                btnHtml = `
-                    <button class="mc-btn mc-btn-green btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="download" title="Stáhnout do profilu">
-                        <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Stáhnout</span>
+                    <button class="mc-btn btn-catalog-delete-mod" data-mod="${escapeHtml(m.id)}" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span>
                     </button>
-                `;
-            }
+                </div>
+            `;
+        } else if (isInstalled) {
+            statusPill = `<span class="mod-status-pill mod-status-installed"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Nainstalováno${currentVer ? ` (v${escapeHtml(currentVer)})` : ''}</span>`;
+            btnHtml = `
+                <div class="mod-card-actions">
+                    <button class="mc-btn btn-download-success btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="installed" title="Již nainstalováno v profilu">
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Nainstalováno</span>
+                    </button>
+                    <button class="mc-btn btn-catalog-delete-mod" data-mod="${escapeHtml(m.id)}" data-filename="${escapeHtml(installedMod?.filename || '')}" data-mod-title="${escapeHtml(m.title)}" title="Smazat mód z profilu">
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span>
+                    </button>
+                </div>
+            `;
+        } else if (!isCompatibleWithTarget) {
+            statusPill = `<span class="mod-status-pill mod-status-incompatible"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Nekompatibilní (MC ${escapeHtml(displayVersionTag)})</span>`;
+            btnHtml = `
+                <button class="mc-btn btn-incompatible-mod" disabled title="Mód není dostupný pro Minecraft ${escapeHtml(targetMcVersion)} (dostupné pro: MC ${escapeHtml(displayVersionTag)})">
+                    <span>Nekompatibilní</span>
+                </button>
+            `;
+        } else {
+            btnHtml = `
+                <button class="mc-btn mc-btn-green btn-toggle-mod" data-mod="${escapeHtml(m.id)}" data-action="download" title="Stáhnout do profilu">
+                    <span><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Stáhnout</span>
+                </button>
+            `;
+        }
 
-            return `
-                <div class="mod-card-row">
+        const safeIconSrc = m.icon_url ? escapeHtml(m.icon_url) : 'assets/server-icon.png';
+
+        return {
+            hasUpdate,
+            installedMod,
+            html: `
+                <div class="mod-card-row" data-mod-row-id="${escapeHtml(m.id)}">
                     <div class="mod-avatar-box" data-mod-id="${escapeHtml(m.id)}">
-                        <img src="${escapeHtml(m.icon_url)}" class="mod-avatar" onerror="this.src='assets/server-icon.png'">
+                        <img src="${safeIconSrc}" class="mod-avatar" width="48" height="48" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='assets/server-icon.png'">
                         <div class="apple-progress-overlay">
                             <svg class="apple-progress-svg" viewBox="0 0 36 36">
                                 <circle class="apple-progress-bg" cx="18" cy="18" r="14"></circle>
@@ -5676,107 +5714,147 @@ document.addEventListener('DOMContentLoaded', async () => {
                     </div>
                     ${btnHtml}
                 </div>
-            `;
-        }).join('');
+            `
+        };
+    }
 
-        // Tlačítko pro hromadnou aktualizaci všech zastaralých módů najednou
+    function refreshSingleCatalogModCard(modId) {
+        if (!modsCardsList || !modId) return;
+        const modObj = lastLoadedCatalogMods.find(x => x && (x.id || x.project_id || x.slug) === modId);
+        if (!modObj) return;
+        const existingRow = modsCardsList.querySelector(`.mod-card-row[data-mod-row-id="${CSS.escape(modId)}"]`);
+        if (!existingRow) return;
+
+        const ctx = resolveCatalogRenderContext(lastLoadedCatalogMods);
+        const built = buildSingleModCardHtml(modObj, ctx);
+        const tmp = document.createElement('div');
+        tmp.innerHTML = built.html.trim();
+        const newRow = tmp.firstElementChild;
+        if (newRow) {
+            existingRow.replaceWith(newRow);
+        }
+        updateUpdateAllCatalogButton();
+    }
+
+    function updateUpdateAllCatalogButton() {
+        const ctx = resolveCatalogRenderContext(lastLoadedCatalogMods);
+        const displayMods = filterCatalogModsList(ctx.rawList, ctx.activeFilterVer);
+        const updateableMods = [];
+        for (const m of displayMods) {
+            const installedMod = findInstalledModForCatalog(m, ctx.activeInstalledList);
+            if (!installedMod) continue;
+            const currentVer = installedMod.version || '';
+            const latestVer = m.latest_version_number || '';
+            const latestSupportsOurMc = !m.latest_game_versions || m.latest_game_versions.length === 0 || m.latest_game_versions.includes(ctx.targetMcVersion);
+            if (isModVersionNewer(latestVer, currentVer) && latestSupportsOurMc) {
+                updateableMods.push({ mod: m, installedMod });
+            }
+        }
+
         const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
         const updateAllCountEl = document.getElementById('updateAllCount');
-        if (btnUpdateAll && updateAllCountEl) {
-            if (updateableMods.length > 0) {
-                updateAllCountEl.textContent = updateableMods.length;
-                btnUpdateAll.style.display = 'inline-flex';
-                btnUpdateAll.onclick = async () => {
-                    btnUpdateAll.disabled = true;
-                    const total = updateableMods.length;
-                    let successCount = 0;
-                    appendLog(`[UPDATE] Spouštím hromadnou aktualizaci ${total} módů...`);
+        if (!btnUpdateAll || !updateAllCountEl) return;
 
-                    for (let idx = 0; idx < total; idx++) {
-                        const item = updateableMods[idx];
-                        btnUpdateAll.innerHTML = `<span class="spinner-inline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span> <span>Aktualizuji ${idx + 1}/${total}...</span>`;
-                        const itemBox = document.querySelector(`.mod-avatar-box[data-mod-id="${CSS.escape(item.mod.id)}"]`);
-                        if (itemBox) {
-                            const ov = itemBox.querySelector('.apple-progress-overlay');
-                            const bar = itemBox.querySelector('.apple-progress-bar');
-                            if (ov && bar) {
-                                ov.classList.remove('success');
-                                ov.classList.add('active');
-                                bar.style.strokeDashoffset = '87.96';
-                            }
+        if (updateableMods.length > 0) {
+            updateAllCountEl.textContent = updateableMods.length;
+            btnUpdateAll.style.display = 'inline-flex';
+            btnUpdateAll.onclick = async () => {
+                btnUpdateAll.disabled = true;
+                const total = updateableMods.length;
+                let successCount = 0;
+                appendLog(`[UPDATE] Spouštím hromadnou aktualizaci ${total} módů...`);
+
+                for (let idx = 0; idx < total; idx++) {
+                    const item = updateableMods[idx];
+                    btnUpdateAll.innerHTML = `<span class="spinner-inline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span> <span>Aktualizuji ${idx + 1}/${total}...</span>`;
+                    const itemBox = modsCardsList.querySelector(`.mod-avatar-box[data-mod-id="${CSS.escape(item.mod.id)}"]`);
+                    if (itemBox) {
+                        const ov = itemBox.querySelector('.apple-progress-overlay');
+                        const bar = itemBox.querySelector('.apple-progress-bar');
+                        if (ov && bar) {
+                            ov.classList.remove('success');
+                            ov.classList.add('active');
+                            bar.style.strokeDashoffset = '87.96';
                         }
-                        try {
-                            const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
-                            const prof = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
-                            const profVer = prof?.version || currentModFilter.version || '26.3';
-                            if (isComingSoonProfile(prof) || isComingSoonVersion(profVer)) {
-                                continue;
-                            }
-                            let chosenLoader = prof?.loader && prof.loader !== 'vanilla' ? prof.loader : (currentModFilter.loader || 'fabric');
+                    }
+                    try {
+                        const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
+                        const prof = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
+                        const profVer = prof?.version || currentModFilter.version || '26.3';
+                        if (isComingSoonProfile(prof) || isComingSoonVersion(profVer)) {
+                            continue;
+                        }
+                        let chosenLoader = prof?.loader && prof.loader !== 'vanilla' ? prof.loader : (currentModFilter.loader || 'fabric');
 
-                            const res = await window.api.downloadModOrPack({
-                                id: item.mod.id,
-                                title: item.mod.title,
-                                projectType: currentModFilter.projectType || 'mod',
-                                version: profVer,
-                                loader: chosenLoader,
-                                profileId: targetProfileId,
-                                oldFilename: item.installedMod?.filename || null
-                            });
+                        const res = await window.api.downloadModOrPack({
+                            id: item.mod.id,
+                            title: item.mod.title,
+                            projectType: currentModFilter.projectType || 'mod',
+                            version: profVer,
+                            loader: chosenLoader,
+                            profileId: targetProfileId,
+                            oldFilename: item.installedMod?.filename || null
+                        });
 
-                            if (res && res.success) {
-                                successCount++;
-                                appendLog(`[UPDATE] ${item.mod.title} byl aktualizován na novou verzi (${res.filename}).`);
-                                if (itemBox) {
-                                    const ov = itemBox.querySelector('.apple-progress-overlay');
-                                    const bar = itemBox.querySelector('.apple-progress-bar');
-                                    if (ov && bar) {
-                                        bar.style.strokeDashoffset = '0';
-                                        ov.classList.add('success');
-                                        setTimeout(() => {
-                                            ov.classList.remove('active', 'success');
-                                            bar.style.strokeDashoffset = '87.96';
-                                        }, 600);
-                                    }
-                                }
-                            } else if (itemBox) {
-                                const ov = itemBox.querySelector('.apple-progress-overlay');
-                                const bar = itemBox.querySelector('.apple-progress-bar');
-                                if (ov && bar) {
-                                    ov.classList.remove('active', 'success');
-                                    bar.style.strokeDashoffset = '87.96';
-                                }
-                            }
-                        } catch (err) {
-                            console.warn(`Selhala aktualizace módu ${item.mod.id}:`, err);
+                        if (res && res.success) {
+                            successCount++;
+                            appendLog(`[UPDATE] ${item.mod.title} byl aktualizován na novou verzi (${res.filename}).`);
                             if (itemBox) {
                                 const ov = itemBox.querySelector('.apple-progress-overlay');
                                 const bar = itemBox.querySelector('.apple-progress-bar');
                                 if (ov && bar) {
-                                    ov.classList.remove('active', 'success');
-                                    bar.style.strokeDashoffset = '87.96';
+                                    bar.style.strokeDashoffset = '0';
+                                    ov.classList.add('success');
+                                    setTimeout(() => {
+                                        ov.classList.remove('active', 'success');
+                                        bar.style.strokeDashoffset = '87.96';
+                                    }, 600);
                                 }
+                            }
+                        } else if (itemBox) {
+                            const ov = itemBox.querySelector('.apple-progress-overlay');
+                            const bar = itemBox.querySelector('.apple-progress-bar');
+                            if (ov && bar) {
+                                ov.classList.remove('active', 'success');
+                                bar.style.strokeDashoffset = '87.96';
+                            }
+                        }
+                    } catch (err) {
+                        console.warn(`Selhala aktualizace módu ${item.mod.id}:`, err);
+                        if (itemBox) {
+                            const ov = itemBox.querySelector('.apple-progress-overlay');
+                            const bar = itemBox.querySelector('.apple-progress-bar');
+                            if (ov && bar) {
+                                ov.classList.remove('active', 'success');
+                                bar.style.strokeDashoffset = '87.96';
                             }
                         }
                     }
+                }
 
-                    showToast(`Aktualizováno ${successCount} z ${total} módů.`, 'success');
-                    btnUpdateAll.disabled = false;
-                    btnUpdateAll.style.display = 'none';
-
-                    const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
-                    await loadProfileMods(targetProfileId);
-                    await loadModrinthMods(true);
-                };
-            } else {
+                showToast(`Aktualizováno ${successCount} z ${total} módů.`, 'success');
+                btnUpdateAll.disabled = false;
                 btnUpdateAll.style.display = 'none';
-            }
-        }
 
-        // Bind interactive delete buttons directly from catalog with iOS-style reverse animation
-        modsCardsList.querySelectorAll('.btn-catalog-delete-mod').forEach(delBtn => {
-            delBtn.addEventListener('click', async (e) => {
+                const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
+                await loadProfileMods(targetProfileId);
+                await loadModrinthMods(true);
+            };
+        } else {
+            btnUpdateAll.style.display = 'none';
+        }
+    }
+
+    function ensureCatalogDelegatedEvents() {
+        if (!modsCardsList || catalogEventsBound) return;
+        catalogEventsBound = true;
+
+        modsCardsList.addEventListener('click', async (e) => {
+            const delBtn = e.target.closest('.btn-catalog-delete-mod');
+            if (delBtn) {
                 e.stopPropagation();
+                if (delBtn.disabled) return;
+                const modId = delBtn.dataset.mod;
                 const filename = delBtn.dataset.filename;
                 const modTitle = delBtn.dataset.modTitle || 'položku';
                 const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
@@ -5792,7 +5870,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const ov = avatarBox?.querySelector('.apple-progress-overlay');
                 const bar = avatarBox?.querySelector('.apple-progress-bar');
 
-                // iOS-style uninstall reverse download animation
                 if (avatarBox) avatarBox.classList.add('ios-uninstalling');
                 if (cardRow) cardRow.classList.add('ios-card-uninstalling');
 
@@ -5810,7 +5887,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
 
                 delBtn.innerHTML = `<span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin ui-icon-svg--red" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span>`;
-
                 await new Promise(r => setTimeout(r, 450));
 
                 try {
@@ -5826,8 +5902,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     if (res && res.success) {
                         showToast(`${modTitle} byl odinstalován z profilu.`, 'success');
-                        await loadProfileMods(targetProfileId);
-                        renderModCards(lastLoadedCatalogMods);
+                        await loadProfileMods(targetProfileId, { skipCatalogRerender: true });
+                        if (modId) {
+                            refreshSingleCatalogModCard(modId);
+                        } else {
+                            renderModCards(lastLoadedCatalogMods);
+                        }
                     } else {
                         showToast('Chyba při mazání: ' + (res?.error || 'Neznámá chyba'), 'error');
                         if (ov) ov.classList.remove('active', 'uninstalling');
@@ -5842,156 +5922,137 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (cardRow) cardRow.classList.remove('ios-card-uninstalling');
                     delBtn.disabled = false;
                 }
-            });
-        });
+                return;
+            }
 
-        // Bind interactive download and update buttons
-        modsCardsList.querySelectorAll('.btn-toggle-mod').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const action = btn.dataset.action;
-                const modId = btn.dataset.mod;
-                const oldFile = btn.dataset.oldFile;
-                const modItem = rawList.find(x => (x.id || x.project_id || x.slug) === modId);
-                const title = modItem ? modItem.title : modId;
-                const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
-                const targetProfile = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
-                const profileLoader = targetProfile?.loader || 'vanilla';
-                const profileVersion = targetProfile?.version || currentModFilter.version || '26.3';
+            const btn = e.target.closest('.btn-toggle-mod');
+            if (!btn || btn.disabled) return;
 
-                if (isComingSoonProfile(targetProfile) || isComingSoonVersion(profileVersion)) {
-                    showToast('Minecraft 26.4 zatím není v katalogu Modrinth (Coming Soon).', 'info');
+            const action = btn.dataset.action;
+            const modId = btn.dataset.mod;
+            const oldFile = btn.dataset.oldFile;
+            const modItem = lastLoadedCatalogMods.find(x => x && (x.id || x.project_id || x.slug) === modId);
+            const title = modItem ? modItem.title : modId;
+            const targetProfileId = selectedModsProfileId || currentConfig.activeProfileId;
+            const targetProfile = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
+            const profileLoader = targetProfile?.loader || 'vanilla';
+            const profileVersion = targetProfile?.version || currentModFilter.version || '26.3';
+
+            if (isComingSoonProfile(targetProfile) || isComingSoonVersion(profileVersion)) {
+                showToast('Minecraft 26.4 zatím není v katalogu Modrinth (Coming Soon).', 'info');
+                return;
+            }
+
+            if (action === 'installed') {
+                showToast(`Mód ${title} je již v profilu nainstalován.`, 'info');
+                return;
+            }
+
+            const isUpdate = action === 'update';
+
+            let chosenLoader = 'fabric';
+            if (profileLoader !== 'vanilla') {
+                chosenLoader = profileLoader;
+                if (modItem && Array.isArray(modItem.loaders) && modItem.loaders.length > 0 && !modItem.loaders.includes(profileLoader)) {
+                    showToast(`Mód "${title}" není dostupný pro zavaděč ${profileLoader.toUpperCase()}!`, 'error');
                     return;
                 }
-
-                if (action === 'installed') {
-                    showToast(`Mód ${title} je již v profilu nainstalován.`, 'info');
-                    return;
-                }
-
-                const isUpdate = action === 'update';
-
-                // Přísná ochrana proti stažení nesprávného loaderu (např. Forge na Fabric profil):
-                let chosenLoader = 'fabric';
-                if (profileLoader !== 'vanilla') {
-                    chosenLoader = profileLoader;
-                    if (modItem && Array.isArray(modItem.loaders) && modItem.loaders.length > 0 && !modItem.loaders.includes(profileLoader)) {
-                        showToast(`Mód "${title}" není dostupný pro zavaděč ${profileLoader.toUpperCase()}!`, 'error');
-                        return;
-                    }
+            } else {
+                if (currentModFilter.loader && modItem?.loaders?.includes(currentModFilter.loader)) {
+                    chosenLoader = currentModFilter.loader;
+                } else if (modItem?.loaders?.includes('fabric')) {
+                    chosenLoader = 'fabric';
+                } else if (modItem?.loaders?.includes('forge')) {
+                    chosenLoader = 'forge';
+                } else if (modItem?.loaders?.includes('neoforge')) {
+                    chosenLoader = 'neoforge';
                 } else {
-                    // Profil je Vanilla: zvolíme loader dle filtru nebo primární podpory módu
-                    if (currentModFilter.loader && modItem?.loaders?.includes(currentModFilter.loader)) {
-                        chosenLoader = currentModFilter.loader;
-                    } else if (modItem?.loaders?.includes('fabric')) {
-                        chosenLoader = 'fabric';
-                    } else if (modItem?.loaders?.includes('forge')) {
-                        chosenLoader = 'forge';
-                    } else if (modItem?.loaders?.includes('neoforge')) {
-                        chosenLoader = 'neoforge';
-                    } else {
-                        chosenLoader = 'fabric';
-                    }
+                    chosenLoader = 'fabric';
                 }
+            }
 
-                // Micro-animation: Button spinner state
-                btn.disabled = true;
-                btn.classList.add('btn-downloading');
-                btn.innerHTML = `<span class="spinner-inline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span> <span>${isUpdate ? 'Aktualizuji...' : 'Stahuji...'}</span>`;
+            btn.disabled = true;
+            btn.classList.add('btn-downloading');
+            btn.innerHTML = `<span class="spinner-inline"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg></span> <span>${isUpdate ? 'Aktualizuji...' : 'Stahuji...'}</span>`;
 
-                const avatarBox = btn.closest('.mod-card-row')?.querySelector('.mod-avatar-box') || document.querySelector(`.mod-avatar-box[data-mod-id="${CSS.escape(modId)}"]`);
-                if (avatarBox) {
-                    const ov = avatarBox.querySelector('.apple-progress-overlay');
-                    const bar = avatarBox.querySelector('.apple-progress-bar');
-                    if (ov && bar) {
-                        ov.classList.remove('success');
-                        ov.classList.add('active');
-                        bar.style.strokeDashoffset = '87.96';
-                    }
+            const avatarBox = btn.closest('.mod-card-row')?.querySelector('.mod-avatar-box') || modsCardsList.querySelector(`.mod-avatar-box[data-mod-id="${CSS.escape(modId)}"]`);
+            if (avatarBox) {
+                const ov = avatarBox.querySelector('.apple-progress-overlay');
+                const bar = avatarBox.querySelector('.apple-progress-bar');
+                if (ov && bar) {
+                    ov.classList.remove('success');
+                    ov.classList.add('active');
+                    bar.style.strokeDashoffset = '87.96';
                 }
+            }
 
-                try {
-                    const res = await window.api.downloadModOrPack({
-                        id: modId,
-                        title: title,
-                        projectType: currentModFilter.projectType || 'mod',
-                        version: profileVersion,
-                        loader: chosenLoader,
-                        profileId: targetProfileId,
-                        oldFilename: oldFile || null
-                    });
+            try {
+                const res = await window.api.downloadModOrPack({
+                    id: modId,
+                    title: title,
+                    projectType: currentModFilter.projectType || 'mod',
+                    version: profileVersion,
+                    loader: chosenLoader,
+                    profileId: targetProfileId,
+                    oldFilename: oldFile || null
+                });
 
-                    if (res && res.success) {
-                        btn.classList.remove('btn-downloading', 'btn-update-mod', 'mc-btn-green', 'mc-btn-primary');
-                        btn.classList.add('btn-download-success');
-                        btn.dataset.action = 'installed';
-                        btn.innerHTML = `<span class="checkmark-anim"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span>STAŽENO</span>`;
+                if (res && res.success) {
+                    btn.classList.remove('btn-downloading', 'btn-update-mod', 'mc-btn-green', 'mc-btn-primary');
+                    btn.classList.add('btn-download-success');
+                    btn.dataset.action = 'installed';
+                    btn.innerHTML = `<span class="checkmark-anim"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span>STAŽENO</span>`;
 
-                        if (avatarBox) {
-                            const ov = avatarBox.querySelector('.apple-progress-overlay');
-                            const bar = avatarBox.querySelector('.apple-progress-bar');
-                            if (ov && bar) {
-                                bar.style.strokeDashoffset = '0';
-                                ov.classList.add('success');
-                                setTimeout(() => {
-                                    ov.classList.remove('active', 'success');
-                                    bar.style.strokeDashoffset = '87.96';
-                                }, 600);
-                            }
-                        }
-
-                        const sub = res.subfolder || 'mods';
-                        const toastMsg = isUpdate
-                            ? `${title} byl aktualizován.`
-                            : `${title} byl stažen.`;
-                        showToast(toastMsg, 'success');
-                        appendLog(`[DOWNLOAD] ${title} (${res.filename}) ${isUpdate ? 'aktualizován' : 'stažen'} do ${sub}/ v profilu ${targetProfileId}.`);
-
-                        // Automatické přepnutí loaderu profilu pouze pokud byl profil Vanilla
-                        if (res.loaderChanged) {
-                            const pObj = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
-                            if (pObj) {
-                                pObj.loader = res.newLoader;
-                            }
-                            if (currentConfig.activeProfileId === targetProfileId) {
-                                currentConfig.loader = res.newLoader;
-                            }
-                            const loaderLabels = {
-                                fabric: 'Fabric',
-                                forge: 'Forge',
-                                neoforge: 'NeoForge',
-                                vanilla: 'Vanilla'
-                            };
-                            const niceNew = loaderLabels[res.newLoader] || res.newLoader;
-                            const nicePrev = loaderLabels[res.prevLoader] || res.prevLoader || 'Vanilla';
-                            showToast(`Profil přepnut na ${niceNew}.`, 'info');
-                            appendLog(`[LOADER] Profil "${pObj ? pObj.name : targetProfileId}" přepnut z ${nicePrev} na ${niceNew}.`);
-
-                            renderModsProfileDropdown();
-                            refreshVersionStatuses();
-                            renderProfilesList();
-                        }
-
-                        // VŽDY synchronizujeme nainstalované položky z disku a překreslíme karty v katalogu
-                        await loadProfileMods(targetProfileId);
-                        renderModCards(lastLoadedCatalogMods);
-                        await checkWardenProbe();
-                        if (currentIllegalMods && currentIllegalMods.length > 0) {
-                            showToast('Tento mód je stažen, ale je zakázán na serveru MYCHAL SMP.', 'warning');
-                        }
-                    } else {
-                        if (avatarBox) {
-                            const ov = avatarBox.querySelector('.apple-progress-overlay');
-                            const bar = avatarBox.querySelector('.apple-progress-bar');
-                            if (ov && bar) {
+                    if (avatarBox) {
+                        const ov = avatarBox.querySelector('.apple-progress-overlay');
+                        const bar = avatarBox.querySelector('.apple-progress-bar');
+                        if (ov && bar) {
+                            bar.style.strokeDashoffset = '0';
+                            ov.classList.add('success');
+                            setTimeout(() => {
                                 ov.classList.remove('active', 'success');
                                 bar.style.strokeDashoffset = '87.96';
-                            }
+                            }, 600);
                         }
-                        btn.classList.remove('btn-downloading');
-                        btn.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> <span>Chyba</span>`;
-                        showToast(`Chyba při stahování: ${res.error || 'Neznámá chyba'}`, 'error');
                     }
-                } catch (e) {
+
+                    const sub = res.subfolder || 'mods';
+                    const toastMsg = isUpdate
+                        ? `${title} byl aktualizován.`
+                        : `${title} byl stažen.`;
+                    showToast(toastMsg, 'success');
+                    appendLog(`[DOWNLOAD] ${title} (${res.filename}) ${isUpdate ? 'aktualizován' : 'stažen'} do ${sub}/ v profilu ${targetProfileId}.`);
+
+                    if (res.loaderChanged) {
+                        const pObj = (currentConfig.profiles || []).find(p => p.id === targetProfileId);
+                        if (pObj) pObj.loader = res.newLoader;
+                        if (currentConfig.activeProfileId === targetProfileId) {
+                            currentConfig.loader = res.newLoader;
+                        }
+                        const loaderLabels = {
+                            fabric: 'Fabric',
+                            forge: 'Forge',
+                            neoforge: 'NeoForge',
+                            vanilla: 'Vanilla'
+                        };
+                        const niceNew = loaderLabels[res.newLoader] || res.newLoader;
+                        const nicePrev = loaderLabels[res.prevLoader] || res.prevLoader || 'Vanilla';
+                        showToast(`Profil přepnut na ${niceNew}.`, 'info');
+                        appendLog(`[LOADER] Profil "${pObj ? pObj.name : targetProfileId}" přepnut z ${nicePrev} na ${niceNew}.`);
+
+                        renderModsProfileDropdown();
+                        refreshVersionStatuses();
+                        renderProfilesList();
+                    }
+
+                    // Obnovíme jen dotčenou kartu v katalogu bez ničení scrollu ani paralelně běžících overlayů
+                    await loadProfileMods(targetProfileId, { skipCatalogRerender: true });
+                    refreshSingleCatalogModCard(modId);
+                    await checkWardenProbe();
+                    if (currentIllegalMods && currentIllegalMods.length > 0) {
+                        showToast('Tento mód je stažen, ale je zakázán na serveru MYCHAL SMP.', 'warning');
+                    }
+                } else {
                     if (avatarBox) {
                         const ov = avatarBox.querySelector('.apple-progress-overlay');
                         const bar = avatarBox.querySelector('.apple-progress-bar');
@@ -6002,14 +6063,77 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                     btn.classList.remove('btn-downloading');
                     btn.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> <span>Chyba</span>`;
-                    showToast(`Chyba: ${e.message}`, 'error');
-                } finally {
-                    setTimeout(() => {
-                        btn.disabled = false;
-                    }, 1000);
+                    showToast(`Chyba při stahování: ${res.error || 'Neznámá chyba'}`, 'error');
                 }
-            });
+            } catch (e) {
+                if (avatarBox) {
+                    const ov = avatarBox.querySelector('.apple-progress-overlay');
+                    const bar = avatarBox.querySelector('.apple-progress-bar');
+                    if (ov && bar) {
+                        ov.classList.remove('active', 'success');
+                        bar.style.strokeDashoffset = '87.96';
+                    }
+                }
+                btn.classList.remove('btn-downloading');
+                btn.innerHTML = `<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> <span>Chyba</span>`;
+                showToast(`Chyba: ${e.message}`, 'error');
+            } finally {
+                setTimeout(() => {
+                    btn.disabled = false;
+                }, 1000);
+            }
         });
+    }
+
+    function appendModCards(newMods) {
+        if (!modsCardsList || !Array.isArray(newMods) || newMods.length === 0) {
+            updateUpdateAllCatalogButton();
+            return;
+        }
+        ensureCatalogDelegatedEvents();
+
+        const ctx = resolveCatalogRenderContext(newMods);
+        const displayNew = filterCatalogModsList(ctx.rawList, ctx.activeFilterVer);
+        if (displayNew.length === 0) {
+            updateUpdateAllCatalogButton();
+            return;
+        }
+
+        const placeholder = modsCardsList.querySelector('.mods-loading');
+        if (placeholder) placeholder.remove();
+
+        const tempContainer = document.createElement('div');
+        tempContainer.innerHTML = displayNew.map(m => buildSingleModCardHtml(m, ctx).html).join('');
+        const frag = document.createDocumentFragment();
+        while (tempContainer.firstElementChild) {
+            frag.appendChild(tempContainer.firstElementChild);
+        }
+        modsCardsList.appendChild(frag);
+        updateUpdateAllCatalogButton();
+    }
+
+    function renderModCards(mods) {
+        if (!modsCardsList) return;
+        ensureCatalogDelegatedEvents();
+
+        const ctx = resolveCatalogRenderContext(mods);
+        if (!ctx.rawList || ctx.rawList.length === 0) {
+            modsCardsList.innerHTML = `<div class="mods-loading">Nenalezeny žádné položky odpovídající hledání.</div>`;
+            const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
+            if (btnUpdateAll) btnUpdateAll.style.display = 'none';
+            return;
+        }
+
+        const displayMods = filterCatalogModsList(ctx.rawList, ctx.activeFilterVer);
+        if (displayMods.length === 0) {
+            modsCardsList.innerHTML = `<div class="mods-loading">Pro verzi MC ${escapeHtml(ctx.activeFilterVer || ctx.targetMcVersion)} nebyly nalezeny žádné kompatibilní položky.</div>`;
+            const btnUpdateAll = document.getElementById('btnUpdateAllCatalogMods');
+            if (btnUpdateAll) btnUpdateAll.style.display = 'none';
+            return;
+        }
+
+        modsCardsList.innerHTML = displayMods.map(m => buildSingleModCardHtml(m, ctx).html).join('');
+        updateUpdateAllCatalogButton();
     }
 
     // Modrinth filters
@@ -6045,15 +6169,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Nekonečné scrollování (Infinite Scroll) v katalogu Modrinth
+    // Nekonečné scrollování (Infinite Scroll) v katalogu Modrinth (řízené přes rAF bez lagování)
     if (modsCardsList) {
         modsCardsList.addEventListener('scroll', () => {
-            if (isCatalogLoading || !hasMoreCatalogMods) return;
-            const { scrollTop, scrollHeight, clientHeight } = modsCardsList;
-            if (scrollTop + clientHeight >= scrollHeight - 350) {
-                loadModrinthMods(false);
-            }
-        });
+            if (catalogScrollRaf || isCatalogLoading || !hasMoreCatalogMods) return;
+            catalogScrollRaf = requestAnimationFrame(() => {
+                catalogScrollRaf = null;
+                if (isCatalogLoading || !hasMoreCatalogMods) return;
+                const { scrollTop, scrollHeight, clientHeight } = modsCardsList;
+                if (scrollTop + clientHeight >= scrollHeight - 350) {
+                    loadModrinthMods(false);
+                }
+            });
+        }, { passive: true });
     }
 
     // ── 3D Skin Viewer (skinview3d) Integration ────────────────────────────
@@ -7151,14 +7279,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             characterSkinNeedsSync = true;
         }
         if (viewer) {
+            viewer._disposed = true;
+            try { viewer.renderPaused = true; } catch (_) { }
+            try {
+                if (viewer.animationID !== null && viewer.animationID !== undefined) {
+                    window.cancelAnimationFrame(viewer.animationID);
+                    viewer.animationID = null;
+                }
+            } catch (_) { }
+            try { viewer.animation = null; } catch (_) { }
             let gl = null;
             try {
                 gl = viewer.renderer && typeof viewer.renderer.getContext === 'function'
                     ? viewer.renderer.getContext()
                     : null;
             } catch (_) { }
-            try { viewer.renderPaused = true; } catch (_) { }
-            try { viewer.animation = null; } catch (_) { }
             try {
                 if (viewer.renderer && typeof viewer.renderer.forceContextLoss === 'function') {
                     viewer.renderer.forceContextLoss();
@@ -7178,7 +7313,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 canvasEl.replaceWith(canvasEl.cloneNode(false));
             } catch (_) { }
         }
-        return document.getElementById(canvasId);
+        const nextCanvas = document.getElementById(canvasId);
+        if (nextCanvas) {
+            nextCanvas.addEventListener('webglcontextlost', (ev) => {
+                ev.preventDefault();
+            }, { once: true });
+        }
+        return nextCanvas;
     }
 
     /**
@@ -7557,16 +7698,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!canvas) return;
 
         const resolvedImgSrc = toAssetSafeUrl(imgSrc);
+        if (!resolvedImgSrc) return;
         const drawKey = `${resolvedImgSrc}|${!!isSlim}`;
         if (drawKey === lastDrawnSkin2DKey && canvas.width > 0) {
             return;
         }
         const ctx = canvas.getContext('2d');
+        if (!ctx) return;
         ctx.imageSmoothingEnabled = false;
 
         const img = new Image();
         if (/^https?:/i.test(resolvedImgSrc)) img.crossOrigin = 'anonymous';
         img.onload = () => {
+            if (!img.naturalWidth || !img.naturalHeight) return;
             lastDrawnSkin2DKey = drawKey;
             canvas.width = 128;
             canvas.height = 256;
@@ -7630,7 +7774,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Propagate rendered canvas to hero skin
             if (heroSkinImg) {
-                heroSkinImg.src = canvas.toDataURL();
+                try {
+                    heroSkinImg.src = canvas.toDataURL();
+                } catch (_) { }
             }
         };
         img.onerror = () => {
@@ -7902,6 +8048,34 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    function unwrapPickedFileResult(picked) {
+        if (!picked) return { canceled: true, filePath: null, dataUrl: null, error: null };
+        if (typeof picked === 'string') {
+            return { canceled: false, filePath: picked, dataUrl: null, error: null };
+        }
+        if (typeof picked === 'object') {
+            if (picked.canceled || !picked.filePath) {
+                return { canceled: true, filePath: null, dataUrl: null, error: picked.error || null };
+            }
+            return {
+                canceled: false,
+                filePath: String(picked.filePath),
+                dataUrl: typeof picked.dataUrl === 'string' ? picked.dataUrl : null,
+                error: picked.error || null
+            };
+        }
+        return { canceled: true, filePath: null, dataUrl: null, error: null };
+    }
+
+    function readFileAsBase64Png(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+            reader.onerror = () => reject(reader.error || new Error('Nepodařilo se přečíst soubor.'));
+            reader.readAsDataURL(file);
+        });
+    }
+
     // Model variant toggles (Classic 4px vs Slim 3px)
     const btnVariantClassic = document.getElementById('btnVariantClassic');
     const btnVariantSlim = document.getElementById('btnVariantSlim');
@@ -7911,8 +8085,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnVariantClassic.classList.add('active');
             btnVariantSlim.classList.remove('active');
             await window.api.saveOfflineSkin({ variant: 'classic' });
-            if (skinViewer) skinViewer.playerObject.skin.modelType = 'default';
-            if (heroSkinViewer) heroSkinViewer.playerObject.skin.modelType = 'default';
+            if (skinViewer?.playerObject?.skin) skinViewer.playerObject.skin.modelType = 'default';
+            if (heroSkinViewer?.playerObject?.skin) heroSkinViewer.playerObject.skin.modelType = 'default';
             updateCharacterTabSkinPreview();
         });
         btnVariantSlim.addEventListener('click', async () => {
@@ -7920,8 +8094,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnVariantSlim.classList.add('active');
             btnVariantClassic.classList.remove('active');
             await window.api.saveOfflineSkin({ variant: 'slim' });
-            if (skinViewer) skinViewer.playerObject.skin.modelType = 'slim';
-            if (heroSkinViewer) heroSkinViewer.playerObject.skin.modelType = 'slim';
+            if (skinViewer?.playerObject?.skin) skinViewer.playerObject.skin.modelType = 'slim';
+            if (heroSkinViewer?.playerObject?.skin) heroSkinViewer.playerObject.skin.modelType = 'slim';
             updateCharacterTabSkinPreview();
         });
     }
@@ -7930,28 +8104,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnUploadMojangSkin = document.getElementById('btnUploadMojangSkin');
     if (btnUploadMojangSkin) {
         btnUploadMojangSkin.addEventListener('click', async () => {
-            const filePath = await window.api.selectSkinFile();
-            if (!filePath) return;
+            const picked = unwrapPickedFileResult(await window.api.selectSkinFile());
+            if (picked.canceled || !picked.filePath) {
+                if (picked.error) showToast(picked.error, 'error');
+                return;
+            }
 
             const variant = currentConfig.customSkinVariant || 'classic';
             btnUploadMojangSkin.disabled = true;
             btnUploadMojangSkin.innerHTML = '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> <span>Nahrávám na Mojang účet...</span>';
 
             try {
-                const res = await window.api.uploadMojangSkin(filePath, variant);
+                const res = await window.api.uploadMojangSkin(picked.filePath, variant);
                 if (res && res.success) {
                     if (window._clearSkinTextureCache) window._clearSkinTextureCache();
                     showToast('Skin nahrán na Mojang účet.', 'success');
                     appendLog('[MOJANG] Skin aktualizován na serverech Mojang.');
-                    if (res.skin && res.skin.url) {
-                        currentConfig.customSkinPath = filePath;
+                    const previewUrl = res.skin?.url || res.skinDataUrl || picked.dataUrl;
+                    currentConfig.customSkinPath = null;
+                    if (currentConfig.microsoftAccount && res.skin?.url) {
+                        currentConfig.microsoftAccount.skinUrl = res.skin.url;
+                    }
+                    if (previewUrl) {
                         const isSlim = variant === 'slim';
-                        drawSkinToCanvas(res.skin.url, isSlim);
-                        updateSkinViewer3D(res.skin.url, getEffectiveCape(), isSlim);
-                        updateHeroSkinViewer3D(res.skin.url, getEffectiveCape(), isSlim);
+                        drawSkinToCanvas(previewUrl, isSlim);
+                        updateSkinViewer3D(previewUrl, getEffectiveCape(), isSlim);
+                        updateHeroSkinViewer3D(previewUrl, getEffectiveCape(), isSlim);
                     }
                 } else {
-                    showToast('Chyba při nahrávání na Mojang: ' + (res.error || 'Neznámá chyba'), 'error');
+                    showToast('Chyba při nahrávání na Mojang: ' + (res?.error || 'Neznámá chyba'), 'error');
                 }
             } catch (e) {
                 showToast('Chyba: ' + e.message, 'error');
@@ -7981,7 +8162,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 updateSkinViewer3D(defaultSkin, getEffectiveCape(), isSlim);
                 updateHeroSkinViewer3D(defaultSkin, getEffectiveCape(), isSlim);
             } else {
-                showToast('Reset selhal: ' + (res.error || 'Chyba'), 'error');
+                showToast('Reset selhal: ' + (res?.error || 'Chyba'), 'error');
             }
         });
     }
@@ -7995,7 +8176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showToast('Plášť byl skryt na tvém Mojang účtu.', 'success');
                 await loadMojangCapes(true);
             } else {
-                showToast('Chyba: ' + (res.error || 'Chyba'), 'error');
+                showToast('Chyba: ' + (res?.error || 'Chyba'), 'error');
             }
         });
     }
@@ -8008,17 +8189,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Offline / Warez: Select local custom skin (.png) - PERSISTS ACROSS ANY OFFLINE NICK
     if (btnSelectSkinFile) {
         btnSelectSkinFile.addEventListener('click', async () => {
-            const destPath = await window.api.selectSkinFile();
-            if (destPath) {
-                currentConfig.customSkinPath = destPath;
-                await window.api.saveOfflineSkin({
-                    skinPath: destPath,
+            try {
+                const picked = unwrapPickedFileResult(await window.api.selectSkinFile());
+                if (picked.canceled || !picked.filePath) {
+                    if (picked.error) showToast(picked.error, 'error');
+                    return;
+                }
+                const saveRes = await window.api.saveOfflineSkin({
+                    skinPath: picked.filePath,
                     variant: currentConfig.customSkinVariant || 'classic'
                 });
+                if (saveRes && saveRes.success === false) {
+                    showToast('Chyba při ukládání skinu: ' + (saveRes.error || 'Neznámá chyba'), 'error');
+                    return;
+                }
+                const savedPath = (typeof saveRes?.customSkinPath === 'string' && saveRes.customSkinPath)
+                    ? saveRes.customSkinPath
+                    : picked.filePath;
+                currentConfig.customSkinPath = savedPath;
                 if (window._clearSkinTextureCache) window._clearSkinTextureCache();
-                updateUserUI(currentConfig.username, 'offline', destPath);
+                updateUserUI(currentConfig.username, 'offline', picked.dataUrl || savedPath);
                 showToast('Skin byl uložen.', 'success');
-                appendLog(`[SKIN] Vlastní offline skin nastaven: ${destPath}`);
+                appendLog(`[SKIN] Vlastní offline skin nastaven: ${savedPath}`);
+            } catch (err) {
+                showToast('Chyba při výběru skinu: ' + err.message, 'error');
             }
         });
     }
@@ -8059,15 +8253,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             try {
-                const res = await window.api.saveDraggedSkin(file.path);
+                let res;
+                if (typeof file.path === 'string' && file.path.trim()) {
+                    res = await window.api.saveDraggedSkin({ filePath: file.path });
+                } else {
+                    const dataUrl = await readFileAsBase64Png(file);
+                    res = await window.api.saveDraggedSkin({ dataBase64: dataUrl });
+                }
                 if (res && res.success) {
-                    currentConfig.customSkinPath = res.customSkinPath;
+                    const savedPath = (typeof res.customSkinPath === 'string' && res.customSkinPath)
+                        ? res.customSkinPath
+                        : (typeof res.path === 'string' ? res.path : null);
+                    currentConfig.customSkinPath = savedPath;
                     await window.api.saveOfflineSkin({
-                        skinPath: res.customSkinPath,
+                        skinPath: savedPath,
                         variant: currentConfig.customSkinVariant || 'classic'
                     });
                     if (window._clearSkinTextureCache) window._clearSkinTextureCache();
-                    updateUserUI(currentConfig.username, currentConfig.authType || 'offline', res.customSkinPath);
+                    updateUserUI(currentConfig.username, currentConfig.authType || 'offline', res.dataUrl || savedPath);
                     showToast('Skin byl nahrán.', 'success');
                     appendLog(`[SKIN] Skin úspěšně nahrán přes Drag & Drop: ${file.name}`);
                 } else {
@@ -8083,15 +8286,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnSelectCapeFile = document.getElementById('btnSelectCapeFile');
     if (btnSelectCapeFile) {
         btnSelectCapeFile.addEventListener('click', async () => {
-            const capePath = await window.api.selectCapeFile();
-            if (capePath) {
-                currentConfig.customCapePath = capePath;
-                await window.api.saveOfflineSkin({ capePath: capePath });
+            try {
+                const picked = unwrapPickedFileResult(await window.api.selectCapeFile());
+                if (picked.canceled || !picked.filePath) {
+                    if (picked.error) showToast(picked.error, 'error');
+                    return;
+                }
+                const saveRes = await window.api.saveOfflineSkin({ capePath: picked.filePath });
+                if (saveRes && saveRes.success === false) {
+                    showToast('Chyba při ukládání pláště: ' + (saveRes.error || 'Neznámá chyba'), 'error');
+                    return;
+                }
+                const savedCape = (typeof saveRes?.customCapePath === 'string' && saveRes.customCapePath)
+                    ? saveRes.customCapePath
+                    : picked.filePath;
+                currentConfig.customCapePath = savedCape;
                 if (window._clearSkinTextureCache) window._clearSkinTextureCache();
                 updateUserUI(currentConfig.username, 'offline', currentConfig.customSkinPath);
                 loadOfflinePresetCapes();
                 showToast('Plášť byl uložen.', 'success');
-                appendLog(`[CAPE] Vlastní offline plášť nastaven: ${capePath}`);
+                appendLog(`[CAPE] Vlastní offline plášť nastaven: ${savedCape}`);
+            } catch (err) {
+                showToast('Chyba při výběru pláště: ' + err.message, 'error');
             }
         });
     }
@@ -8645,8 +8861,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnDownloadLog.addEventListener('click', async () => {
             try {
                 const logText = await getFullLogContent();
-                const downloadFn = (window.api && typeof window.api.downloadLogMog === 'function') 
-                    ? window.api.downloadLogMog 
+                const downloadFn = (window.api && typeof window.api.downloadLogMog === 'function')
+                    ? window.api.downloadLogMog
                     : (window.api ? window.api.downloadLogMyco : null);
                 if (downloadFn) {
                     const res = await downloadFn(logText);

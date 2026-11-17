@@ -2872,13 +2872,15 @@ pub fn construct_launch_spec(
     jvm_args.push("-Dminecraft.launcher.brand=mychalsmp".to_string());
     jvm_args.push(format!("-Dminecraft.launcher.version={}", APP_VERSION));
 
-    let brand_jar = base_dir
-        .join("libraries")
-        .join("smpclient")
-        .join("brand")
-        .join("smpclient-brand.jar");
-    if brand_jar.exists() {
-        jvm_args.push(format!("-Xbootclasspath/a:{}", brand_jar.to_string_lossy()));
+    if loader.eq_ignore_ascii_case("vanilla") {
+        let brand_jar = base_dir
+            .join("libraries")
+            .join("smpclient")
+            .join("brand")
+            .join("smpclient-brand.jar");
+        if brand_jar.exists() {
+            jvm_args.push(format!("-Xbootclasspath/a:{}", brand_jar.to_string_lossy()));
+        }
     }
 
     // 6. Manifest JVM Arguments
@@ -4137,6 +4139,62 @@ mod tests {
         ]);
         let ports = parse_proc_net_tcp_established_ports(sample, &inodes);
         assert_eq!(ports, vec![25565, 443]);
+    }
+
+    #[test]
+    fn test_vanilla_bootclasspath_brand_only_applied_for_vanilla() {
+        let temp_dir = std::env::temp_dir().join(format!("mychalsmp_test_brand_boot_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let brand_dir = temp_dir.join("libraries").join("smpclient").join("brand");
+        fs::create_dir_all(&brand_dir).unwrap();
+        fs::write(brand_dir.join("smpclient-brand.jar"), b"stub").unwrap();
+
+        let config = json!({});
+        let auth = json!({ "name": "Steve", "uuid": "0", "access_token": "x", "user_type": "legacy" });
+        let manifest = VersionManifest {
+            id: "26.3".to_string(),
+            inherits_from: None,
+            main_class: "net.minecraft.client.main.Main".to_string(),
+            arguments: None,
+            libraries: vec![],
+            asset_index: None,
+            assets: None,
+            downloads: None,
+        };
+
+        let vanilla_prof = json!({ "id": "vanilla-26.3", "name": "Vanilla", "version": "26.3", "loader": "vanilla" });
+        let vanilla_spec = construct_launch_spec(
+            &config,
+            &vanilla_prof,
+            &auth,
+            &manifest,
+            &temp_dir,
+            Path::new("/usr/bin/java"),
+            TargetOs::Linux,
+        )
+        .unwrap();
+        assert!(
+            vanilla_spec.jvm_args.iter().any(|a| a.starts_with("-Xbootclasspath/a:") && a.contains("smpclient-brand.jar")),
+            "Vanilla launch must include -Xbootclasspath/a:smpclient-brand.jar"
+        );
+
+        let fabric_prof = json!({ "id": "fabric-26.3", "name": "Fabric", "version": "26.3", "loader": "fabric" });
+        let fabric_spec = construct_launch_spec(
+            &config,
+            &fabric_prof,
+            &auth,
+            &manifest,
+            &temp_dir,
+            Path::new("/usr/bin/java"),
+            TargetOs::Linux,
+        )
+        .unwrap();
+        assert!(
+            !fabric_spec.jvm_args.iter().any(|a| a.contains("smpclient-brand.jar")),
+            "Fabric launch must rely on SelfNametag mixin and omit smpclient-brand.jar bootclasspath"
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }
 

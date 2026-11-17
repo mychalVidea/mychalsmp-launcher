@@ -7,8 +7,126 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use zip::ZipArchive;
+
+pub const CORE_SELFNAMETAG_FILENAME: &str = "selfnametag-1.0.0.jar";
+const BUNDLED_SELFNAMETAG_JAR: &[u8] = include_bytes!("../../assets/mods/selfnametag-1.0.0.jar");
+const BUNDLED_VANILLA_BRAND_JAR: &[u8] = include_bytes!("../../assets/smpclient-brand.jar");
+
+fn resolve_bundled_asset_bytes(
+    app: Option<&AppHandle>,
+    rel_subpath: &str,
+    embedded: &'static [u8],
+) -> Vec<u8> {
+    let mut base_candidates = Vec::new();
+    if let Some(a) = app {
+        if let Ok(res_dir) = a.path().resource_dir() {
+            base_candidates.push(res_dir.clone());
+            base_candidates.push(res_dir.join("_up_"));
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            base_candidates.push(exe_dir.to_path_buf());
+            base_candidates.push(exe_dir.join("resources"));
+        }
+    }
+    for base in base_candidates {
+        let candidate = base.join("assets").join(rel_subpath);
+        if candidate.is_file() {
+            if let Ok(bytes) = fs::read(&candidate) {
+                if bytes.len() >= 128 && bytes.starts_with(b"PK\x03\x04") {
+                    return bytes;
+                }
+            }
+        }
+    }
+    embedded.to_vec()
+}
+
+fn write_jar_bytes_if_changed(target: &Path, expected_bytes: &[u8]) -> Result<bool, String> {
+    if let Ok(existing) = fs::read(target) {
+        if existing == expected_bytes {
+            return Ok(false);
+        }
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Nelze vytvořit složku {}: {}", parent.display(), e))?;
+    }
+    let tmp_path = target.with_extension("jar.tmp");
+    fs::write(&tmp_path, expected_bytes)
+        .map_err(|e| format!("Nelze zapsat {}: {}", target.display(), e))?;
+    if resilient_rename(&tmp_path, target).is_err() {
+        let _ = fs::remove_file(&tmp_path);
+        fs::write(target, expected_bytes)
+            .map_err(|e| format!("Nelze aktualizovat {}: {}", target.display(), e))?;
+    }
+    Ok(true)
+}
+
+pub fn ensure_core_selfnametag_in_mods_dir(mods_dir: &Path, jar_bytes: &[u8]) -> Result<bool, String> {
+    fs::create_dir_all(mods_dir)
+        .map_err(|e| format!("Nelze vytvořit složku módů {}: {}", mods_dir.display(), e))?;
+
+    if let Ok(entries) = fs::read_dir(mods_dir) {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().to_string();
+            let lower = fname.to_lowercase();
+            if lower.starts_with("selfnametag")
+                && ((lower.ends_with(".jar") && fname != CORE_SELFNAMETAG_FILENAME)
+                    || lower.ends_with(".jar.disabled"))
+            {
+                let _ = resilient_remove_file(&entry.path());
+            }
+        }
+    }
+
+    write_jar_bytes_if_changed(&mods_dir.join(CORE_SELFNAMETAG_FILENAME), jar_bytes)
+}
+
+pub fn ensure_core_smpclient_mods(
+    app: Option<&AppHandle>,
+    prof_dir: &Path,
+    loader_type: &str,
+) -> Result<bool, String> {
+    if !loader_type.eq_ignore_ascii_case("fabric") && !loader_type.eq_ignore_ascii_case("quilt") {
+        return Ok(false);
+    }
+    let jar_bytes = resolve_bundled_asset_bytes(
+        app,
+        "mods/selfnametag-1.0.0.jar",
+        BUNDLED_SELFNAMETAG_JAR,
+    );
+    ensure_core_selfnametag_in_mods_dir(&prof_dir.join("mods"), &jar_bytes)
+}
+
+pub fn ensure_vanilla_brand_jar_in_base(base_dir: &Path, jar_bytes: &[u8]) -> Result<bool, String> {
+    let brand_jar = base_dir
+        .join("libraries")
+        .join("smpclient")
+        .join("brand")
+        .join("smpclient-brand.jar");
+    write_jar_bytes_if_changed(&brand_jar, jar_bytes)
+}
+
+pub fn ensure_smpclient_vanilla_brand_jar(
+    app: Option<&AppHandle>,
+    base_dir: &Path,
+) -> Result<bool, String> {
+    let jar_bytes = resolve_bundled_asset_bytes(
+        app,
+        "smpclient-brand.jar",
+        BUNDLED_VANILLA_BRAND_JAR,
+    );
+    ensure_vanilla_brand_jar_in_base(base_dir, &jar_bytes)
+}
+
+fn is_core_selfnametag_mod(path: &Path, filename: &str) -> bool {
+    let (mod_id, _, _, _, _) = parse_jar_metadata(path, filename);
+    mod_id.eq_ignore_ascii_case("selfnametag")
+        || filename.to_lowercase().starts_with("selfnametag")
+}
 
 pub struct OptimizationModDef {
     pub id: &'static str,
@@ -293,6 +411,18 @@ pub async fn download_file_with_progress(
     dest: &Path,
     expected_sha1: Option<&str>,
 ) -> Result<(), String> {
+    download_file_with_throttled_progress(url, dest, expected_sha1, None).await
+}
+
+async fn download_file_with_throttled_progress(
+    url: &str,
+    dest: &Path,
+    expected_sha1: Option<&str>,
+    progress_ctx: Option<(&AppHandle, &str, &str)>,
+) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static TMP_SEQ: AtomicU64 = AtomicU64::new(1);
+
     if let Some(sha) = expected_sha1 {
         if dest.exists() {
             if let Some(actual) = compute_sha1_file(dest) {
@@ -313,17 +443,70 @@ pub async fn download_file_with_progress(
         return Err(format!("HTTP {} při stahování {}", resp.status(), url));
     }
 
-    let tmp_path = dest.with_extension("download.tmp");
+    let total_bytes = resp.content_length().unwrap_or(0);
+    let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let fname_str = dest
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file");
+    let tmp_path = dest.with_file_name(format!("{}.{}.download.tmp", fname_str, seq));
     let mut file = File::create(&tmp_path).map_err(|e| e.to_string())?;
     let mut stream = resp.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let bytes = chunk.map_err(|e| e.to_string())?;
-        file.write_all(&bytes).map_err(|e| e.to_string())?;
+    let mut received: u64 = 0;
+    let mut last_emit_at = std::time::Instant::now();
+    let mut last_emit_pct: u32 = 50;
+
+    while let Some(chunk_res) = stream.next().await {
+        let bytes = match chunk_res {
+            Ok(b) => b,
+            Err(e) => {
+                drop(file);
+                let _ = fs::remove_file(&tmp_path);
+                return Err(e.to_string());
+            }
+        };
+        if let Err(e) = file.write_all(&bytes) {
+            drop(file);
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e.to_string());
+        }
+        received = received.saturating_add(bytes.len() as u64);
+
+        if let Some((app, project_id, title)) = progress_ctx {
+            let pct = if total_bytes > 0 {
+                50 + ((received.saturating_mul(44)) / total_bytes).min(44) as u32
+            } else {
+                last_emit_pct
+            };
+            let elapsed = last_emit_at.elapsed();
+            if elapsed >= Duration::from_millis(90) && (pct >= last_emit_pct + 4 || total_bytes == 0) {
+                last_emit_at = std::time::Instant::now();
+                last_emit_pct = pct;
+                let _ = app.emit(
+                    "mod-download-progress",
+                    json!({
+                        "id": project_id,
+                        "projectId": project_id,
+                        "title": title,
+                        "percent": pct,
+                        "received": received,
+                        "total": total_bytes
+                    }),
+                );
+            }
+        }
     }
-    file.flush().map_err(|e| e.to_string())?;
+    if let Err(e) = file.flush() {
+        drop(file);
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.to_string());
+    }
     drop(file);
 
-    fs::rename(&tmp_path, dest).map_err(|e| e.to_string())?;
+    if let Err(e) = resilient_rename(&tmp_path, dest) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e);
+    }
     Ok(())
 }
 
@@ -469,7 +652,13 @@ pub async fn download_mod_or_pack_with_deps(
     );
 
     let dest_path = target_dir.join(&filename);
-    download_file_with_progress(&download_url, &dest_path, sha1_opt.as_deref()).await?;
+    download_file_with_throttled_progress(
+        &download_url,
+        &dest_path,
+        sha1_opt.as_deref(),
+        Some((app, project_id, title)),
+    )
+    .await?;
 
     // If updating/replacing an older version of the same project, remove old jar
     if project_type == "mod" {
@@ -893,6 +1082,12 @@ pub fn toggle_profile_mod_file(profile_id: Option<&str>, filename: &str) -> Valu
     let (new_name, enabled) = if safe_name.ends_with(".disabled") {
         (safe_name.trim_end_matches(".disabled").to_string(), true)
     } else {
+        if is_core_selfnametag_mod(&current_path, &safe_name) {
+            return json!({
+                "success": false,
+                "error": "Základní mód SMPClient (Self Nametag) nelze vypnout — zajišťuje detekci klienta a barevný nick."
+            });
+        }
         (format!("{}.disabled", safe_name), false)
     };
     let new_path = mods_dir.join(&new_name);
@@ -912,6 +1107,12 @@ pub fn delete_profile_mod_file(profile_id: Option<&str>, filename: &str) -> Valu
         .unwrap_or_default();
     let target = mods_dir.join(&safe_name);
     if target.exists() {
+        if is_core_selfnametag_mod(&target, &safe_name) {
+            return json!({
+                "success": false,
+                "error": "Základní mód SMPClient (Self Nametag) nelze smazat — zajišťuje detekci klienta a barevný nick."
+            });
+        }
         if let Err(e) = resilient_remove_file(&target) {
             return json!({ "success": false, "error": e });
         }
@@ -1334,6 +1535,7 @@ pub async fn install_optimization_pack_for_profile(
     }
 
     ensure_default_options_and_servers(&prof_dir);
+    let _ = ensure_core_smpclient_mods(Some(app), &prof_dir, "fabric");
     let _ = resolve_profile_mod_collisions(profile_id);
 
     json!({
@@ -1536,6 +1738,53 @@ mod tests {
             assert!(!facets.contains("categories:fabric"));
             assert!(!facets.contains("versions:"));
         }
+    }
+
+    #[test]
+    fn test_ensure_core_selfnametag_installs_updates_and_reenables() {
+        let tmp = std::env::temp_dir().join(format!(
+            "mychalsmp_test_core_mods_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp);
+        let mods_dir = tmp.join("mods");
+        fs::create_dir_all(&mods_dir).unwrap();
+        fs::write(mods_dir.join("selfnametag-1.0.0.jar.disabled"), b"old-disabled").unwrap();
+        fs::write(mods_dir.join("selfnametag-0.9.0.jar"), b"old-version").unwrap();
+
+        let installed = ensure_core_selfnametag_in_mods_dir(&mods_dir, BUNDLED_SELFNAMETAG_JAR).unwrap();
+        assert!(installed, "Expected selfnametag-1.0.0.jar to be written");
+        assert!(!mods_dir.join("selfnametag-1.0.0.jar.disabled").exists());
+        assert!(!mods_dir.join("selfnametag-0.9.0.jar").exists());
+        assert_eq!(
+            fs::read(mods_dir.join(CORE_SELFNAMETAG_FILENAME)).unwrap(),
+            BUNDLED_SELFNAMETAG_JAR
+        );
+
+        let second = ensure_core_selfnametag_in_mods_dir(&mods_dir, BUNDLED_SELFNAMETAG_JAR).unwrap();
+        assert!(!second, "Expected idempotent no-op when jar already matches");
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_ensure_vanilla_brand_jar_writes_expected_path() {
+        let tmp = std::env::temp_dir().join(format!(
+            "mychalsmp_test_brand_jar_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp);
+
+        let written = ensure_vanilla_brand_jar_in_base(&tmp, BUNDLED_VANILLA_BRAND_JAR).unwrap();
+        assert!(written);
+        let target = tmp
+            .join("libraries")
+            .join("smpclient")
+            .join("brand")
+            .join("smpclient-brand.jar");
+        assert_eq!(fs::read(&target).unwrap(), BUNDLED_VANILLA_BRAND_JAR);
+
+        let _ = fs::remove_dir_all(&tmp);
     }
 }
 

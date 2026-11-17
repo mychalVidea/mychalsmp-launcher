@@ -23,7 +23,7 @@
       if (internals?.convertFileSrc) {
         return internals.convertFileSrc(cleanPath);
       }
-    } catch (_) {}
+    } catch (_) { }
     return cleanPath.startsWith('/') ? `file://${cleanPath}` : filePath;
   }
 
@@ -222,7 +222,18 @@
 
     // Mod Collisions & Drag Skin
     resolveModCollisions: (profileId) => invoke('resolve_mod_collisions', { profileId: profileId ?? null }),
-    saveDraggedSkin: (filePath) => invoke('save_dragged_skin', { filePath }),
+    saveDraggedSkin: (filePathOrData) => {
+      if (filePathOrData && typeof filePathOrData === 'object') {
+        return invoke('save_dragged_skin', {
+          filePath: filePathOrData.filePath ?? null,
+          dataBase64: filePathOrData.dataBase64 ?? null
+        });
+      }
+      return invoke('save_dragged_skin', {
+        filePath: typeof filePathOrData === 'string' ? filePathOrData : null,
+        dataBase64: null
+      });
+    },
     preloadLaunchEnvironment: (profileId) => invoke('preload_launch_environment', { profileId: profileId ?? null })
   };
 
@@ -237,7 +248,7 @@
           return;
         }
         if (tauri && tauri.window && typeof tauri.window.getCurrentWindow === 'function') {
-          tauri.window.getCurrentWindow().startDragging().catch(() => {});
+          tauri.window.getCurrentWindow().startDragging().catch(() => { });
         }
       });
     });

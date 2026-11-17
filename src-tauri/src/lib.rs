@@ -278,7 +278,10 @@ async fn launch_game(
             }
         }
 
-        if !loader_type.eq_ignore_ascii_case("vanilla") {
+        if loader_type.eq_ignore_ascii_case("vanilla") {
+            let _ = crate::mods::ensure_smpclient_vanilla_brand_jar(Some(&app_clone), &base_dir);
+        } else {
+            let _ = crate::mods::ensure_core_smpclient_mods(Some(&app_clone), &prof_dir, loader_type);
             let _ = crate::mods::resolve_profile_mod_collisions(Some(&pid_clone));
             let _ = crate::launcher::resolve_mod_compatibility(&prof_dir.join("mods"));
         }
@@ -563,8 +566,10 @@ fn toggle_mod(mod_id: String) -> Value {
 }
 
 #[tauri::command]
-fn get_profile_mods(profile_id: Option<String>) -> Value {
-    crate::mods::get_profile_mods_list(profile_id.as_deref())
+async fn get_profile_mods(profile_id: Option<String>) -> Value {
+    tokio::task::spawn_blocking(move || crate::mods::get_profile_mods_list(profile_id.as_deref()))
+        .await
+        .unwrap_or_else(|e| json!({ "success": false, "error": format!("Chyba při načítání módů: {}", e) }))
 }
 
 #[tauri::command]
@@ -592,8 +597,8 @@ fn discover_installed_profiles() -> Value {
 }
 
 #[tauri::command]
-fn import_profile_dialog(app: AppHandle) -> Value {
-    crate::profiles::import_profile_dialog(&app)
+async fn import_profile_dialog(app: AppHandle) -> Value {
+    crate::profiles::import_profile_dialog(&app).await
 }
 
 #[tauri::command]
@@ -777,71 +782,163 @@ fn window_is_maximized(window: Window) -> bool {
 // 9. Skins & Capes Commands
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[tauri::command]
-fn select_skin_file(app: AppHandle) -> Value {
+async fn pick_png_dialog_nonblocking(app: AppHandle, title: &str) -> Value {
     use tauri_plugin_dialog::DialogExt;
-    if let Some(file_path) = app
-        .dialog()
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
         .file()
-        .add_filter("PNG Skin", &["png"])
-        .blocking_pick_file()
-    {
-        if let Some(path) = file_path.as_path() {
-            let data_url = crate::skin::file_to_data_url(path).unwrap_or_default();
-            return json!({
-                "canceled": false,
-                "filePath": path.to_string_lossy(),
-                "dataUrl": data_url
-            });
-        }
-    }
-    json!({ "canceled": true })
-}
+        .add_filter(title, &["png"])
+        .pick_file(move |file_path| {
+            let _ = tx.send(file_path);
+        });
 
-#[tauri::command]
-fn select_cape_file(app: AppHandle) -> Value {
-    use tauri_plugin_dialog::DialogExt;
-    if let Some(file_path) = app
-        .dialog()
-        .file()
-        .add_filter("PNG Cape", &["png"])
-        .blocking_pick_file()
-    {
-        if let Some(path) = file_path.as_path() {
-            let data_url = crate::skin::file_to_data_url(path).unwrap_or_default();
-            return json!({
-                "canceled": false,
-                "filePath": path.to_string_lossy(),
-                "dataUrl": data_url
-            });
-        }
-    }
-    json!({ "canceled": true })
-}
-
-#[tauri::command]
-fn save_offline_skin(skin_data: Value) -> Value {
-    let base_dir = crate::config::get_default_game_dir();
-    let skin_path = base_dir.join("assets").join("selfnametag_skin.png");
-    if let Some(parent) = skin_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let raw_str = if let Some(s) = skin_data.as_str() {
-        s
-    } else if let Some(s) = skin_data.get("dataUrl").and_then(|v| v.as_str()) {
-        s
-    } else {
-        ""
+    let Some(file_path) = rx.await.ok().flatten() else {
+        return json!({ "canceled": true });
+    };
+    let Some(path) = file_path.as_path().map(|p| p.to_path_buf()) else {
+        return json!({ "canceled": true, "error": "Vybraný soubor nemá platnou lokální cestu." });
     };
 
-    if raw_str.contains("base64,") {
-        let b64 = raw_str.split("base64,").nth(1).unwrap_or("");
-        if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
-            let _ = std::fs::write(&skin_path, bytes);
-            return json!({ "success": true, "path": skin_path.to_string_lossy() });
+    tokio::task::spawn_blocking(move || {
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                if !crate::skin::is_valid_png_bytes(&bytes) {
+                    return json!({
+                        "canceled": true,
+                        "error": "Vybraný soubor není platný PNG obrázek (max 5 MB)."
+                    });
+                }
+                let data_url = crate::skin::file_to_data_url(&path).unwrap_or_default();
+                json!({
+                    "canceled": false,
+                    "filePath": path.to_string_lossy(),
+                    "dataUrl": data_url
+                })
+            }
+            Err(e) => json!({
+                "canceled": true,
+                "error": format!("Nepodařilo se přečíst vybraný soubor: {}", e)
+            }),
         }
-    }
-    json!({ "success": true })
+    })
+    .await
+    .unwrap_or_else(|e| json!({ "canceled": true, "error": format!("Chyba při čtení souboru: {}", e) }))
+}
+
+#[tauri::command]
+async fn select_skin_file(app: AppHandle) -> Value {
+    pick_png_dialog_nonblocking(app, "PNG Skin").await
+}
+
+#[tauri::command]
+async fn select_cape_file(app: AppHandle) -> Value {
+    pick_png_dialog_nonblocking(app, "PNG Cape").await
+}
+
+#[tauri::command]
+async fn save_offline_skin(skin_data: Value) -> Value {
+    tokio::task::spawn_blocking(move || {
+        let base_dir = crate::config::get_default_game_dir();
+        let skins_dir = base_dir.join("skins");
+        let assets_dir = base_dir.join("assets");
+        let _ = std::fs::create_dir_all(&skins_dir);
+        let _ = std::fs::create_dir_all(&assets_dir);
+        let skin_path = assets_dir.join("selfnametag_skin.png");
+        let custom_skin_copy = skins_dir.join("custom_skin.png");
+        let custom_cape_copy = skins_dir.join("custom_cape.png");
+
+        let mut cfg = crate::config::load_config();
+        let mut patches = serde_json::Map::new();
+        let mut resolved_skin_path: Option<String> = None;
+
+        if let Some(obj) = skin_data.as_object() {
+            if let Some(variant) = obj.get("variant").and_then(|v| v.as_str()) {
+                let norm = if variant.eq_ignore_ascii_case("slim") { "slim" } else { "classic" };
+                patches.insert("customSkinVariant".to_string(), json!(norm));
+                let mut offline_skin = cfg.get("offlineSkin").cloned().unwrap_or_else(|| json!({}));
+                if offline_skin.is_object() {
+                    offline_skin["variant"] = json!(norm);
+                    patches.insert("offlineSkin".to_string(), offline_skin);
+                }
+            }
+
+            if let Some(skin_val) = obj.get("skinPath") {
+                if skin_val.is_null() || skin_val.as_str().map(str::trim) == Some("") {
+                    patches.insert("customSkinPath".to_string(), Value::Null);
+                } else if let Some(src_str) = skin_val.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+                    let src = PathBuf::from(src_str);
+                    if src.is_file() {
+                        if let Ok(bytes) = std::fs::read(&src) {
+                            if !crate::skin::is_valid_png_bytes(&bytes) {
+                                return json!({ "success": false, "error": "Neplatný PNG obrázek skinu." });
+                            }
+                            let _ = std::fs::write(&custom_skin_copy, &bytes);
+                            let _ = std::fs::write(&skin_path, &bytes);
+                            crate::skin::sync_local_selfnametag_skin(Some(&bytes), None);
+                            let saved_str = custom_skin_copy.to_string_lossy().to_string();
+                            patches.insert("customSkinPath".to_string(), json!(saved_str.clone()));
+                            resolved_skin_path = Some(saved_str);
+                        }
+                    }
+                }
+            }
+
+            if let Some(cape_val) = obj.get("capePath") {
+                if cape_val.is_null() || cape_val.as_str().map(str::trim) == Some("") {
+                    patches.insert("customCapePath".to_string(), Value::Null);
+                    crate::skin::sync_local_selfnametag_skin(None, Some(&[]));
+                } else if let Some(c_str) = cape_val.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+                    let src = PathBuf::from(c_str);
+                    if src.is_file() {
+                        if let Ok(bytes) = std::fs::read(&src) {
+                            if !crate::skin::is_valid_png_bytes(&bytes) {
+                                return json!({ "success": false, "error": "Neplatný PNG obrázek pláště." });
+                            }
+                            let _ = std::fs::write(&custom_cape_copy, &bytes);
+                            crate::skin::sync_local_selfnametag_skin(None, Some(&bytes));
+                            patches.insert("customCapePath".to_string(), json!(custom_cape_copy.to_string_lossy().to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        let raw_str = if let Some(s) = skin_data.as_str() {
+            s
+        } else if let Some(s) = skin_data.get("dataUrl").and_then(|v| v.as_str()) {
+            s
+        } else {
+            ""
+        };
+        if raw_str.contains("base64,") {
+            let b64 = raw_str.split("base64,").nth(1).unwrap_or("");
+            if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+                if !crate::skin::is_valid_png_bytes(&bytes) {
+                    return json!({ "success": false, "error": "Neplatná PNG data skinu." });
+                }
+                let _ = std::fs::write(&custom_skin_copy, &bytes);
+                let _ = std::fs::write(&skin_path, &bytes);
+                crate::skin::sync_local_selfnametag_skin(Some(&bytes), None);
+                let saved_str = custom_skin_copy.to_string_lossy().to_string();
+                patches.insert("customSkinPath".to_string(), json!(saved_str.clone()));
+                resolved_skin_path = Some(saved_str);
+            }
+        }
+
+        if !patches.is_empty() {
+            cfg = crate::config::save_config(&Value::Object(patches));
+        }
+
+        json!({
+            "success": true,
+            "path": resolved_skin_path.as_deref().unwrap_or(&skin_path.to_string_lossy()),
+            "customSkinPath": cfg.get("customSkinPath").cloned().unwrap_or(Value::Null),
+            "customSkinVariant": cfg.get("customSkinVariant").cloned().unwrap_or(json!("classic")),
+            "customCapePath": cfg.get("customCapePath").cloned().unwrap_or(Value::Null)
+        })
+    })
+    .await
+    .unwrap_or_else(|e| json!({ "success": false, "error": format!("Chyba při ukládání skinu: {}", e) }))
 }
 
 #[tauri::command]
@@ -868,19 +965,60 @@ async fn set_mojang_cape(cape_id: Option<String>) -> Value {
 }
 
 #[tauri::command]
-fn save_dragged_skin(file_path: String) -> Value {
-    let base_dir = crate::config::get_default_game_dir();
-    let skin_dest = base_dir.join("assets").join("selfnametag_skin.png");
-    if let Some(parent) = skin_dest.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let src = PathBuf::from(&file_path);
-    if src.exists() {
-        if std::fs::copy(&src, &skin_dest).is_ok() {
-            return json!({ "success": true, "path": skin_dest.to_string_lossy() });
+async fn save_dragged_skin(file_path: Option<String>, data_base64: Option<String>) -> Value {
+    tokio::task::spawn_blocking(move || {
+        use base64::Engine as _;
+        let base_dir = crate::config::get_default_game_dir();
+        let skins_dir = base_dir.join("skins");
+        let assets_dir = base_dir.join("assets");
+        let _ = std::fs::create_dir_all(&skins_dir);
+        let _ = std::fs::create_dir_all(&assets_dir);
+        let custom_copy = skins_dir.join("custom_skin.png");
+        let skin_dest = assets_dir.join("selfnametag_skin.png");
+
+        let bytes = if let Some(b64_raw) = data_base64.as_deref().filter(|s| !s.trim().is_empty()) {
+            let trimmed = b64_raw.split("base64,").nth(1).unwrap_or(b64_raw).trim();
+            match base64::engine::general_purpose::STANDARD.decode(trimmed) {
+                Ok(b) => b,
+                Err(_) => return json!({ "success": false, "error": "Neplatná PNG data přetaženého souboru." }),
+            }
+        } else if let Some(fp) = file_path.as_deref().filter(|s| !s.trim().is_empty()) {
+            let src = PathBuf::from(fp);
+            if !src.is_file() {
+                return json!({ "success": false, "error": "Soubor neexistuje." });
+            }
+            match std::fs::read(&src) {
+                Ok(b) => b,
+                Err(_) => return json!({ "success": false, "error": "Soubor se nepodařilo přečíst." }),
+            }
+        } else {
+            return json!({ "success": false, "error": "Chybí cesta nebo data souboru skinu." });
+        };
+
+        if !crate::skin::is_valid_png_bytes(&bytes) {
+            return json!({ "success": false, "error": "Soubor není platný PNG obrázek (max 5 MB)." });
         }
-    }
-    json!({ "success": false, "error": "Soubor se nepodařilo zkopírovat." })
+
+        if std::fs::write(&custom_copy, &bytes).is_err() || std::fs::write(&skin_dest, &bytes).is_err() {
+            return json!({ "success": false, "error": "Soubor se nepodařilo uložit." });
+        }
+
+        crate::skin::sync_local_selfnametag_skin(Some(&bytes), None);
+        let custom_str = custom_copy.to_string_lossy().to_string();
+        let _ = crate::config::save_config(&json!({ "customSkinPath": custom_str }));
+        let data_url = format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(&bytes)
+        );
+        json!({
+            "success": true,
+            "path": custom_str,
+            "customSkinPath": custom_str,
+            "dataUrl": data_url
+        })
+    })
+    .await
+    .unwrap_or_else(|e| json!({ "success": false, "error": format!("Chyba při ukládání skinu: {}", e) }))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1135,24 +1273,25 @@ fn open_logs_folder() {
     let _ = open::that_detached(&logs_dir);
 }
 
-#[tauri::command]
-fn download_log_mog(app: AppHandle, custom_text: Option<String>) -> Value {
+async fn save_log_dialog_nonblocking(app: AppHandle, filter_name: &str, ext: &str, text: String) -> Value {
     use tauri_plugin_dialog::DialogExt;
-    let base = crate::config::get_default_game_dir();
-    let text = custom_text.unwrap_or_else(|| crate::crash::read_latest_log_tail(&base, 2000));
     let now = chrono::Utc::now().format("%Y-%m-%d-%H%M%S").to_string();
-    let default_name = format!("mychalsmp-log-{}.mog", now);
-
-    if let Some(file_path) = app
-        .dialog()
+    let default_name = format!("mychalsmp-log-{}.{}", now, ext);
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
         .file()
         .set_file_name(&default_name)
-        .add_filter("Mychal Log", &["mog"])
-        .blocking_save_file()
-    {
-        if let Some(path) = file_path.as_path() {
-            if std::fs::write(path, text.as_bytes()).is_ok() {
-                return json!({ "success": true, "path": path.to_string_lossy() });
+        .add_filter(filter_name, &[ext])
+        .save_file(move |fp| {
+            let _ = tx.send(fp);
+        });
+
+    if let Ok(Some(file_path)) = rx.await {
+        if let Some(path) = file_path.as_path().map(|p| p.to_path_buf()) {
+            let res = tokio::task::spawn_blocking(move || std::fs::write(&path, text.as_bytes()).map(|_| path))
+                .await;
+            if let Ok(Ok(saved_path)) = res {
+                return json!({ "success": true, "path": saved_path.to_string_lossy() });
             }
         }
     }
@@ -1160,27 +1299,17 @@ fn download_log_mog(app: AppHandle, custom_text: Option<String>) -> Value {
 }
 
 #[tauri::command]
-fn download_log_myco(app: AppHandle, custom_text: Option<String>) -> Value {
-    use tauri_plugin_dialog::DialogExt;
+async fn download_log_mog(app: AppHandle, custom_text: Option<String>) -> Value {
     let base = crate::config::get_default_game_dir();
     let text = custom_text.unwrap_or_else(|| crate::crash::read_latest_log_tail(&base, 2000));
-    let now = chrono::Utc::now().format("%Y-%m-%d-%H%M%S").to_string();
-    let default_name = format!("mychalsmp-log-{}.myco", now);
+    save_log_dialog_nonblocking(app, "Mychal Log", "mog", text).await
+}
 
-    if let Some(file_path) = app
-        .dialog()
-        .file()
-        .set_file_name(&default_name)
-        .add_filter("MYCO Log", &["myco"])
-        .blocking_save_file()
-    {
-        if let Some(path) = file_path.as_path() {
-            if std::fs::write(path, text.as_bytes()).is_ok() {
-                return json!({ "success": true, "path": path.to_string_lossy() });
-            }
-        }
-    }
-    json!({ "success": false, "canceled": true })
+#[tauri::command]
+async fn download_log_myco(app: AppHandle, custom_text: Option<String>) -> Value {
+    let base = crate::config::get_default_game_dir();
+    let text = custom_text.unwrap_or_else(|| crate::crash::read_latest_log_tail(&base, 2000));
+    save_log_dialog_nonblocking(app, "MYCO Log", "myco", text).await
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1212,8 +1341,10 @@ fn open_file_path(full_path: String) -> Value {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-fn get_profile_packs(profile_id: Option<String>, pack_type: String) -> Value {
-    crate::mods::get_profile_packs_list(profile_id.as_deref(), &pack_type)
+async fn get_profile_packs(profile_id: Option<String>, pack_type: String) -> Value {
+    tokio::task::spawn_blocking(move || crate::mods::get_profile_packs_list(profile_id.as_deref(), &pack_type))
+        .await
+        .unwrap_or_else(|e| json!({ "success": false, "error": format!("Chyba při načítání balíčků: {}", e) }))
 }
 
 #[tauri::command]

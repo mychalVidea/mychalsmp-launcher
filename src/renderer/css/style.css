@@ -3100,7 +3100,9 @@ select option {
     border: 1px solid var(--surface-border);
     border-radius: var(--radius-md);
     padding: 14px 18px;
-    contain: layout style;
+    contain: content;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 92px;
     transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
@@ -3146,9 +3148,8 @@ select option {
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: rgba(10, 14, 26, 0.75);
-    backdrop-filter: blur(2px);
-    display: flex;
+    background: rgba(10, 14, 26, 0.78);
+    display: none;
     align-items: center;
     justify-content: center;
     opacity: 0;
@@ -3158,6 +3159,7 @@ select option {
 }
 
 .apple-progress-overlay.active {
+    display: flex;
     opacity: 1;
     pointer-events: auto;
 }
