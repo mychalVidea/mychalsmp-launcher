@@ -11,6 +11,7 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
         rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="css/style.css?v=1.6.8">
+    <link rel="stylesheet" href="css/style.css?v=1.6.9">
 </head>
 
 <body>
@@ -24,7 +25,8 @@
             </div>
 
             <!-- Real-time FPS Monitor Badge (hidden by default; optional in Advanced Settings) -->
-            <span class="fps-badge" id="launcherFpsBadge" title="Aktuální snímková frekvence launcheru" style="display: none;">-- FPS</span>
+            <span class="fps-badge" id="launcherFpsBadge" title="Aktuální snímková frekvence launcheru"
+                style="display: none;">-- FPS</span>
 
             <!-- Network Status Chip -->
             <div class="network-status-chip" id="networkChip">
@@ -80,7 +82,8 @@
     </header>
 
     <!-- Discord-Style Startup Auto-Update Splash -->
-    <div id="bootSplash" class="smp-boot-splash titlebar-drag" role="dialog" aria-modal="true" aria-label="Spouštění SMPClient">
+    <div id="bootSplash" class="smp-boot-splash titlebar-drag" role="dialog" aria-modal="true"
+        aria-label="Spouštění SMPClient">
         <div class="smp-boot-win-controls">
             <button type="button" class="win-btn win-min" id="bootSplashMin" title="Minimalizovat">
                 <svg width="10" height="1" viewBox="0 0 10 1">
@@ -151,7 +154,8 @@
                     </svg>
                 </button>
                 <button class="nav-icon-btn" data-tab="profiles" title="Verze">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
                         <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                         <polyline points="2 17 12 22 22 17"></polyline>
                         <polyline points="2 12 12 17 22 12"></polyline>
@@ -347,7 +351,8 @@
                                         style="background-image: url('assets/keyarts/card-26.3.webp');"></div>
                                     <div class="profile-card-keyart-overlay"></div>
                                     <div class="profile-icon-box">
-                                        <img src="assets/icons/newest.png" class="profile-3d-float-icon" alt="Minecraft 26.3" draggable="false" />
+                                        <img src="assets/icons/newest.png" class="profile-3d-float-icon"
+                                            alt="Minecraft 26.3" draggable="false" />
                                     </div>
                                     <div class="profile-details">
                                         <div class="profile-title-line">
@@ -385,7 +390,8 @@
                                         style="background-image: url('assets/keyarts/card-26.2.webp');"></div>
                                     <div class="profile-card-keyart-overlay"></div>
                                     <div class="profile-icon-box">
-                                        <img src="assets/icons/mostplayed.png" class="profile-3d-float-icon" alt="Minecraft 26.2" draggable="false" />
+                                        <img src="assets/icons/mostplayed.png" class="profile-3d-float-icon"
+                                            alt="Minecraft 26.2" draggable="false" />
                                     </div>
                                     <div class="profile-details">
                                         <div class="profile-title-line">
@@ -422,7 +428,8 @@
                                         style="background-image: url('assets/keyarts/card-26.1.webp');"></div>
                                     <div class="profile-card-keyart-overlay"></div>
                                     <div class="profile-icon-box">
-                                        <img src="assets/icons/old.png" class="profile-3d-float-icon" alt="Minecraft 26.1.2" draggable="false" />
+                                        <img src="assets/icons/old.png" class="profile-3d-float-icon"
+                                            alt="Minecraft 26.1.2" draggable="false" />
                                     </div>
                                     <div class="profile-details">
                                         <div class="profile-title-line">
@@ -460,7 +467,8 @@
                                         style="background-image: url('assets/keyarts/card-1.21.11.webp');"></div>
                                     <div class="profile-card-keyart-overlay"></div>
                                     <div class="profile-icon-box">
-                                        <img src="assets/icons/old.png" class="profile-3d-float-icon" alt="Minecraft 1.21.11" draggable="false" />
+                                        <img src="assets/icons/old.png" class="profile-3d-float-icon"
+                                            alt="Minecraft 1.21.11" draggable="false" />
                                     </div>
                                     <div class="profile-details">
                                         <div class="profile-title-line">
@@ -637,7 +645,8 @@
                         <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnGoToProfilesTabFromMods"
                             title="Otevřít správu všech profilů">
                             <span>
-                                <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2">
                                     <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                                     <polyline points="2 17 12 22 22 17"></polyline>
                                     <polyline points="2 12 12 17 22 12"></polyline>
@@ -729,28 +738,44 @@
                         <div class="installed-tab-indicator" id="installedTabIndicator"></div>
                         <button type="button" class="installed-type-btn active" data-pack-type="mods"
                             id="tabInstalledMods">
-                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-                                <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path
+                                    d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                                <path d="m3.3 7 8.7 5 8.7-5M12 22V12" />
                             </svg>
                             <span>Módy (<span id="installedModsCountSub">0</span>)</span>
                         </button>
                         <button type="button" class="installed-type-btn" data-pack-type="resourcepacks"
                             id="tabInstalledResourcePacks">
-                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                <circle cx="8.5" cy="8.5" r="1.5"/>
-                                <polyline points="21 15 16 10 5 21"/>
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
                             </svg>
                             <span>Texture Packy (<span id="installedRpCount">0</span>)</span>
                         </button>
                         <button type="button" class="installed-type-btn" data-pack-type="shaderpacks"
                             id="tabInstalledShaders">
-                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="4"/>
-                                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="4" />
+                                <path
+                                    d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
                             </svg>
                             <span>Shadery (<span id="installedShaderCount">0</span>)</span>
+                        </button>
+                        <button type="button" class="installed-type-btn" data-pack-type="modpacks"
+                            id="tabInstalledModpacks">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path
+                                    d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                                <path d="m3.3 7 8.7 5 8.7-5" />
+                                <path d="M12 22V12" />
+                            </svg>
+                            <span>Modpacky (<span id="installedModpackCount">0</span>)</span>
                         </button>
                     </div>
 
@@ -782,33 +807,44 @@
                         <div class="catalog-subtabs">
                             <div class="catalog-tab-indicator" id="catalogTabIndicator"></div>
                             <button class="mod-tab-btn active" data-mod-type="mod">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-                                    <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
+                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path
+                                        d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                                    <path d="m3.3 7 8.7 5 8.7-5M12 22V12" />
                                 </svg>
                                 <span>Módy</span>
                             </button>
                             <button class="mod-tab-btn" data-mod-type="resourcepack">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                                    <polyline points="21 15 16 10 5 21"/>
+                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                    <polyline points="21 15 16 10 5 21" />
                                 </svg>
                                 <span>Resource Packy</span>
                             </button>
                             <button class="mod-tab-btn" data-mod-type="shader">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="4"/>
-                                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="4" />
+                                    <path
+                                        d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
                                 </svg>
                                 <span>Shadery</span>
                             </button>
                             <button class="mod-tab-btn" data-mod-type="modpack">
-                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-                                    <path d="m3.3 7 8.7 5 8.7-5"/>
-                                    <path d="M12 22V12"/>
-                                    <path d="M16.5 9.4 7.55 4.24"/>
+                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path
+                                        d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                                    <path d="m3.3 7 8.7 5 8.7-5" />
+                                    <path d="M12 22V12" />
+                                    <path d="M16.5 9.4 7.55 4.24" />
                                 </svg>
                                 <span>Modpacky</span>
                             </button>
@@ -987,7 +1023,8 @@
                                     Plášť
                                 </span>
                             </button>
-                            <button type="button" class="btn-3d-chip" id="btn3DFlyingToggle" aria-label="Poloha při letu">
+                            <button type="button" class="btn-3d-chip" id="btn3DFlyingToggle"
+                                aria-label="Poloha při letu">
                                 <span id="label3DFlying">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <path
@@ -1084,7 +1121,8 @@
                                     </button>
                                     <button class="mc-btn mc-btn-secondary" id="btnSwitchMicrosoftAccount" type="button"
                                         title="Přihlásit jiný Microsoft účet nebo znovu autorizovat">
-                                        <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
                                             <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                                             <circle cx="8.5" cy="7" r="4"></circle>
                                             <polyline points="17 11 19 13 23 9"></polyline>
@@ -1206,15 +1244,18 @@
                         <p>Vyber si server a klikni na Hrát.</p>
                     </div>
                     <div class="pane-header-actions">
-                        <button type="button" class="mc-btn mc-btn-secondary btn-compact servers-refresh-btn" id="btnRefreshServersStatus" title="Znovu zkontrolovat servery">
-                            <svg class="ui-icon-svg ui-icon-svg--xs server-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <button type="button" class="mc-btn mc-btn-secondary btn-compact servers-refresh-btn"
+                            id="btnRefreshServersStatus" title="Znovu zkontrolovat servery">
+                            <svg class="ui-icon-svg ui-icon-svg--xs server-refresh-icon" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
                                 <polyline points="23 4 23 10 17 10"></polyline>
                                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                             </svg>
                             <span>Obnovit</span>
                         </button>
                         <button type="button" class="mc-btn mc-btn-primary btn-compact" id="btnOpenAddServerTab">
-                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2.2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
                             </svg>
@@ -1284,8 +1325,8 @@
                                 </span>
                             </button>
 
-                            <button type="button" class="settings-nav-btn" data-settings-cat="performance"
-                                role="tab" aria-selected="false">
+                            <button type="button" class="settings-nav-btn" data-settings-cat="performance" role="tab"
+                                aria-selected="false">
                                 <span class="settings-nav-icon">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <rect x="4" y="4" width="16" height="16" rx="2"></rect>
@@ -1306,8 +1347,8 @@
                                 </span>
                             </button>
 
-                            <button type="button" class="settings-nav-btn" data-settings-cat="java"
-                                role="tab" aria-selected="false">
+                            <button type="button" class="settings-nav-btn" data-settings-cat="java" role="tab"
+                                aria-selected="false">
                                 <span class="settings-nav-icon">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <polyline points="16 18 22 12 16 6"></polyline>
@@ -1320,12 +1361,14 @@
                                 </span>
                             </button>
 
-                            <button type="button" class="settings-nav-btn" data-settings-cat="system"
-                                role="tab" aria-selected="false">
+                            <button type="button" class="settings-nav-btn" data-settings-cat="system" role="tab"
+                                aria-selected="false">
                                 <span class="settings-nav-icon">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                         <circle cx="12" cy="12" r="3"></circle>
-                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        <path
+                                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                        </path>
                                     </svg>
                                 </span>
                                 <span class="settings-nav-text">
@@ -1334,11 +1377,13 @@
                                 </span>
                             </button>
 
-                            <button type="button" class="settings-nav-btn" data-settings-cat="maintenance"
-                                role="tab" aria-selected="false">
+                            <button type="button" class="settings-nav-btn" data-settings-cat="maintenance" role="tab"
+                                aria-selected="false">
                                 <span class="settings-nav-icon">
                                     <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
-                                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                                        <path
+                                            d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z">
+                                        </path>
                                     </svg>
                                 </span>
                                 <span class="settings-nav-text">
@@ -1372,7 +1417,8 @@
                                     </span>
                                     <div>
                                         <h3 class="settings-group-title">Herní obrazovka a zobrazení</h3>
-                                        <p class="settings-group-desc">Zvol velikost herního okna a režim zobrazení na monitoru.</p>
+                                        <p class="settings-group-desc">Zvol velikost herního okna a režim zobrazení na
+                                            monitoru.</p>
                                     </div>
                                 </div>
 
@@ -1410,10 +1456,13 @@
                                         <input type="checkbox" id="checkBorderlessFullscreen">
                                         <div class="perf-toggle-info">
                                             <div class="perf-toggle-title-row">
-                                                <span class="perf-toggle-title">Bezokrajové okno (Borderless Fullscreen)</span>
+                                                <span class="perf-toggle-title">Bezokrajové okno (Borderless
+                                                    Fullscreen)</span>
                                                 <span class="badge-beta">Beta</span>
                                             </div>
-                                            <span class="perf-toggle-desc">Hra běží přes celou obrazovku bez rámečků – při přepnutí do Discordu či prohlížeče (Alt+Tab) nezčerná monitor a hra se nezmenší.</span>
+                                            <span class="perf-toggle-desc">Hra běží přes celou obrazovku bez rámečků –
+                                                při přepnutí do Discordu či prohlížeče (Alt+Tab) nezčerná monitor a hra
+                                                se nezmenší.</span>
                                         </div>
                                     </label>
                                 </div>
@@ -1423,12 +1472,15 @@
                                 <div class="settings-group-header">
                                     <span class="group-icon-wrap">
                                         <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
-                                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                            <polygon
+                                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                                            </polygon>
                                         </svg>
                                     </span>
                                     <div>
                                         <h3 class="settings-group-title">Herní vylepšení a integrace</h3>
-                                        <p class="settings-group-desc">Automatické funkce pro pohodlné hraní a napojení na Discord.</p>
+                                        <p class="settings-group-desc">Automatické funkce pro pohodlné hraní a napojení
+                                            na Discord.</p>
                                     </div>
                                 </div>
 
@@ -1437,7 +1489,8 @@
                                         <input type="checkbox" id="checkAutoUpdateMods" checked>
                                         <div class="perf-toggle-info">
                                             <span class="perf-toggle-title">Automatická aktualizace módů</span>
-                                            <span class="perf-toggle-desc">Při spuštění hry zkontrolovat a stáhnout novější verze módů pro server.</span>
+                                            <span class="perf-toggle-desc">Při spuštění hry zkontrolovat a stáhnout
+                                                novější verze módů pro server.</span>
                                         </div>
                                     </label>
 
@@ -1445,7 +1498,8 @@
                                         <input type="checkbox" id="checkDiscordRpc" checked>
                                         <div class="perf-toggle-info">
                                             <span class="perf-toggle-title">Discord Rich Presence</span>
-                                            <span class="perf-toggle-desc">Zobrazovat přátelům na Discordu, že právě hraješ na serveru MYCHAL SMP.</span>
+                                            <span class="perf-toggle-desc">Zobrazovat přátelům na Discordu, že právě
+                                                hraješ na serveru MYCHAL SMP.</span>
                                         </div>
                                     </label>
 
@@ -1453,7 +1507,8 @@
                                         <input type="checkbox" id="checkScreenshotClipboard" checked>
                                         <div class="perf-toggle-info">
                                             <span class="perf-toggle-title">Screenshot do schránky (Ctrl+V)</span>
-                                            <span class="perf-toggle-desc">Po stisku F2 ve hře se snímek automaticky zkopíruje do schránky pro vložení na Discord.</span>
+                                            <span class="perf-toggle-desc">Po stisku F2 ve hře se snímek automaticky
+                                                zkopíruje do schránky pro vložení na Discord.</span>
                                         </div>
                                     </label>
 
@@ -1461,7 +1516,8 @@
                                         <input type="checkbox" id="checkShowFpsCounter">
                                         <div class="perf-toggle-info">
                                             <span class="perf-toggle-title">Diagnostický FPS čítač UI</span>
-                                            <span class="perf-toggle-desc">Zobrazí snímkovou frekvenci rozhraní launcheru v horní liště.</span>
+                                            <span class="perf-toggle-desc">Zobrazí snímkovou frekvenci rozhraní
+                                                launcheru v horní liště.</span>
                                         </div>
                                     </label>
                                 </div>
@@ -1482,28 +1538,37 @@
                                     </span>
                                     <div>
                                         <h3 class="settings-group-title">Paměť RAM pro Minecraft</h3>
-                                        <p class="settings-group-desc">Kolik operační paměti počítače dostane hra pro plynulé načítání světa a chunků.</p>
+                                        <p class="settings-group-desc">Kolik operační paměti počítače dostane hra pro
+                                            plynulé načítání světa a chunků.</p>
                                     </div>
                                 </div>
 
                                 <div class="form-group setting-ram-group" style="margin-bottom: 0;">
                                     <div class="setting-title-row">
                                         <div class="ram-quick-buttons">
-                                            <button type="button" class="btn-ram-preset" data-ram="4">4 GB (Základ)</button>
-                                            <button type="button" class="btn-ram-preset btn-ram-preset--recommended" id="btnApplyRecommendedRam" style="display: none;">
-                                                <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24">
-                                                    <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path>
+                                            <button type="button" class="btn-ram-preset" data-ram="4">4 GB
+                                                (Základ)</button>
+                                            <button type="button" class="btn-ram-preset btn-ram-preset--recommended"
+                                                id="btnApplyRecommendedRam" style="display: none;">
+                                                <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green"
+                                                    viewBox="0 0 24 24">
+                                                    <path
+                                                        d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z">
+                                                    </path>
                                                 </svg>
                                                 <span>Doporučeno: <strong id="ramRecommendedVal">8 GB</strong></span>
                                             </button>
-                                            <button type="button" class="btn-ram-preset" data-ram="16">16 GB (Shadery)</button>
+                                            <button type="button" class="btn-ram-preset" data-ram="16">16 GB
+                                                (Shadery)</button>
                                         </div>
                                         <div class="ram-title-right">
-                                            <span class="ram-detected-text" id="ramDetectedText">V počítači: <strong id="ramTotalText">-- GB RAM</strong></span>
+                                            <span class="ram-detected-text" id="ramDetectedText">V počítači: <strong
+                                                    id="ramTotalText">-- GB RAM</strong></span>
                                             <span class="setting-value-badge" id="ramValueBadge">4 GB</span>
                                         </div>
                                     </div>
-                                    <input type="range" id="ramSlider" min="2" max="16" step="any" value="4" class="slider">
+                                    <input type="range" id="ramSlider" min="2" max="16" step="any" value="4"
+                                        class="slider">
                                     <div class="slider-marks" id="ramSliderMarks"></div>
                                 </div>
                             </div>
@@ -1526,7 +1591,8 @@
                                     </span>
                                     <div>
                                         <h3 class="settings-group-title">Grafická karta a Render API</h3>
-                                        <p class="settings-group-desc">Detekovaný grafický adaptér a volba vykreslovacího backendu hry.</p>
+                                        <p class="settings-group-desc">Detekovaný grafický adaptér a volba
+                                            vykreslovacího backendu hry.</p>
                                     </div>
                                 </div>
 
@@ -1535,7 +1601,8 @@
                                         <label class="setting-section-label">Grafická karta</label>
                                         <div class="gpu-detected-card">
                                             <div class="gpu-detected-left">
-                                                <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
+                                                <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue"
+                                                    viewBox="0 0 24 24">
                                                     <rect x="4" y="4" width="16" height="16" rx="2"></rect>
                                                     <rect x="9" y="9" width="6" height="6"></rect>
                                                     <line x1="9" y1="1" x2="9" y2="4"></line>
@@ -1547,7 +1614,8 @@
                                                     <line x1="1" y1="9" x2="4" y2="9"></line>
                                                     <line x1="1" y1="14" x2="4" y2="14"></line>
                                                 </svg>
-                                                <span class="gpu-name-text" id="gpuNameText">Detekuji grafickou kartu...</span>
+                                                <span class="gpu-name-text" id="gpuNameText">Detekuji grafickou
+                                                    kartu...</span>
                                             </div>
                                             <span class="badge-status badge-success" id="gpuDedicatedBadge"
                                                 style="display: none;">Diskrétní GPU</span>
@@ -1558,7 +1626,8 @@
                                     <div class="form-group" id="graphicsBackendGroup" style="margin-bottom: 0;">
                                         <div class="setting-section-header">
                                             <label class="setting-section-label">Grafický režim (Render API)</label>
-                                            <span class="setting-section-hint" id="graphicsBackendHint">Minecraft 26.2+</span>
+                                            <span class="setting-section-hint" id="graphicsBackendHint">Minecraft
+                                                26.2+</span>
                                         </div>
                                         <div class="backend-options">
                                             <label class="radio-label radio-label--backend">
@@ -1566,12 +1635,17 @@
                                                 <span>Výchozí</span>
                                             </label>
                                             <label class="radio-label radio-label--backend" id="labelBackendVulkan">
-                                                <input type="radio" name="graphicsBackend" id="radioBackendVulkan" value="vulkan">
+                                                <input type="radio" name="graphicsBackend" id="radioBackendVulkan"
+                                                    value="vulkan">
                                                 <span class="backend-vulkan-label">
-                                                    <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                                        <polygon points="12 2 2 7 12 12 22 7 12 2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                        <polyline points="2 17 12 22 22 17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                        <polyline points="2 12 12 17 22 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue"
+                                                        viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                                        <polygon points="12 2 2 7 12 12 22 7 12 2" stroke-width="2"
+                                                            stroke-linecap="round" stroke-linejoin="round" />
+                                                        <polyline points="2 17 12 22 22 17" stroke-width="2"
+                                                            stroke-linecap="round" stroke-linejoin="round" />
+                                                        <polyline points="2 12 12 17 22 12" stroke-width="2"
+                                                            stroke-linecap="round" stroke-linejoin="round" />
                                                     </svg>
                                                     Vulkan
                                                 </span>
@@ -1598,13 +1672,15 @@
                                     </span>
                                     <div>
                                         <h3 class="settings-group-title">Java Runtime a argumenty JVM</h3>
-                                        <p class="settings-group-desc">Cesta k binárce Javy, Garbage Collector a vlastní proměnné prostředí při spuštění.</p>
+                                        <p class="settings-group-desc">Cesta k binárce Javy, Garbage Collector a vlastní
+                                            proměnné prostředí při spuštění.</p>
                                     </div>
                                 </div>
 
                                 <!-- Java Runtime -->
                                 <div class="form-group">
-                                    <label for="javaPathInput" class="setting-section-label">Java Runtime (Verze Javy)</label>
+                                    <label for="javaPathInput" class="setting-section-label">Java Runtime (Verze
+                                        Javy)</label>
                                     <div class="input-with-button">
                                         <input type="text" id="javaPathInput" class="input-text"
                                             placeholder="Výchozí: Java 25...">
@@ -1616,13 +1692,14 @@
 
                                 <!-- Argumenty Javy -->
                                 <div class="form-group" style="margin-top: 16px;">
-                                    <label for="jvmArgsInput" class="setting-section-label">Argumenty Javy (JVM Flags)</label>
+                                    <label for="jvmArgsInput" class="setting-section-label">Argumenty Javy (JVM
+                                        Flags)</label>
                                     <input type="text" id="jvmArgsInput" class="input-text"
                                         placeholder="-XX:+UseZGC -XX:+UnlockExperimentalVMOptions...">
                                     <div class="jvm-args-actions">
                                         <button type="button" class="btn-pill-small" id="btnPresetZgc">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24"
-                                                fill="currentColor">
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue"
+                                                viewBox="0 0 24 24" fill="currentColor">
                                                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
                                                     fill="currentColor"></polygon>
                                             </svg>
@@ -1635,7 +1712,8 @@
 
                                 <!-- Vlastní proměnné prostředí -->
                                 <div class="form-group" style="margin-top: 16px; margin-bottom: 0;">
-                                    <label for="customEnvVarsInput" class="setting-section-label">Vlastní proměnné prostředí</label>
+                                    <label for="customEnvVarsInput" class="setting-section-label">Vlastní proměnné
+                                        prostředí</label>
                                     <textarea id="customEnvVarsInput" class="input-text" rows="3"
                                         style="font-family: var(--font-mono); font-size: 11.5px; resize: vertical;"
                                         placeholder="KEY=VALUE (jeden záznam na řádek)"></textarea>
@@ -1650,12 +1728,15 @@
                                     <span class="group-icon-wrap">
                                         <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
                                             <circle cx="12" cy="12" r="3"></circle>
-                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                            <path
+                                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                            </path>
                                         </svg>
                                     </span>
                                     <div>
                                         <h3 class="settings-group-title">Optimalizace operačního systému</h3>
-                                        <p class="settings-group-desc">Nativní ladění procesu, GPU a grafického serveru pro Windows a Linux.</p>
+                                        <p class="settings-group-desc">Nativní ladění procesu, GPU a grafického serveru
+                                            pro Windows a Linux.</p>
                                     </div>
                                 </div>
 
@@ -1664,33 +1745,40 @@
                                     <details class="settings-os-details" id="detailsWindowsSettings">
                                         <summary class="settings-os-summary">
                                             <div class="settings-os-summary-left">
-                                                <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24" fill="currentColor">
-                                                    <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.401H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.949-1.801"/>
+                                                <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue"
+                                                    viewBox="0 0 24 24" fill="currentColor">
+                                                    <path
+                                                        d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.401H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.949-1.801" />
                                                 </svg>
                                                 <span class="settings-os-title">Optimalizace pro Windows</span>
                                             </div>
                                             <div class="settings-os-summary-right">
                                                 <span class="badge-os" id="badgeOsWindows">Windows</span>
-                                                <svg class="settings-os-chevron ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                                <svg class="settings-os-chevron ui-icon-svg ui-icon-svg--xs"
+                                                    viewBox="0 0 24 24">
                                                     <polyline points="6 9 12 15 18 9"></polyline>
                                                 </svg>
                                             </div>
                                         </summary>
                                         <div class="settings-os-body">
                                             <div class="os-inactive-notice" id="noticeOsWindows" style="display: none;">
-                                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
                                                     <circle cx="12" cy="12" r="10"></circle>
                                                     <line x1="12" y1="8" x2="12" y2="12"></line>
                                                     <line x1="12" y1="16" x2="12.01" y2="16"></line>
                                                 </svg>
-                                                <span>Tato nastavení jsou dostupná pouze na operačním systému Windows.</span>
+                                                <span>Tato nastavení jsou dostupná pouze na operačním systému
+                                                    Windows.</span>
                                             </div>
                                             <div class="perf-settings-grid">
                                                 <label class="perf-toggle-card" id="cardWinHighPriority">
                                                     <input type="checkbox" id="checkWinHighPriority" checked>
                                                     <div class="perf-toggle-info">
                                                         <span class="perf-toggle-title">Vysoká priorita procesu</span>
-                                                        <span class="perf-toggle-desc">Spustí proces Minecraftu s prioritou HIGH_PRIORITY_CLASS pro stabilní frame time.</span>
+                                                        <span class="perf-toggle-desc">Spustí proces Minecraftu s
+                                                            prioritou HIGH_PRIORITY_CLASS pro stabilní frame
+                                                            time.</span>
                                                     </div>
                                                 </label>
 
@@ -1698,8 +1786,11 @@
                                                     <input type="checkbox" id="checkWinDedicatedGpu" checked>
                                                     <div class="perf-toggle-info">
                                                         <span class="perf-toggle-title">Vynucení dedikované GPU</span>
-                                                        <span class="perf-toggle-desc">Nastaví SHIM_MCCOMPAT (0xD4000000) pro preference výkonného GPU akcelerátoru.</span>
-                                                        <span class="perf-toggle-reason" id="reasonWinDedicatedGpu" style="display: none;"></span>
+                                                        <span class="perf-toggle-desc">Nastaví SHIM_MCCOMPAT
+                                                            (0xD4000000) pro preference výkonného GPU
+                                                            akcelerátoru.</span>
+                                                        <span class="perf-toggle-reason" id="reasonWinDedicatedGpu"
+                                                            style="display: none;"></span>
                                                     </div>
                                                 </label>
                                             </div>
@@ -1710,7 +1801,9 @@
                                     <details class="settings-os-details" id="detailsLinuxSettings">
                                         <summary class="settings-os-summary">
                                             <div class="settings-os-summary-left">
-                                                <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue"
+                                                    viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                     <polyline points="4 17 10 11 4 5"></polyline>
                                                     <line x1="12" y1="19" x2="20" y2="19"></line>
                                                 </svg>
@@ -1718,54 +1811,69 @@
                                             </div>
                                             <div class="settings-os-summary-right">
                                                 <span class="badge-os" id="badgeOsLinux">Linux</span>
-                                                <svg class="settings-os-chevron ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                                <svg class="settings-os-chevron ui-icon-svg ui-icon-svg--xs"
+                                                    viewBox="0 0 24 24">
                                                     <polyline points="6 9 12 15 18 9"></polyline>
                                                 </svg>
                                             </div>
                                         </summary>
                                         <div class="settings-os-body">
                                             <div class="os-inactive-notice" id="noticeOsLinux" style="display: none;">
-                                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
                                                     <circle cx="12" cy="12" r="10"></circle>
                                                     <line x1="12" y1="8" x2="12" y2="12"></line>
                                                     <line x1="12" y1="16" x2="12.01" y2="16"></line>
                                                 </svg>
-                                                <span>Tato nastavení jsou dostupná pouze na operačním systému Linux.</span>
+                                                <span>Tato nastavení jsou dostupná pouze na operačním systému
+                                                    Linux.</span>
                                             </div>
                                             <div class="perf-settings-grid">
                                                 <label class="perf-toggle-card" id="cardGameMode">
                                                     <input type="checkbox" id="checkGameMode" checked>
                                                     <div class="perf-toggle-info">
                                                         <span class="perf-toggle-title">Herní režim (GameMode)</span>
-                                                        <span class="perf-toggle-desc">Spustí hru přes gamemoderun pro výkonný CPU governor a I/O prioritu.</span>
-                                                        <span class="perf-toggle-reason" id="reasonGameMode" style="display: none;"></span>
+                                                        <span class="perf-toggle-desc">Spustí hru přes gamemoderun pro
+                                                            výkonný CPU governor a I/O prioritu.</span>
+                                                        <span class="perf-toggle-reason" id="reasonGameMode"
+                                                            style="display: none;"></span>
                                                     </div>
                                                 </label>
 
                                                 <label class="perf-toggle-card" id="cardDiscreteGpu">
                                                     <input type="checkbox" id="checkDiscreteGpu" checked>
                                                     <div class="perf-toggle-info">
-                                                        <span class="perf-toggle-title">Dedikovaná GPU (PRIME Offload)</span>
-                                                        <span class="perf-toggle-desc" id="descDiscreteGpu">Přepne hybridní grafiku na diskrétní GPU místo integrovaného čipu.</span>
-                                                        <span class="perf-toggle-reason" id="reasonDiscreteGpu" style="display: none;"></span>
+                                                        <span class="perf-toggle-title">Dedikovaná GPU (PRIME
+                                                            Offload)</span>
+                                                        <span class="perf-toggle-desc" id="descDiscreteGpu">Přepne
+                                                            hybridní grafiku na diskrétní GPU místo integrovaného
+                                                            čipu.</span>
+                                                        <span class="perf-toggle-reason" id="reasonDiscreteGpu"
+                                                            style="display: none;"></span>
                                                     </div>
                                                 </label>
 
                                                 <label class="perf-toggle-card" id="cardDisableVsync">
                                                     <input type="checkbox" id="checkDisableVsync">
                                                     <div class="perf-toggle-info">
-                                                        <span class="perf-toggle-title">Nízká odezva (V-Sync ovladače)</span>
-                                                        <span class="perf-toggle-desc">Potlačí V-Sync na úrovni OpenGL ovladače pro nižší input lag.</span>
-                                                        <span class="perf-toggle-reason" id="reasonDisableVsync" style="display: none;"></span>
+                                                        <span class="perf-toggle-title">Nízká odezva (V-Sync
+                                                            ovladače)</span>
+                                                        <span class="perf-toggle-desc">Potlačí V-Sync na úrovni OpenGL
+                                                            ovladače pro nižší input lag.</span>
+                                                        <span class="perf-toggle-reason" id="reasonDisableVsync"
+                                                            style="display: none;"></span>
                                                     </div>
                                                 </label>
 
                                                 <label class="perf-toggle-card" id="cardNativeWayland">
                                                     <input type="checkbox" id="checkNativeWayland">
                                                     <div class="perf-toggle-info">
-                                                        <span class="perf-toggle-title">Nativní Wayland okno (GLFW)</span>
-                                                        <span class="perf-toggle-desc">Spustí hru přímo na Waylandu bez XWayland mezivrstvy.</span>
-                                                        <span class="perf-toggle-reason" id="reasonNativeWayland" style="display: none;"></span>
+                                                        <span class="perf-toggle-title">Nativní Wayland okno
+                                                            (GLFW)</span>
+                                                        <span class="perf-toggle-desc">Spustí hru přímo na Waylandu bez
+                                                            XWayland mezivrstvy.</span>
+                                                        <span class="perf-toggle-reason" id="reasonNativeWayland"
+                                                            style="display: none;"></span>
                                                     </div>
                                                 </label>
 
@@ -1773,8 +1881,10 @@
                                                     <input type="checkbox" id="checkSystemGlfw">
                                                     <div class="perf-toggle-info">
                                                         <span class="perf-toggle-title">Systémová knihovna GLFW</span>
-                                                        <span class="perf-toggle-desc">Předá LWJGL systémovou knihovnu libglfw.so (např. glfw-wayland-minecraft).</span>
-                                                        <span class="perf-toggle-reason" id="reasonSystemGlfw" style="display: none;"></span>
+                                                        <span class="perf-toggle-desc">Předá LWJGL systémovou knihovnu
+                                                            libglfw.so (např. glfw-wayland-minecraft).</span>
+                                                        <span class="perf-toggle-reason" id="reasonSystemGlfw"
+                                                            style="display: none;"></span>
                                                     </div>
                                                 </label>
 
@@ -1782,43 +1892,61 @@
                                                     <input type="checkbox" id="checkZink">
                                                     <div class="perf-toggle-info">
                                                         <span class="perf-toggle-title">Zink (OpenGL přes Vulkan)</span>
-                                                        <span class="perf-toggle-desc">Mesa ovladač převádějící OpenGL volání do Vulkan API.</span>
-                                                        <span class="perf-toggle-reason" id="reasonZink" style="display: none;"></span>
+                                                        <span class="perf-toggle-desc">Mesa ovladač převádějící OpenGL
+                                                            volání do Vulkan API.</span>
+                                                        <span class="perf-toggle-reason" id="reasonZink"
+                                                            style="display: none;"></span>
                                                     </div>
                                                 </label>
                                             </div>
 
                                             <!-- Podmíněná sekce pro NVIDIA OpenGL (skrytá bez NVIDIA GPU) -->
-                                            <div class="perf-subsection" id="nvidiaOpenGlSection" style="display: none;">
+                                            <div class="perf-subsection" id="nvidiaOpenGlSection"
+                                                style="display: none;">
                                                 <div class="perf-subsection-header">
                                                     <span class="perf-subsection-title">NVIDIA OpenGL akcelerace</span>
-                                                    <span class="perf-subsection-hint" id="nvidiaDriverBadgeHint">Proprietární ovladač</span>
+                                                    <span class="perf-subsection-hint"
+                                                        id="nvidiaDriverBadgeHint">Proprietární ovladač</span>
                                                 </div>
-                                                <div class="os-inactive-notice" id="noticeNvidiaUnavailable" style="display: none;">
-                                                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <div class="os-inactive-notice" id="noticeNvidiaUnavailable"
+                                                    style="display: none;">
+                                                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"
+                                                        fill="none" stroke="currentColor" stroke-width="2">
                                                         <circle cx="12" cy="12" r="10"></circle>
                                                         <line x1="12" y1="8" x2="12" y2="12"></line>
                                                         <line x1="12" y1="16" x2="12.01" y2="16"></line>
                                                     </svg>
-                                                    <span id="textNvidiaUnavailable">Proprietární NVIDIA OpenGL volby nejsou dostupné.</span>
+                                                    <span id="textNvidiaUnavailable">Proprietární NVIDIA OpenGL volby
+                                                        nejsou dostupné.</span>
                                                 </div>
                                                 <div class="perf-settings-grid">
                                                     <label class="perf-toggle-card" id="cardNvidiaThreadedOpt">
                                                         <input type="checkbox" id="checkNvidiaThreadedOpt" checked>
                                                         <div class="perf-toggle-info">
-                                                            <span class="perf-toggle-title">OpenGL Threaded Optimization</span>
-                                                            <span class="perf-toggle-desc">Zapne vícevláknové zpracování draw callů (__GL_THREADED_OPTIMIZATIONS=1).</span>
-                                                            <span class="perf-toggle-reason" id="reasonNvidiaThreadedOpt" style="display: none;"></span>
+                                                            <span class="perf-toggle-title">OpenGL Threaded
+                                                                Optimization</span>
+                                                            <span class="perf-toggle-desc">Zapne vícevláknové zpracování
+                                                                draw callů (__GL_THREADED_OPTIMIZATIONS=1).</span>
+                                                            <span class="perf-toggle-reason"
+                                                                id="reasonNvidiaThreadedOpt"
+                                                                style="display: none;"></span>
                                                         </div>
                                                     </label>
 
                                                     <label class="perf-toggle-card" id="cardNvidiaBusyWait">
                                                         <input type="checkbox" id="checkNvidiaBusyWait">
                                                         <div class="perf-toggle-info">
-                                                            <span class="perf-toggle-title">Aktivní čekání vlákna (__GL_YIELD)</span>
-                                                            <span class="perf-toggle-desc">Nastaví __GL_YIELD=NOTHING pro nižší latenci kamery na úkor vyššího odběru CPU.</span>
-                                                            <span class="perf-toggle-warning" id="warnNvidiaBusyWaitBattery" style="display: none;">Detekována baterie — aktivní čekání zvyšuje spotřebu a zkracuje výdrž.</span>
-                                                            <span class="perf-toggle-reason" id="reasonNvidiaBusyWait" style="display: none;"></span>
+                                                            <span class="perf-toggle-title">Aktivní čekání vlákna
+                                                                (__GL_YIELD)</span>
+                                                            <span class="perf-toggle-desc">Nastaví __GL_YIELD=NOTHING
+                                                                pro nižší latenci kamery na úkor vyššího odběru
+                                                                CPU.</span>
+                                                            <span class="perf-toggle-warning"
+                                                                id="warnNvidiaBusyWaitBattery"
+                                                                style="display: none;">Detekována baterie — aktivní
+                                                                čekání zvyšuje spotřebu a zkracuje výdrž.</span>
+                                                            <span class="perf-toggle-reason" id="reasonNvidiaBusyWait"
+                                                                style="display: none;"></span>
                                                         </div>
                                                     </label>
                                                 </div>
@@ -1835,12 +1963,15 @@
                                 <div class="settings-group-header">
                                     <span class="group-icon-wrap">
                                         <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
-                                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                                            <path
+                                                d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z">
+                                            </path>
                                         </svg>
                                     </span>
                                     <div>
                                         <h3 class="settings-group-title">Správa a údržba launcheru</h3>
-                                        <p class="settings-group-desc">Aktualizace na nejnovější verzi a uvolnění místa na pevném disku.</p>
+                                        <p class="settings-group-desc">Aktualizace na nejnovější verzi a uvolnění místa
+                                            na pevném disku.</p>
                                     </div>
                                 </div>
 
@@ -1848,7 +1979,8 @@
                                     <div class="update-checker-card">
                                         <div class="tool-card-header">
                                             <span class="ui-icon-wrap">
-                                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue"
+                                                    viewBox="0 0 24 24">
                                                     <path d="M21 2v6h-6"></path>
                                                     <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
                                                     <path d="M3 22v-6h6"></path>
@@ -1857,16 +1989,19 @@
                                             </span>
                                             <div>
                                                 <strong class="tool-card-title">Aktualizace aplikace</strong>
-                                                <p class="tool-card-desc" id="launcherVersionStatus">Verze: <strong>v1.7.26</strong>
+                                                <p class="tool-card-desc" id="launcherVersionStatus">Verze:
+                                                    <strong>v1.7.26</strong>
                                                 </p>
                                             </div>
                                         </div>
                                         <div class="tool-card-actions">
-                                            <button type="button" class="mc-btn mc-btn-primary" id="btnManualCheckUpdate">
+                                            <button type="button" class="mc-btn mc-btn-primary"
+                                                id="btnManualCheckUpdate">
                                                 <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
                                                     <polyline points="23 4 23 10 17 10"></polyline>
                                                     <polyline points="1 20 1 14 7 14"></polyline>
-                                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15">
+                                                    <path
+                                                        d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15">
                                                     </path>
                                                 </svg>
                                                 <span>Zkontrolovat</span>
@@ -1877,7 +2012,8 @@
                                     <div class="cache-cleaner-card">
                                         <div class="tool-card-header">
                                             <span class="ui-icon-wrap">
-                                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24">
+                                                <svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue"
+                                                    viewBox="0 0 24 24">
                                                     <line x1="22" y1="12" x2="2" y2="12"></line>
                                                     <path
                                                         d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z">
@@ -1913,14 +2049,16 @@
                                             title="Zkopírovat celý log do schránky">
                                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1">
+                                                </path>
                                             </svg>
                                             <span>Kopírovat log</span>
                                         </button>
                                         <button type="button" class="btn-mini" id="btnOpenLogEditor"
                                             title="Otevřít dekomprimovaný log ve výchozím textovém editoru (Poznámkový blok)">
                                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6">
+                                                </path>
                                                 <polyline points="15 3 21 3 21 9"></polyline>
                                                 <line x1="10" y1="14" x2="21" y2="3"></line>
                                             </svg>
@@ -1938,7 +2076,9 @@
                                         <button type="button" class="btn-mini" id="btnOpenLogFolder"
                                             title="Procházet složku s logy v průzkumníku souborů">
                                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                                <path
+                                                    d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
+                                                </path>
                                             </svg>
                                             <span>Procházet složku</span>
                                         </button>
@@ -1953,7 +2093,8 @@
                                 <div class="danger-zone-card" style="margin-top: 0;">
                                     <div class="danger-zone-info">
                                         <span class="danger-zone-title">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24">
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red"
+                                                viewBox="0 0 24 24">
                                                 <path
                                                     d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
                                                 </path>
@@ -1962,7 +2103,8 @@
                                             </svg>
                                             Reset dat
                                         </span>
-                                        <span class="danger-zone-desc">Smaže uložené profily, stažená data a obnoví výchozí nastavení.</span>
+                                        <span class="danger-zone-desc">Smaže uložené profily, stažená data a obnoví
+                                            výchozí nastavení.</span>
                                     </div>
                                     <button class="btn-danger-reset" id="btnResetLauncherData">
                                         <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--red" viewBox="0 0 24 24">
@@ -2112,9 +2254,10 @@
                     </svg>
                     <input type="text" id="keybindSearchInput" class="keybind-search-input"
                         placeholder="Hledat akci nebo klávesu (např. W, Sprint, Zoom, Voice)...">
-                    <button type="button" id="btnClearKeybindSearch" class="keybind-clear-search"
-                        style="display: none;" aria-label="Vymazat hledání">
-                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <button type="button" id="btnClearKeybindSearch" class="keybind-clear-search" style="display: none;"
+                        aria-label="Vymazat hledání">
+                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <line x1="18" y1="6" x2="6" y2="18"></line>
                             <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
@@ -2131,7 +2274,13 @@
                     <button type="button" class="cat-chip" data-category="mods">Módy</button>
                     <button type="button" class="cat-chip chip-conflicts" data-category="conflicts"
                         id="chipOnlyConflicts" style="display: none;">
-                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                            <path
+                                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
+                            </path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
                         <span>Jen konflikty</span>
                     </button>
                 </div>
@@ -2162,7 +2311,8 @@
                     <!-- Inspector bar: Informace o vybrané klávese -->
                     <div class="keybind-inspector-card" id="keybindInspectorCard">
                         <div class="inspector-empty" id="inspectorEmptyState">
-                            <span>Klikni na libovolnou klávesu na klávesnici pro zobrazení přiřazených akcí nebo změnu bindu.</span>
+                            <span>Klikni na libovolnou klávesu na klávesnici pro zobrazení přiřazených akcí nebo změnu
+                                bindu.</span>
                         </div>
                         <div class="inspector-active" id="inspectorActiveContent" style="display: none;">
                             <div class="inspector-header">
@@ -2201,7 +2351,8 @@
             <div class="modal-footer keybind-modal-footer">
                 <div class="keybind-footer-info">
                     <span class="footer-legend-item"><span class="legend-dot dot-bound"></span> Přiřazená klávesa</span>
-                    <span class="footer-legend-item"><span class="legend-dot dot-conflict"></span> Konflikt (více akcí)</span>
+                    <span class="footer-legend-item"><span class="legend-dot dot-conflict"></span> Konflikt (více
+                        akcí)</span>
                     <span class="footer-legend-item"><span class="legend-dot dot-free"></span> Volná klávesa</span>
                 </div>
                 <div class="keybind-save-status" id="keybindAutoSaveIndicator">
@@ -2234,7 +2385,8 @@
             <div style="margin-top: 24px; display: flex; justify-content: center; gap: 10px;">
                 <button type="button" class="mc-btn mc-btn-secondary btn-sm" id="btnRecorderUnbind"
                     style="display: inline-flex; align-items: center; gap: 6px;">
-                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
@@ -2247,13 +2399,15 @@
         </div>
     </div>
     <div class="launcher-modal-overlay" id="modalCreateProfile" style="display: none;">
-        <div class="launcher-modal-card create-profile-modal-card" role="dialog" aria-modal="true" aria-labelledby="createProfileModalTitle">
+        <div class="launcher-modal-card create-profile-modal-card" role="dialog" aria-modal="true"
+            aria-labelledby="createProfileModalTitle">
             <div class="modal-header cp-modal-header">
                 <div class="cp-modal-title-group">
                     <h3 id="createProfileModalTitle">Nový profil</h3>
                     <p class="cp-modal-subtitle">Vyber verzi Minecraftu, mod loader a paměť RAM.</p>
                 </div>
-                <button type="button" class="modal-close-btn cp-close-btn" id="btnCloseCreateProfileModal" aria-label="Zavřít">
+                <button type="button" class="modal-close-btn cp-close-btn" id="btnCloseCreateProfileModal"
+                    aria-label="Zavřít">
                     <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -2265,19 +2419,23 @@
                 <div class="cp-identity-row">
                     <div class="form-group cp-name-group">
                         <label for="newProfileNameInput">Název profilu</label>
-                        <input type="text" class="text-input cp-text-input" id="newProfileNameInput" placeholder="Např. Survival 26.3" autocomplete="off">
+                        <input type="text" class="text-input cp-text-input" id="newProfileNameInput"
+                            placeholder="Např. Survival 26.3" autocomplete="off">
                     </div>
                     <div class="form-group cp-icon-group">
                         <label>Ikona</label>
                         <div class="icon-picker-grid cp-icon-picker-grid" id="newProfileIconPicker">
                             <button type="button" class="icon-picker-item active" data-icon="sword" title="Iron Golem">
-                                <img src="assets/icons/mostplayed.png" class="profile-3d-picker-icon" alt="Golem" draggable="false">
+                                <img src="assets/icons/mostplayed.png" class="profile-3d-picker-icon" alt="Golem"
+                                    draggable="false">
                             </button>
                             <button type="button" class="icon-picker-item" data-icon="latest" title="Tráva">
-                                <img src="assets/icons/newest.png" class="profile-3d-picker-icon" alt="Tráva" draggable="false">
+                                <img src="assets/icons/newest.png" class="profile-3d-picker-icon" alt="Tráva"
+                                    draggable="false">
                             </button>
                             <button type="button" class="icon-picker-item" data-icon="old" title="Hlína">
-                                <img src="assets/icons/old.png" class="profile-3d-picker-icon" alt="Hlína" draggable="false">
+                                <img src="assets/icons/old.png" class="profile-3d-picker-icon" alt="Hlína"
+                                    draggable="false">
                             </button>
                         </div>
                     </div>
@@ -2291,27 +2449,33 @@
                                 <div class="custom-dropdown-selected">
                                     <span class="custom-dropdown-selected-icon">
                                         <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold" viewBox="0 0 24 24">
-                                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                            <polygon
+                                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                                            </polygon>
                                         </svg>
                                     </span>
                                     <span class="custom-dropdown-selected-text">Minecraft 26.3</span>
                                 </div>
-                                <span class="custom-dropdown-chevron"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg></span>
+                                <span class="custom-dropdown-chevron"><svg class="ui-icon-svg ui-icon-svg--xs"
+                                        viewBox="0 0 24 24">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg></span>
                             </button>
                             <div class="custom-dropdown-menu">
                                 <div class="custom-dropdown-option" data-value="26.4" data-icon="latest">
                                     <div class="custom-option-left">
                                         <span class="custom-option-icon">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue"
+                                                viewBox="0 0 24 24">
                                                 <circle cx="12" cy="12" r="10"></circle>
                                                 <polyline points="12 6 12 12 16 14"></polyline>
                                             </svg>
                                         </span>
                                         <div class="custom-option-text">
-                                            <span class="custom-option-title">Minecraft 26.4 <span class="custom-option-tag">· Coming Soon</span></span>
-                                            <span class="custom-option-desc">Připravovaná verze • zatím nelze spustit</span>
+                                            <span class="custom-option-title">Minecraft 26.4 <span
+                                                    class="custom-option-tag">· Coming Soon</span></span>
+                                            <span class="custom-option-desc">Připravovaná verze • zatím nelze
+                                                spustit</span>
                                         </div>
                                     </div>
                                     <span class="custom-option-check"></span>
@@ -2319,8 +2483,11 @@
                                 <div class="custom-dropdown-option active" data-value="26.3" data-icon="latest">
                                     <div class="custom-option-left">
                                         <span class="custom-option-icon">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold" viewBox="0 0 24 24">
-                                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold"
+                                                viewBox="0 0 24 24">
+                                                <polygon
+                                                    points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                                                </polygon>
                                             </svg>
                                         </span>
                                         <div class="custom-option-text">
@@ -2337,7 +2504,8 @@
                                 <div class="custom-dropdown-option" data-value="26.2" data-icon="sword">
                                     <div class="custom-option-left">
                                         <span class="custom-option-icon">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue"
+                                                viewBox="0 0 24 24">
                                                 <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline>
                                                 <line x1="13" y1="19" x2="19" y2="13"></line>
                                                 <line x1="16" y1="16" x2="20" y2="20"></line>
@@ -2355,7 +2523,9 @@
                                     <div class="custom-option-left">
                                         <span class="custom-option-icon">
                                             <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
-                                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                                <path
+                                                    d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                                                </path>
                                                 <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
                                                 <line x1="12" y1="22.08" x2="12" y2="12"></line>
                                             </svg>
@@ -2370,7 +2540,8 @@
                                 <div class="custom-dropdown-option" data-value="1.21.11" data-icon="shield">
                                     <div class="custom-option-left">
                                         <span class="custom-option-icon">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue"
+                                                viewBox="0 0 24 24">
                                                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                                             </svg>
                                         </span>
@@ -2397,9 +2568,10 @@
                                     </span>
                                     <span class="custom-dropdown-selected-text">Vanilla</span>
                                 </div>
-                                <span class="custom-dropdown-chevron"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg></span>
+                                <span class="custom-dropdown-chevron"><svg class="ui-icon-svg ui-icon-svg--xs"
+                                        viewBox="0 0 24 24">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg></span>
                             </button>
                             <div class="custom-dropdown-menu">
                                 <div class="custom-dropdown-option active" data-value="vanilla" data-icon="vanilla">
@@ -2423,7 +2595,8 @@
                                 <div class="custom-dropdown-option" data-value="fabric" data-icon="fabric">
                                     <div class="custom-option-left">
                                         <span class="custom-option-icon">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue"
+                                                viewBox="0 0 24 24">
                                                 <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                                                 <polyline points="2 17 12 22 22 17"></polyline>
                                                 <polyline points="2 12 12 17 22 12"></polyline>
@@ -2439,8 +2612,11 @@
                                 <div class="custom-dropdown-option" data-value="neoforge" data-icon="neoforge">
                                     <div class="custom-option-left">
                                         <span class="custom-option-icon">
-                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold" viewBox="0 0 24 24">
-                                                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
+                                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--gold"
+                                                viewBox="0 0 24 24">
+                                                <path
+                                                    d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z">
+                                                </path>
                                             </svg>
                                         </span>
                                         <div class="custom-option-text">
@@ -2454,7 +2630,9 @@
                                     <div class="custom-option-left">
                                         <span class="custom-option-icon">
                                             <svg class="ui-icon-svg ui-icon-svg--sm" viewBox="0 0 24 24">
-                                                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                                                <path
+                                                    d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z">
+                                                </path>
                                             </svg>
                                         </span>
                                         <div class="custom-option-text">
@@ -2471,7 +2649,8 @@
                                 <circle cx="12" cy="12" r="10"></circle>
                                 <polyline points="12 6 12 12 16 14"></polyline>
                             </svg>
-                            <span>Pro verzi 26.4 lze zatím založit pouze čistý profil; spuštění i podpora Modrinthu budou doplněny po vydání.</span>
+                            <span>Pro verzi 26.4 lze zatím založit pouze čistý profil; spuštění i podpora Modrinthu
+                                budou doplněny po vydání.</span>
                         </div>
                     </div>
                 </div>
@@ -2481,7 +2660,8 @@
                         <span class="cp-section-label">Alokace RAM pro tento profil</span>
                         <span class="slider-value-badge cp-ram-readout" id="newProfileRamValueBadge">4 GB</span>
                     </div>
-                    <input type="range" min="2" max="16" step="any" value="4" class="slider cp-ram-slider" id="newProfileRamSlider">
+                    <input type="range" min="2" max="16" step="any" value="4" class="slider cp-ram-slider"
+                        id="newProfileRamSlider">
                 </div>
 
                 <div class="cp-advanced-block">
@@ -2494,8 +2674,9 @@
                     <div class="cp-advanced-collapse" id="newProfileJvmCollapse">
                         <div class="cp-advanced-collapse-inner">
                             <div class="cp-advanced-field">
-                                <input type="text" class="text-input font-mono cp-text-input" id="newProfileJvmArgsInput"
-                                    placeholder="-XX:+UseZGC -Dcustom.prop=true" spellcheck="false" autocomplete="off"
+                                <input type="text" class="text-input font-mono cp-text-input"
+                                    id="newProfileJvmArgsInput" placeholder="-XX:+UseZGC -Dcustom.prop=true"
+                                    spellcheck="false" autocomplete="off"
                                     style="font-family: var(--font-mono); font-size: 11.5px;">
                             </div>
                         </div>
@@ -2545,10 +2726,14 @@
                 <div class="discovered-profiles-section" id="discoveredProfilesSection" style="display: none;">
                     <div class="discovered-profiles-header">
                         <div class="discovered-profiles-title">
-                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
                             <span>Nalezené profily na tvém PC</span>
                         </div>
-                        <div class="discovered-profiles-desc">Vyber profil z Minecraftu, Lunaru nebo jiného launcheru pro okamžitý import:</div>
+                        <div class="discovered-profiles-desc">Vyber profil z Minecraftu, Lunaru nebo jiného launcheru
+                            pro okamžitý import:</div>
                     </div>
                     <div class="discovered-profiles-list" id="discoveredProfilesList">
                         <!-- Dynamically filled with top 10 profiles -->
@@ -2761,13 +2946,20 @@
             <div class="modal-body">
                 <div class="profile-quick-upgrade-banner" id="profileQuickUpgradeBanner" style="display: none;">
                     <div>
-                        <div style="font-size: 13px; font-weight: 600; color: #f1f5f9; display: flex; align-items: center; gap: 7px;">
-                            <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="16 12 12 8 8 12"></polyline><line x1="12" y1="16" x2="12" y2="8"></line></svg>
+                        <div
+                            style="font-size: 13px; font-weight: 600; color: #f1f5f9; display: flex; align-items: center; gap: 7px;">
+                            <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--blue" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="16 12 12 8 8 12"></polyline>
+                                <line x1="12" y1="16" x2="12" y2="8"></line>
+                            </svg>
                             <span id="profileUpgradeBannerTitle">Dostupný upgrade verze</span>
                         </div>
-                        <div style="font-size: 11.5px; color: #94a3b8; margin-top: 3px;" id="profileUpgradeBannerDesc">Upgradovat profil na novější verzi Minecraftu a stáhnout aktuální módy.</div>
+                        <div style="font-size: 11.5px; color: #94a3b8; margin-top: 3px;" id="profileUpgradeBannerDesc">
+                            Upgradovat profil na novější verzi Minecraftu a stáhnout aktuální módy.</div>
                     </div>
-                    <button type="button" class="mc-btn mc-btn-primary" id="btnModalUpgradeProfile" style="padding: 7px 16px; font-size: 12px; white-space: nowrap;">
+                    <button type="button" class="mc-btn mc-btn-primary" id="btnModalUpgradeProfile"
+                        style="padding: 7px 16px; font-size: 12px; white-space: nowrap;">
                         <span>Upgradovat</span>
                     </button>
                 </div>
@@ -2786,8 +2978,11 @@
                     <div class="loader-cards-grid" id="loaderCardsContainer">
                         <div class="loader-card active" data-loader="fabric">
                             <div class="loader-card-icon">
-                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="currentColor"></polygon>
+                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="currentColor">
+                                    </polygon>
                                 </svg>
                             </div>
                             <div class="loader-card-title">Fabric</div>
@@ -2795,8 +2990,12 @@
                         </div>
                         <div class="loader-card" data-loader="vanilla">
                             <div class="loader-card-icon">
-                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path
+                                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                                    </path>
                                     <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
                                     <line x1="12" y1="22.08" x2="12" y2="12"></line>
                                 </svg>
@@ -2806,9 +3005,13 @@
                         </div>
                         <div class="loader-card" data-loader="neoforge">
                             <div class="loader-card-icon">
-                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+                                    stroke-linejoin="round">
                                     <circle cx="12" cy="12" r="3"></circle>
-                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                    <path
+                                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                    </path>
                                 </svg>
                             </div>
                             <div class="loader-card-title">NeoForge</div>
@@ -2816,17 +3019,30 @@
                         </div>
                         <div class="loader-card" data-loader="forge">
                             <div class="loader-card-icon">
-                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                                <svg class="ui-icon-svg loader-svg-icon" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path
+                                        d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z">
+                                    </path>
                                 </svg>
                             </div>
                             <div class="loader-card-title">Forge</div>
                             <div class="loader-card-desc">Tradiční loader pro starší modpacky.</div>
                         </div>
                     </div>
-                    <div id="profileImportedLoaderNotice" style="display: none; font-size: 12.5px; color: #94a3b8; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 8px; padding: 11px 16px; align-items: center; gap: 10px;">
-                        <svg class="ui-icon-svg ui-icon-svg--xs" style="color: #0a67e5;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                        <span>Zavaděč: <strong id="profileImportedLoaderLabel" style="color: #fff; text-transform: capitalize;">Fabric</strong> <span id="profileLoaderLockReason" style="color: var(--text-muted); font-size: 11.5px;">(uzamčeno pro importovaný profil)</span></span>
+                    <div id="profileImportedLoaderNotice"
+                        style="display: none; font-size: 12.5px; color: #94a3b8; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 8px; padding: 11px 16px; align-items: center; gap: 10px;">
+                        <svg class="ui-icon-svg ui-icon-svg--xs" style="color: #0a67e5;" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        <span>Zavaděč: <strong id="profileImportedLoaderLabel"
+                                style="color: #fff; text-transform: capitalize;">Fabric</strong> <span
+                                id="profileLoaderLockReason"
+                                style="color: var(--text-muted); font-size: 11.5px;">(uzamčeno pro importovaný
+                                profil)</span></span>
                     </div>
                 </div>
 
@@ -2855,13 +3071,16 @@
                     <label>Ikona profilu</label>
                     <div class="icon-picker-grid" id="profileSettingsIconPicker">
                         <button type="button" class="icon-picker-item active" data-icon="sword" title="Iron Golem">
-                            <img src="assets/icons/mostplayed.png" class="profile-3d-picker-icon" alt="Golem" draggable="false">
+                            <img src="assets/icons/mostplayed.png" class="profile-3d-picker-icon" alt="Golem"
+                                draggable="false">
                         </button>
                         <button type="button" class="icon-picker-item" data-icon="latest" title="Tráva">
-                            <img src="assets/icons/newest.png" class="profile-3d-picker-icon" alt="Tráva" draggable="false">
+                            <img src="assets/icons/newest.png" class="profile-3d-picker-icon" alt="Tráva"
+                                draggable="false">
                         </button>
                         <button type="button" class="icon-picker-item" data-icon="old" title="Hlína">
-                            <img src="assets/icons/old.png" class="profile-3d-picker-icon" alt="Hlína" draggable="false">
+                            <img src="assets/icons/old.png" class="profile-3d-picker-icon" alt="Hlína"
+                                draggable="false">
                         </button>
                     </div>
                 </div>
@@ -2875,7 +3094,8 @@
                 </div>
 
                 <div class="form-group">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                         <label style="margin-bottom: 0;">Vlastní argumenty JVM</label>
                         <span style="font-size: 11px; color: #94a3b8;">Specifické parametry pro Java VM</span>
                     </div>
@@ -2888,24 +3108,24 @@
                     <label>Rychlé otevření složek profilu</label>
                     <div class="profile-folders-quick-grid"
                         style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
-                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder=""
-                            style="padding: 8px; font-size: 11px;">
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                            data-subfolder="" style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                                 </path>
                             </svg>
                             <span>Celá složka</span>
                         </button>
-                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="mods"
-                            style="padding: 8px; font-size: 11px;">
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                            data-subfolder="mods" style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                                 </path>
                             </svg>
                             <span>mods/</span>
                         </button>
-                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="config"
-                            style="padding: 8px; font-size: 11px;">
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                            data-subfolder="config" style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                                 </path>
@@ -2925,8 +3145,8 @@
                             </svg>
                             <span>textury/</span>
                         </button>
-                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="shaderpacks"
-                            style="padding: 8px; font-size: 11px;">
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                            data-subfolder="shaderpacks" style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-pulse" viewBox="0 0 24 24">
                                 <path
                                     d="M12 3l1.912 5.885L20 10.8l-5.088 3.697L16.824 20.4 12 16.703 7.176 20.4l1.912-5.903L4 10.8l6.088-1.915L12 3z">
@@ -2934,10 +3154,12 @@
                             </svg>
                             <span>shadery/</span>
                         </button>
-                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder" data-subfolder="screenshots"
-                            style="padding: 8px; font-size: 11px;">
+                        <button type="button" class="mc-btn mc-btn-secondary btn-open-profile-subfolder"
+                            data-subfolder="screenshots" style="padding: 8px; font-size: 11px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24">
-                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <path
+                                    d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
+                                </path>
                                 <circle cx="12" cy="13" r="4"></circle>
                             </svg>
                             <span>snímky/</span>
@@ -2971,7 +3193,9 @@
                             style="padding: 6px 12px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 6px;">
                             <svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24">
                                 <polyline points="3 6 5 6 21 6"></polyline>
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <path
+                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                </path>
                             </svg>
                             <span>Smazat</span>
                         </button>
@@ -3034,11 +3258,23 @@
                         </div>
 
                         <ul class="first-launch-features">
-                            <li><span class="feat-check"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span><strong>Fabric + Sodium & Lithium</strong> –
+                            <li><span class="feat-check"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg></span> <span><strong>Fabric + Sodium & Lithium</strong> –
                                     vysoký výkon a plynulost</span></li>
-                            <li><span class="feat-check"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span><strong>Iris Shaders</strong> s balíčkem
+                            <li><span class="feat-check"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg></span> <span><strong>Iris Shaders</strong> s balíčkem
                                     Complementary</span></li>
-                            <li><span class="feat-check"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span> <span>Vyladěné herní nastavení pro MYCHAL SMP</span>
+                            <li><span class="feat-check"><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg></span> <span>Vyladěné herní nastavení pro MYCHAL SMP</span>
                             </li>
                         </ul>
 
@@ -3138,7 +3374,8 @@
             </div>
             <div class="modal-foot">
                 <button class="mc-btn mc-btn-secondary" id="btnIgnoreWardenClose">Zavřít</button>
-                <button class="mc-btn mc-btn-secondary" id="btnLaunchWithoutSmp" style="color: #60a5fa;" title="Spustit hru pro singleplayer nebo jiné servery">
+                <button class="mc-btn mc-btn-secondary" id="btnLaunchWithoutSmp" style="color: #60a5fa;"
+                    title="Spustit hru pro singleplayer nebo jiné servery">
                     <span>
                         <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-svg--blue" viewBox="0 0 24 24">
                             <rect x="2" y="6" width="20" height="12" rx="4"></rect>
@@ -3261,7 +3498,8 @@
             <div class="modal-head">
                 <div class="modal-title-with-icon">
                     <span class="modal-icon" id="updateModalIconWrap">
-                        <svg class="ui-icon-svg ui-icon-svg--lg ui-icon-svg--blue" viewBox="0 0 24 24" id="updateModalIcon">
+                        <svg class="ui-icon-svg ui-icon-svg--lg ui-icon-svg--blue" viewBox="0 0 24 24"
+                            id="updateModalIcon">
                             <polyline points="23 4 23 10 17 10"></polyline>
                             <polyline points="1 20 1 14 7 14"></polyline>
                             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -3324,7 +3562,8 @@
                         </div>
                     </div>
                     <div class="update-success-title">Nová verze je připravena</div>
-                    <p class="update-success-subtitle">Aktualizace byla úspěšně nainstalována. Klient se automaticky restartuje.</p>
+                    <p class="update-success-subtitle">Aktualizace byla úspěšně nainstalována. Klient se automaticky
+                        restartuje.</p>
 
                     <div class="update-countdown-row">
                         <div class="update-countdown-badge">
@@ -3339,7 +3578,8 @@
 
                     <div class="update-success-action-row">
                         <button type="button" class="btn-restart-now" id="btnRestartNow">
-                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"></polyline>
                                 <polyline points="1 20 1 14 7 14"></polyline>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -3371,7 +3611,8 @@
             <div class="modal-head">
                 <div class="modal-title-with-icon">
                     <span class="modal-icon" id="crashModalIcon">
-                        <svg class="ui-icon-svg ui-icon-svg--lg ui-icon-svg--red" id="crashModalIconSvg" viewBox="0 0 24 24">
+                        <svg class="ui-icon-svg ui-icon-svg--lg ui-icon-svg--red" id="crashModalIconSvg"
+                            viewBox="0 0 24 24">
                             <path
                                 d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
                             </path>
@@ -3381,7 +3622,8 @@
                     </span>
                     <div>
                         <h3 id="crashAnalyzerTitle" style="color: #f51515;">Pád hry</h3>
-                        <p class="modal-subtitle" id="crashAnalyzerSubtitle" style="color: #94a3b8;">Chyba při běhu (kód 1)</p>
+                        <p class="modal-subtitle" id="crashAnalyzerSubtitle" style="color: #94a3b8;">Chyba při běhu (kód
+                            1)</p>
                     </div>
                 </div>
                 <button class="modal-close-x" id="btnCloseCrashModal">
@@ -3397,9 +3639,11 @@
                     style="background: rgba(245, 21, 21, 0.08); border: 1px solid rgba(245, 21, 21, 0.25); border-radius: 10px; padding: 14px; margin-bottom: 14px;">
                     <div
                         style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-                        <strong id="crashCauseHead" style="color: #f51515; font-size: 15px;">Příčina: Nedostatek paměti RAM</strong>
+                        <strong id="crashCauseHead" style="color: #f51515; font-size: 15px;">Příčina: Nedostatek paměti
+                            RAM</strong>
                         <span class="badge" id="crashExitCodeBadge"
-                            style="background: #f51515; color: #ffffff; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Kód 1</span>
+                            style="background: #f51515; color: #ffffff; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Kód
+                            1</span>
                     </div>
                     <p id="crashCauseDesc"
                         style="font-size: 13px; color: #94a3b8; line-height: 1.5; margin: 0 0 10px 0;">
@@ -3409,14 +3653,19 @@
                     <!-- Live Autonomous Auto-Repair Status Banner -->
                     <div id="crashAutoRepairBanner"
                         style="display: none; align-items: center; gap: 12px; background: rgba(10, 103, 229, 0.12); border: 1px solid rgba(10, 103, 229, 0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);">
-                        <span id="crashAutoRepairIcon" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" style="color: #0a67e5;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/>
+                        <span id="crashAutoRepairIcon"
+                            style="display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <svg class="ui-icon-svg ui-icon-svg--sm ui-icon-spin" style="color: #0a67e5;"
+                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12" />
                             </svg>
                         </span>
                         <div style="flex: 1; min-width: 0;">
-                            <div id="crashAutoRepairTitle" style="font-size: 13px; font-weight: 600; color: #0a67e5;">Automatická oprava probíhá</div>
-                            <div id="crashAutoRepairDesc" style="font-size: 12px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Aplikuji opravy...</div>
+                            <div id="crashAutoRepairTitle" style="font-size: 13px; font-weight: 600; color: #0a67e5;">
+                                Automatická oprava probíhá</div>
+                            <div id="crashAutoRepairDesc"
+                                style="font-size: 12px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                Aplikuji opravy...</div>
                         </div>
                     </div>
 
@@ -3546,6 +3795,7 @@
     <script src="js/lib/skinview3d.bundle.js"></script>
     <script src="js/tauri-bridge.js?v=1.6.2"></script>
     <script src="js/app.js?v=1.7.3"></script>
+    <script src="js/app.js?v=1.7.4"></script>
 </body>
 
 </html>

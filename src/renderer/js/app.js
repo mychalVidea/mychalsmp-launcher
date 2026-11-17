@@ -3624,9 +3624,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             const pKeyart = resolveCardKeyartUrl(p.keyart || p.version);
             const keyartBgStyle = pKeyart ? `background-image: url('${escapeHtml(pKeyart)}');` : '';
             const iconDesc = resolveProfile3DIcon(p);
-            const iconHtml = (iconDesc && iconDesc.type === 'svg')
-                ? `<div class="profile-icon-box">${iconDesc.svg}</div>`
-                : `<div class="profile-icon-box"><img src="${escapeHtml((iconDesc && iconDesc.src) || 'assets/icons/old.png')}" class="profile-3d-float-icon" alt="${escapeHtml(p.name || '')}" draggable="false" /></div>`;
+            const iconHtml = p.iconUrl
+                ? `<div class="profile-icon-box"><img src="${escapeHtml(p.iconUrl)}" class="profile-3d-float-icon profile-modpack-thumb" onerror="this.src='assets/icons/newest.png';this.classList.remove('profile-modpack-thumb');" alt="${escapeHtml(p.name || '')}" draggable="false" /></div>`
+                : ((iconDesc && iconDesc.type === 'svg')
+                    ? `<div class="profile-icon-box">${iconDesc.svg}</div>`
+                    : `<div class="profile-icon-box"><img src="${escapeHtml((iconDesc && iconDesc.src) || 'assets/icons/old.png')}" class="profile-3d-float-icon" alt="${escapeHtml(p.name || '')}" draggable="false" /></div>`);
 
             const isComingSoon = isComingSoonProfile(p);
             const loaderTag = (p.loader && p.loader !== 'vanilla') ? `${p.loader.charAt(0).toUpperCase() + p.loader.slice(1)}` : 'Vanilla';
@@ -5018,6 +5020,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (rpCountEl) rpCountEl.textContent = currentProfileResourcePacksList.length;
             const shCountEl = document.getElementById('installedShaderCount');
             if (shCountEl) shCountEl.textContent = currentProfileShadersList.length;
+            const mpCountEl = document.getElementById('installedModpackCount');
+            if (mpCountEl) mpCountEl.textContent = (currentConfig.profiles || []).filter(p => p.modpackProjectId).length;
 
             if (summaryEl) {
                 const activeCount = currentProfileModsList.filter(m => m.enabled).length;
@@ -5299,18 +5303,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const profId = selectedModsProfileId || currentConfig.activeProfileId;
+        const fallbackSvg = isShader
+            ? '<svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>'
+            : '<svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
         listEl.innerHTML = filtered.map(p => {
             const displayName = cleanMinecraftFormatting(p.name || p.cleanName);
-            const initial = (displayName || 'P').charAt(0).toUpperCase();
             const cleanFileName = cleanMinecraftFormatting(p.filename);
+            const catalogMatch = (!p.iconDataUrl && !p.iconUrl && Array.isArray(lastLoadedCatalogMods))
+                ? lastLoadedCatalogMods.find(cm => findInstalledModForCatalog(cm, [p]))
+                : null;
+            const resolvedIcon = p.iconDataUrl || p.iconUrl || catalogMatch?.icon_url || '';
             return `
             <div class="installed-mod-row ${p.enabled ? 'mod-enabled' : 'mod-disabled'}" data-filename="${escapeHtml(p.filename)}">
                 <div class="mod-row-left">
                     <div class="mod-avatar-wrapper">
-                        ${(p.iconDataUrl || p.iconUrl)
-                    ? `<img src="${p.iconDataUrl || p.iconUrl}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
-                               <div class="mod-avatar-fallback" style="display:none;">${escapeHtml(initial)}</div>`
-                    : `<div class="mod-avatar-fallback">${escapeHtml(initial)}</div>`
+                        ${resolvedIcon
+                    ? `<img src="${escapeHtml(resolvedIcon)}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                               <div class="mod-avatar-fallback" style="display:none;">${fallbackSvg}</div>`
+                    : `<div class="mod-avatar-fallback">${fallbackSvg}</div>`
                 }
                     </div>
                     <div class="mod-row-info">
@@ -5402,24 +5412,157 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    function renderFilteredInstalledModpacks() {
+        const listEl = document.getElementById('installedModsList');
+        const searchInput = document.getElementById('installedModsSearchInput');
+        const summaryEl = document.getElementById('installedModsSummary');
+        if (!listEl) return;
+
+        const modpacks = (currentConfig.profiles || []).filter(p => p.modpackProjectId);
+        const filterText = (searchInput?.value || '').trim().toLowerCase();
+        const filtered = modpacks.filter(p => {
+            if (!filterText) return true;
+            return (p.name || '').toLowerCase().includes(filterText)
+                || (p.version || '').toLowerCase().includes(filterText)
+                || (p.modpackProjectId || '').toLowerCase().includes(filterText);
+        });
+
+        if (summaryEl) {
+            summaryEl.innerHTML = `Modpacky: <strong>${modpacks.length} nainstalováno</strong>`;
+        }
+
+        if (filtered.length === 0) {
+            listEl.innerHTML = modpacks.length === 0
+                ? `<div class="empty-mods-state">
+                        <div class="empty-mods-icon">
+                            <svg class="ui-icon-svg ui-icon-svg--xl" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                        </div>
+                        <div class="empty-mods-title">Zatím nejsou nainstalovány žádné modpacky</div>
+                        <p class="empty-mods-desc">V katalogu Modrinth přejdi na záložku Modpacky a klikni na Instalovat.</p>
+                        <div class="empty-mods-actions">
+                            <button type="button" class="mc-btn mc-btn-primary" id="btnEmptyGoCatalogModpacks">
+                                <span>Přejít do katalogu Modpacků</span>
+                            </button>
+                        </div>
+                   </div>`
+                : `<div class="empty-mods-state"><p>Hledání neodpovídá žádný modpack.</p></div>`;
+            const goMp = document.getElementById('btnEmptyGoCatalogModpacks');
+            if (goMp) {
+                goMp.onclick = () => {
+                    btnSwitchCatalogMods?.click();
+                    const mpTab = Array.from(modTabButtons).find(b => b.dataset.modType === 'modpack');
+                    if (mpTab) mpTab.click();
+                };
+            }
+            return;
+        }
+
+        const modpackSvg = '<svg class="ui-icon-svg ui-icon-svg--md ui-icon-svg--blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>';
+        listEl.innerHTML = filtered.map(p => {
+            const isActive = p.id === currentConfig.activeProfileId;
+            const catalogMatch = (!p.iconUrl && Array.isArray(lastLoadedCatalogMods))
+                ? lastLoadedCatalogMods.find(cm => cm && (cm.id === p.modpackProjectId || cm.project_id === p.modpackProjectId))
+                : null;
+            const iconSrc = p.iconUrl || catalogMatch?.icon_url || '';
+            const ldr = (p.loader && p.loader !== 'vanilla') ? p.loader.toUpperCase() : 'VANILLA';
+            return `
+            <div class="installed-mod-row mod-enabled" data-profile-id="${escapeHtml(p.id)}">
+                <div class="mod-row-left">
+                    <div class="mod-avatar-wrapper">
+                        ${iconSrc
+                    ? `<img src="${escapeHtml(iconSrc)}" class="mod-avatar-thumb" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                               <div class="mod-avatar-fallback" style="display:none;">${modpackSvg}</div>`
+                    : `<div class="mod-avatar-fallback">${modpackSvg}</div>`
+                }
+                    </div>
+                    <div class="mod-row-info">
+                        <div class="mod-row-title-line">
+                            <span class="mod-row-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                            ${p.modpackVersionNumber ? `<span class="mod-version-tag">v${escapeHtml(p.modpackVersionNumber)}</span>` : ''}
+                            <span class="mod-row-badge ${isActive ? 'badge-enabled' : 'badge-disabled'}">
+                                ${isActive ? '<svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--green" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Aktivní profil' : escapeHtml(ldr)}
+                            </span>
+                        </div>
+                        <div class="mod-row-file-meta">
+                            <span>Minecraft ${escapeHtml(p.version || '')}</span>
+                            <span>•</span>
+                            <span>${escapeHtml(ldr)}</span>
+                            ${p.desc ? `<span>•</span><span>${escapeHtml(p.desc)}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="mod-row-actions">
+                    <button type="button" class="btn-mod-toggle btn-enable btn-installed-modpack-open"
+                        data-profile-id="${escapeHtml(p.id)}"
+                        title="Vybrat profil modpacku">
+                        <span>Vybrat</span>
+                    </button>
+                    <button type="button" class="btn-mod-delete btn-installed-modpack-delete"
+                        data-profile-id="${escapeHtml(p.id)}"
+                        data-profile-name="${escapeHtml(p.name)}"
+                        title="Odinstalovat celý modpack">
+                        <span><svg class="ui-icon-svg ui-icon-svg--xs ui-icon-svg--red" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Smazat</span>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+
+        listEl.querySelectorAll('.btn-installed-modpack-open').forEach(btn => {
+            btn.onclick = () => {
+                const pid = btn.dataset.profileId;
+                if (pid) {
+                    selectActiveProfile(pid);
+                    switchTab('profiles');
+                }
+            };
+        });
+        listEl.querySelectorAll('.btn-installed-modpack-delete').forEach(btn => {
+            btn.onclick = async () => {
+                const pid = btn.dataset.profileId;
+                const pName = btn.dataset.profileName || pid;
+                if (!confirm(`Opravdu chceš odinstalovat modpack "${pName}"?`)) return;
+                btn.disabled = true;
+                try {
+                    const res = await window.api.deleteProfile(pid);
+                    if (res && res.success) {
+                        showToast(`Modpack "${pName}" byl odstraněn.`, 'success');
+                        await loadConfiguration();
+                        renderProfilesList();
+                        renderModsProfileDropdown();
+                        loadProfileMods();
+                    } else {
+                        showToast(res?.error || 'Modpack se nepodařilo smazat.', 'error');
+                        btn.disabled = false;
+                    }
+                } catch (err) {
+                    showToast('Chyba: ' + err.message, 'error');
+                    btn.disabled = false;
+                }
+            };
+        });
+    }
+
     // Render filtered installed items according to active subtab
     function renderFilteredInstalledItems() {
         if (currentInstalledTab === 'mods') {
             renderFilteredInstalledMods();
+        } else if (currentInstalledTab === 'modpacks') {
+            renderFilteredInstalledModpacks();
         } else {
             renderFilteredInstalledPacks(currentInstalledTab);
         }
     }
 
-    // Subtabs: Módy vs Texture Packy vs Shadery
+    // Subtabs: Módy vs Texture Packy vs Shadery vs Modpacky
     const tabInstalledMods = document.getElementById('tabInstalledMods');
     const tabInstalledResourcePacks = document.getElementById('tabInstalledResourcePacks');
     const tabInstalledShaders = document.getElementById('tabInstalledShaders');
+    const tabInstalledModpacks = document.getElementById('tabInstalledModpacks');
 
-    [tabInstalledMods, tabInstalledResourcePacks, tabInstalledShaders].forEach(tabBtn => {
+    [tabInstalledMods, tabInstalledResourcePacks, tabInstalledShaders, tabInstalledModpacks].forEach(tabBtn => {
         if (!tabBtn) return;
         tabBtn.addEventListener('click', () => {
-            [tabInstalledMods, tabInstalledResourcePacks, tabInstalledShaders].forEach(b => {
+            [tabInstalledMods, tabInstalledResourcePacks, tabInstalledShaders, tabInstalledModpacks].forEach(b => {
                 if (b) b.classList.remove('active');
             });
             tabBtn.classList.add('active');
@@ -5523,18 +5666,20 @@ document.addEventListener('DOMContentLoaded', async () => {
      */
     function extractModBaseName(filename) {
         if (!filename) return '';
-        let base = filename.replace(/\.disabled$/i, '').replace(/\.(jar|zip)$/i, '');
+        let base = filename.replace(/\.disabled$/i, '').replace(/\.(jar|zip|mrpack)$/i, '');
+        // Oříznout hranaté závorky s verzí na konci (např. "Faithful [1.21.4]")
+        base = base.replace(/\s*\[[^\]]+\]\s*$/, '');
         let prev;
         do {
             prev = base;
             // 1. Oříznout koncový loader (-fabric, -forge, -neoforge, -quilt)
-            base = base.replace(/[-_+](?:fabric|forge|neoforge|quilt)$/i, '');
-            // 2. Oříznout koncovou verzi, mc tag nebo build tag (-1.5.1+26.2, +1.20.4, _r5.8.1, -mc1.20.4, +edge, -v2.5)
-            base = base.replace(/[-_+](?:(?:mc)?[0-9][0-9._\-+a-zA-Z]*|[vr][0-9][0-9._\-+a-zA-Z]*)$/i, '');
+            base = base.replace(/[-_+\s]+(?:fabric|forge|neoforge|quilt)$/i, '');
+            // 2. Oříznout koncovou verzi, mc tag nebo build tag (-1.5.1+26.2, _r5.8.1, -mc1.20.4, +edge, -v2.5, " - 1.21.4")
+            base = base.replace(/(?:[-_+]|\s+-\s+|\s+)(?:(?:mc)?[0-9][0-9._\-+a-zA-Z]*|[vr][0-9][0-9._\-+a-zA-Z]*)$/i, '');
             // 3. Oříznout loader spojený s verzí (-fabric-1.5.1, _forge_1.20)
             base = base.replace(/[-_+](?:fabric|forge|neoforge|quilt)[-_+][0-9a-zA-Z._\-+]*$/i, '');
         } while (base !== prev && base.length > 2);
-        return base;
+        return base.trim();
     }
 
     /**
@@ -6051,7 +6196,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         const res = await window.api.downloadModOrPack({
                             id: item.mod.id,
+                            slug: item.mod.slug || item.mod.id,
                             title: item.mod.title,
+                            iconUrl: item.mod.icon_url || null,
+                            author: item.mod.author || 'Modrinth',
                             projectType: currentModFilter.projectType || 'mod',
                             version: profVer,
                             loader: chosenLoader,
@@ -6349,7 +6497,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const res = await window.api.downloadModOrPack({
                     id: modId,
+                    slug: modItem?.slug || modId,
                     title: title,
+                    iconUrl: modItem?.icon_url || null,
+                    author: modItem?.author || 'Modrinth',
                     projectType: currentModFilter.projectType || 'mod',
                     version: profileVersion,
                     loader: chosenLoader,

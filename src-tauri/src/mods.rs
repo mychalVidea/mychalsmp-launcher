@@ -319,8 +319,8 @@ fn normalize_modrinth_search_hits(data: &mut Value) {
     }
 }
 
-fn read_registry_file(profile_dir: &Path) -> Value {
-    let reg_path = profile_dir.join("mods").join(".modrinth-registry.json");
+fn read_dir_registry(dir: &Path) -> Value {
+    let reg_path = dir.join(".modrinth-registry.json");
     if let Ok(raw) = fs::read_to_string(&reg_path) {
         if let Ok(val) = serde_json::from_str::<Value>(&raw) {
             if val.is_object() {
@@ -331,12 +331,39 @@ fn read_registry_file(profile_dir: &Path) -> Value {
     json!({})
 }
 
-fn write_registry_file(profile_dir: &Path, registry: &Value) {
-    let mods_dir = profile_dir.join("mods");
-    let _ = fs::create_dir_all(&mods_dir);
-    let reg_path = mods_dir.join(".modrinth-registry.json");
+fn write_dir_registry(dir: &Path, registry: &Value) {
+    let _ = fs::create_dir_all(dir);
+    let reg_path = dir.join(".modrinth-registry.json");
     if let Ok(s) = serde_json::to_string_pretty(registry) {
         let _ = fs::write(reg_path, s);
+    }
+}
+
+fn remove_from_dir_registry(dir: &Path, filename: &str) {
+    let mut reg = read_dir_registry(dir);
+    let base = filename.trim_end_matches(".disabled");
+    let disabled = format!("{}.disabled", base);
+    if let Some(obj) = reg.as_object_mut() {
+        let changed = obj.remove(filename).is_some()
+            || obj.remove(base).is_some()
+            || obj.remove(&disabled).is_some();
+        if changed {
+            write_dir_registry(dir, &reg);
+        }
+    }
+}
+
+fn read_registry_file(profile_dir: &Path) -> Value {
+    read_dir_registry(&profile_dir.join("mods"))
+}
+
+fn format_bytes_human(bytes: u64) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1024 {
+        format!("{} KB", (bytes + 512) / 1024)
+    } else {
+        format!("{} B", bytes)
     }
 }
 
@@ -571,6 +598,7 @@ pub async fn download_mod_or_pack_with_deps(
     let target_subdir = match project_type {
         "resourcepack" => "resourcepacks",
         "shader" => "shaderpacks",
+        "datapack" => "datapacks",
         _ => "mods",
     };
     let target_dir = prof_dir.join(target_subdir);
@@ -660,27 +688,30 @@ pub async fn download_mod_or_pack_with_deps(
     )
     .await?;
 
-    // If updating/replacing an older version of the same project, remove old jar
-    if project_type == "mod" {
-        let mut reg = read_registry_file(&prof_dir);
-        if let Some(old_file) = mod_options.get("oldFilename").and_then(|v| v.as_str()) {
-            if old_file != filename {
-                let _ = fs::remove_file(target_dir.join(old_file));
-                if let Some(obj) = reg.as_object_mut() {
-                    obj.remove(old_file);
-                }
+    // Record Modrinth metadata & replace older version for mods, resourcepacks, shaders, and datapacks
+    let mut reg = read_dir_registry(&target_dir);
+    if let Some(old_file) = mod_options.get("oldFilename").and_then(|v| v.as_str()) {
+        if !old_file.is_empty() && old_file != filename {
+            let _ = fs::remove_file(target_dir.join(old_file));
+            if let Some(obj) = reg.as_object_mut() {
+                obj.remove(old_file);
             }
         }
-        reg[&filename] = json!({
-            "projectId": project_id,
-            "versionId": ver_info.get("id").cloned().unwrap_or(Value::Null),
-            "versionNumber": ver_info.get("version_number").cloned().unwrap_or(Value::Null),
-            "name": title,
-            "author": mod_options.get("author").cloned().unwrap_or(json!("Modrinth")),
-            "iconUrl": mod_options.get("iconUrl").cloned().unwrap_or(Value::Null),
-            "installedAt": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
-        });
-        write_registry_file(&prof_dir, &reg);
+    }
+    reg[&filename] = json!({
+        "projectId": project_id,
+        "slug": mod_options.get("slug").cloned().unwrap_or_else(|| json!(project_id)),
+        "versionId": ver_info.get("id").cloned().unwrap_or(Value::Null),
+        "versionNumber": ver_info.get("version_number").cloned().unwrap_or(Value::Null),
+        "name": title,
+        "author": mod_options.get("author").cloned().unwrap_or(json!("Modrinth")),
+        "iconUrl": mod_options.get("iconUrl").cloned().unwrap_or(Value::Null),
+        "projectType": project_type,
+        "installedAt": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+    });
+    write_dir_registry(&target_dir, &reg);
+
+    if project_type == "mod" {
         let _ = resolve_profile_mod_collisions(profile_id);
 
         // Resolve required dependencies (1 level deep)
@@ -1154,6 +1185,26 @@ pub async fn install_modrinth_modpack(
         .unwrap_or(title);
     let dl_count = downloaded_ok.load(Ordering::Relaxed);
 
+    let mut icon_url = options
+        .get("iconUrl")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    if icon_url.is_none() {
+        let proj_url = format!("https://api.modrinth.com/v2/project/{}", urlencoding::encode(project_id));
+        if let Ok(p_resp) = client.get(&proj_url).send().await {
+            if let Ok(p_json) = p_resp.json::<Value>().await {
+                icon_url = p_json
+                    .get("icon_url")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
+            }
+        }
+    }
+
     let cfg = load_config();
     let cur_ram = cfg.get("ramMax").and_then(|v| v.as_u64()).unwrap_or(4);
     let modpack_ram = cur_ram.max(6).min(12);
@@ -1167,6 +1218,7 @@ pub async fn install_modrinth_modpack(
         "optimizedChosen": if loader == "fabric" { "optimized" } else { "vanilla" },
         "desc": format!("Modpack {} ({}) • {} souborů", ver_num, mc_ver, dl_count),
         "icon": "latest",
+        "iconUrl": icon_url,
         "modpackProjectId": project_id,
         "modpackVersionId": ver_id,
         "modpackVersionNumber": ver_num,
@@ -1425,7 +1477,10 @@ pub fn get_profile_mods_list(profile_id: Option<&str>) -> Value {
                 "description": description.unwrap_or_default(),
                 "enabled": enabled,
                 "sizeBytes": size_bytes,
+                "sizeFormatted": format_bytes_human(size_bytes),
                 "projectId": reg_entry.and_then(|r| r.get("projectId")).cloned().unwrap_or(Value::Null),
+                "modrinthId": reg_entry.and_then(|r| r.get("projectId")).cloned().unwrap_or(Value::Null),
+                "modrinthSlug": reg_entry.and_then(|r| r.get("slug")).cloned().unwrap_or(Value::Null),
                 "iconUrl": icon_val,
                 "iconDataUrl": icon_val,
                 "isCore": mod_id == "selfnametag"
@@ -1585,6 +1640,7 @@ pub fn delete_profile_mod_file(profile_id: Option<&str>, filename: &str) -> Valu
         if let Err(e) = resilient_remove_file(&target) {
             return json!({ "success": false, "error": e });
         }
+        remove_from_dir_registry(&mods_dir, &safe_name);
     }
     json!({ "success": true })
 }
@@ -1632,6 +1688,8 @@ pub fn get_profile_packs_list(profile_id: Option<&str>, pack_type: &str) -> Valu
     let prof_dir = resolve_profile_dir(&cfg, profile_id);
     let subdir = if pack_type == "shader" || pack_type == "shaderpacks" {
         "shaderpacks"
+    } else if pack_type == "datapack" || pack_type == "datapacks" {
+        "datapacks"
     } else {
         "resourcepacks"
     };
@@ -1640,6 +1698,7 @@ pub fn get_profile_packs_list(profile_id: Option<&str>, pack_type: &str) -> Valu
         return json!({ "packs": [] });
     }
 
+    let reg = read_dir_registry(&dir);
     let mut packs = Vec::new();
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
@@ -1648,8 +1707,8 @@ pub fn get_profile_packs_list(profile_id: Option<&str>, pack_type: &str) -> Valu
                 continue;
             }
             let enabled = !fname.ends_with(".disabled");
-            let clean_name = fname
-                .trim_end_matches(".disabled")
+            let base_file = fname.trim_end_matches(".disabled");
+            let clean_name = base_file
                 .trim_end_matches(".zip")
                 .to_string();
             let size_bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
@@ -1669,15 +1728,42 @@ pub fn get_profile_packs_list(profile_id: Option<&str>, pack_type: &str) -> Valu
                     }
                 }
             }
+            let reg_entry = reg.get(&fname).or_else(|| reg.get(base_file));
+            let display_name = reg_entry
+                .and_then(|r| r.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(&clean_name);
+            let reg_icon = reg_entry
+                .and_then(|r| r.get("iconUrl"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(Value::from);
+            let icon_val = pack_icon
+                .as_deref()
+                .map(Value::from)
+                .or(reg_icon.clone())
+                .unwrap_or(Value::Null);
+
             packs.push(json!({
                 "filename": fname,
-                "name": clean_name,
+                "name": display_name,
+                "cleanName": clean_name,
+                "version": reg_entry.and_then(|r| r.get("versionNumber")).cloned().unwrap_or(json!("")),
                 "enabled": enabled,
                 "sizeBytes": size_bytes,
-                "iconDataUrl": pack_icon.as_deref().map(Value::from).unwrap_or(Value::Null)
+                "sizeFormatted": format_bytes_human(size_bytes),
+                "modrinthId": reg_entry.and_then(|r| r.get("projectId")).cloned().unwrap_or(Value::Null),
+                "modrinthSlug": reg_entry.and_then(|r| r.get("slug")).cloned().unwrap_or(Value::Null),
+                "iconUrl": reg_icon.unwrap_or(Value::Null),
+                "iconDataUrl": icon_val
             }));
         }
     }
+    packs.sort_by(|a, b| {
+        let na = a.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+        let nb = b.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+        na.cmp(&nb)
+    });
     json!({ "packs": packs })
 }
 
@@ -1729,6 +1815,7 @@ pub fn delete_profile_pack_file(profile_id: Option<&str>, pack_type: &str, filen
         } else if let Err(e) = resilient_remove_file(&target) {
             return json!({ "success": false, "error": e });
         }
+        remove_from_dir_registry(&dir, &safe_name);
     }
     json!({ "success": true })
 }

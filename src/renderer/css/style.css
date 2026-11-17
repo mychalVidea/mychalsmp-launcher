@@ -1675,6 +1675,15 @@ body.is-maximized {
     transform: translateZ(0);
 }
 
+.profile-3d-float-icon.profile-modpack-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    object-fit: cover;
+    image-rendering: auto;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
 .profile-row-card:hover .profile-3d-float-icon {
     transform: translateY(-2px) scale(1.06);
 }
