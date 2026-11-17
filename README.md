@@ -1,140 +1,149 @@
-# <p align="center"><img src="src/renderer/assets/logo.png" alt="SMPClient Logo" width="96"><br>SMPClient v1.7.0</p>
+<p align="center">
+  <img src="src/renderer/assets/logo.png" alt="SMPClient Logo" width="88">
+</p>
+
+<h1 align="center">SMPClient</h1>
 
 <p align="center">
-  <strong>Oficiální prémiový multiplatformní Minecraft klient vytvořený na míru pro komunitu a síť MYCHAL SMP.</strong><br>
-  <sub>Postaveno na nativním jádru <strong>Rust & Tauri v2</strong> — 16 MB binárka, okamžitý start pod 150 ms a nulový Electron bloat.</sub>
+  Oficiální multiplatformní Minecraft launcher pro síť <strong>MYCHAL SMP</strong>.<br>
+  Postaveno na nativním backendu <strong>Rust &amp; Tauri v2</strong> a čistém HTML/CSS/JS rozhraní pro Linux a Windows.
 </p>
 
 <p align="center">
-  <a href="https://mychalsmp.xyz"><img src="https://img.shields.io/badge/Server-mychalsmp.xyz-0a67e5?style=for-the-badge&logo=minecraft" alt="Server IP"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Doporučená_verze-26.3-21de00?style=for-the-badge" alt="Doporučená verze 26.3"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Jádro-Rust_%26_Tauri_v2-0a67e5?style=for-the-badge&logo=rust" alt="Rust & Tauri v2"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Platformy-Linux_%7C_Windows_11-18181c?style=for-the-badge&logo=linux" alt="Platformy"></a>
+  <a href="https://join.mychalsmp.xyz"><img src="https://img.shields.io/badge/Server-mychalsmp.xyz-0a67e5?style=flat-square" alt="Server mychalsmp.xyz"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Verze_launcheru-1.7.24-18181c?style=flat-square" alt="Verze 1.7.24"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Doporučený_Minecraft-26.3-21de00?style=flat-square" alt="Minecraft 26.3"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Stack-Rust_%2B_Tauri_v2-0a67e5?style=flat-square" alt="Rust + Tauri v2"></a>
 </p>
 
 ---
 
-## 🌟 O SMPClientu (Nativní Rust & Tauri v2 Edice)
+## Přehled
 
-**SMPClient** prošel kompletním přepisem z původního Electronu do **100% nativního Rustu a Tauri v2**. Místo přibalování celého 250MB prohlížeče Chromium a Node.js je celý backend i herní suverénní orchestrátor zkompilovaný přímo do jediné nativní strojové binárky (~16 MB, v komprimovaném `.tar.gz` update balíčku jen **~6 MB**).
+**SMPClient** spravuje instalace Minecraftu, herní profily, módy z Modrinthu, skiny, pláště i optimalizaci spuštění přímo z nativní desktopové aplikace bez přibalování Chromium/Node.js runtime.
 
-Launcher plně podporuje **všechny distribuce Linuxu** (**CachyOS, Arch Linux, Fedora, Nobara, Ubuntu, Debian, Linux Mint, openSUSE**) i **Windows 10/11**.
-
----
-
-## ✨ Klíčové funkce
-
-### 🦀 Nativní Rust Backend & Bleskový Auto-Updater
-* **Ultralehký `.tar.gz` Auto-Updater (~6 MB):** Na rozdíl od starého Electronu (kde `.asar` aktualizoval jen JavaScript, ale samotný 200MB runtime zůstával starý) je v Tauri v2 kompletní UI i celý Rust backend zapečený přímo do jediné zkompilované binárky. Bleskový auto-updater stáhne jen ~6MB `.tar.gz` balíček, přímo v paměti ho přes `flate2` + `tar` rozbalí a atomicky vymění binárku za běhu bez nutnosti cokoliv přeinstalovávat.
-* **Nativní trezor účtů (`vault.rs`):** Hardwarově vázané šifrování přihlašovacích tokenů pomocí **AES-256-GCM** a **PBKDF2-HMAC-SHA256** (100 000 iterací) vázané na `/etc/machine-id` (Linux) nebo `MachineGuid` (Windows). Renderer nikdy nemá přístup k raw tokenům.
-* **Ochrana proti EBUSY zámkům (Windows Defender / Antiviry):** Exponenciální retry smyčka při stahování a přejmenovávání knihoven zabraňuje pádům spouštění hry na Windows.
-* **Automatická verifikace a oprava Vanilla JARu:** Kontrola SHA-1 otisků a velikosti klientského `.jar` souboru před každým startem s automatickým pře-stažením poškozeného archivu.
-
-### 🎛️ Profile Management Studio & Modpack Engine
-* **Kompletní správa herních profilů:** Vlastní nezávislé instance s volbou verze Minecraftu (`26.3`, `26.2`, `26.1.2`, `1.21.11`), loaderu (`Fabric` / `Vanilla`), vyhrazené RAM, vlastních JVM argumentů a ikon.
-* **Klonování, zálohování a přenos (`.smppack` / `.mrpack`):**
-  * **1-Click Klonování profilu:** Kompletní hloubková kopie nastavení, módů, shaderů a resourcepacků.
-  * **ZIP Zálohy (Snapshots):** Vytváření a obnova časových snímků profilu jedním kliknutím.
-  * **Import & Export:** Plná podpora exportu do `.smppack` a přímého importu komunitních **Modrinth (`.mrpack`)** modpacků včetně paralelního stažení všech závislostí.
-* **Chytrá správa světa a screenshotů:** Přehled světů (velikost, datum posledního hraní, rychlé otevření složky, záloha do ZIPu) a integrovaná galerie screenshotů přímo v detailu profilu.
-
-### ⚡ Extrémní FPS & 1-Click Herní optimalizace
-* **Přednastavený Fabric loader:** Automatické nasazení a správa moderního zavaděče módů včetně automatického sloučení konfigurace s Mojang manifestem.
-* **Sodium + Iris + Lithium:** Jedním kliknutím nainstaluje a nakonfiguruje nejvýkonnější optimalizační modifikace s automatickým hlídáním vzájemné kompatibility verzí Sodium a Iris.
-* **Vyladěné JVM argumenty:** Nativní detekce dostupné systémové paměti (`sysinfo`) a automatická konfigurace moderního Garbage Collectoru (**Generational ZGC**).
-
-### 🧩 Integrovaný Modrinth Store
-* **Prohlížeč módů, shaderů a resourcepacků přímo v aplikaci:** Okamžité vyhledávání a instalace z platformy Modrinth.
-* **Chytré řešení závislostí:** Automatická detekce a stažení vyžadovaných knihoven (např. *Fabric API*) pro příslušnou verzi hry.
-* **Správa nainstalovaných doplňků:** Rychlé zapínání/vypínání módů (`.jar` ↔ `.jar.disabled`) a bezpečné mazání přímo z rozhraní profilu.
-
-### 🛡️ Hloubkový Crash Analyzer & Warden Integrace
-* **Detekce konkrétního viníka v Mixinech (`crash.rs`):** Analyzátor čte kompletní stacktrace i `hs_err_pid` logy, rozklíčuje kaskádové chyby Mixinů (`MixinApplyError`, `MixinTransformerError`), odfiltruje interní knihovny Fabric API a přesně označí konkrétní nekompatibilní mód s tlačítkem pro jeho okamžité vypnutí.
-* **Warden Probe Checker (`warden.rs`):** Nativní kontrola integrity prostředí a modifikací před připojením na server.
-
-### 🌐 Živý Server Tracker & 1-Click Join
-* **Nativní Tokio TCP & SLP Ping (`ping.rs`):** Asynchronní měření odezvy (RTT), čtení MOTD, počtu online hráčů a stavu sítě `mychalsmp.xyz` a `pvp.mychalsmp.xyz`.
-* **Přímé připojení do hry:** Tlačítko pro okamžité spuštění hry rovnou na zvolený server (`--quickPlayMultiplayer`).
-
-### 🐧 Nativní Linux Gaming Integrace
-* **Feral GameMode:** Automatické využití `gamemoderun` pro maximální prioritu CPU a GPU.
-* **Wayland & X11 + Zink:** Podpora nativního běhu i akcelerace OpenGL přes Vulkan (`Zink`).
-* **Dedikovaná GPU:** Přepínač pro vynucení diskrétní grafické karty (`DRI_PRIME=1`, NVIDIA Prime offload).
+Podporované systémy:
+- **Linux:** CachyOS, Arch Linux, Fedora, Ubuntu, Debian, Linux Mint, openSUSE (Wayland i X11)
+- **Windows:** Windows 10 a Windows 11 (x64, WebView2 + NSIS instalátor)
 
 ---
 
-## ☕ Podporované verze Minecraftu
+## Architektura a funkce
 
-| Verze | Status | Popis |
+### Jádro spouštění a správa knihoven
+- **Izolované nativní knihovny (`launcher.rs`):** Každý profil rozbaluje nativní soubory LWJGL striktně podle svého manifestu a architektury do odděleného adresáře s kontrolním `.natives-stamp` otiskem, aby se nemíchaly verze napříč instalacemi Minecraftu.
+- **Ověření integrity a SHA-1:** Kontrola klientských JARů a knihoven před spuštěním včetně ochrany proti souborovým zámkům (`resilient_rename` s opakovanými pokusy na Windows).
+- **Hardwarově řízený tuning (`services.rs`, `drm_vblank.rs`):** Automatická detekce GPU (NVIDIA / AMD / Intel), typu session (Wayland / X11), dostupnosti `gamemoderun`, Vulkan/Zink přepínačů a systémové RAM pro nastavení JVM (ZGC, custom argumenty).
+- **Identifikace klienta (`mods.rs`):** Automatická synchronizace `selfnametag-1.0.0.jar` pro Fabric a bootclasspath brandingu `smpclient-brand.jar` pro Vanilla profily.
+
+### Profily, zálohy a Modrinth katalog
+- **Správa profilů (`profiles.rs`):** Vytváření nezávislých instancí (verze, mod loader `Vanilla` / `Fabric` / `NeoForge` / `Forge`, vyhrazená RAM, vlastní JVM parametry, ikona), klonování a automatické vyhledání existujících instancí na disku.
+- **Import, export a zálohy:** Podpora balíčků `.smppack`, komunitních Modrinth modpacků (`.mrpack`) a lokálních ZIP snímků profilů i světů.
+- **Modrinth katalog (`mods.rs`):** Vyhledávání módů, shaderů a resource packů filtrovaných podle verze a loaderu, instalace závislostí (např. Fabric API), hromadné aktualizace a přepínání `.jar` ↔ `.jar.disabled`.
+
+### Účty, skiny a diagnostika pádů
+- **Microsoft & Offline účty (`auth.rs`, `vault.rs`):** Přihlašování přes Microsoft OAuth i lokální offline profily. Přístupové tokeny jsou uložené zašifrovaně pomocí **AES-256-GCM** a klíče odvozeného přes **PBKDF2-HMAC-SHA256** navázaného na identifikátor zařízení; frontend nikdy nečte surové tokeny.
+- **3D náhled a správa skinů (`skin.rs`):** Interaktivní 3D prohlížeč (`skinview3d`), přepínání modelu (`Classic` / `Slim`), nahrání vlastního PNG skinu na Mojang účet i pro offline profil (výběr souboru nebo Drag & Drop) a správa Mojang plášťů.
+- **Crash Analyzer & Auto-Opravy (`crash.rs`):** Rozbor logů `latest.log`, `crash-reports/*.txt` a `hs_err_pid*.log` — detekce OOM, neshody verzí Javy, chybějících závislostí, kolizí Mixinů, poškozeného client JARu nebo nekompatibilních nativních knihoven LWJGL s návaznou automatickou opravou.
+- **Live Server Tracker & Auto-Updater (`ping.rs`, `services.rs`):** Asynchronní TCP/SLP stav serverů `mychalsmp.xyz` a `pvp.mychalsmp.xyz`, 1-click připojení přes `--quickPlayMultiplayer` a aktualizace binárky přímo z GitHub Releases.
+
+---
+
+## Podporované verze Minecraftu
+
+| Verze | Doporučení | Poznámka |
 | :--- | :--- | :--- |
-| **`26.3`** | 🌟 **Doporučeno & Nativní** | Primární, plně stabilní nativní verze sítě MYCHAL SMP s kompletní optimalizací. |
-| **`26.2`** | 📦 **Podporováno** | Podporovaná verze přes multi-version ProtocolBridge. |
-| **`26.1.2`** | 📦 **Podporováno** | Plně kompatibilní verze s podporou ProtocolBridge. |
-| **`1.21.11`** | 🛡️ **Podporováno** | Stabilní verze 1.21 s integrovaným profilem a oficiálním keyartem. |
+| `26.3` | Doporučeno | Primární podporovaná verze sítě MYCHAL SMP |
+| `26.2` | Podporováno | Plná kompatibilita přes multi-version ProtocolBridge |
+| `26.1.2` | Podporováno | Starší stabilní větev kompatibilní s ProtocolBridge |
+| `1.21.11` | Podporováno | Stabilní verze 1.21 |
+| `26.4` | Coming Soon | Připravený placeholder v seznamu profilů (zatím nelze spustit) |
 
 ---
 
-## 📥 Instalace & Balíčky pro všechny systémy
+## Struktura projektu
 
-Každé vydání na GitHubu automaticky generuje nativní balíčky pro všechny hlavní distribuce Linuxu i Windows:
-
-### 🐧 Linux (CachyOS, Arch Linux, Fedora, Ubuntu, Debian)
-
-#### 1. Univerzální 1-Click instalátor (CachyOS / Arch / Fedora / Ubuntu)
-Automaticky rozpozná tvůj systém (`pacman`, `dnf`, `apt`, `zypper`), zkontroluje závislosti (`webkit2gtk-4.1`), stáhne nejnovější `.tar.gz` a vytvoří zástupce v menu aplikací:
-```bash
-curl -sSfL https://raw.githubusercontent.com/mychalVidea/mychalsmp-launcher/main/install.sh | bash
+```text
+mychalsmp-launcher/
+├── src/renderer/           # Vanilla HTML, CSS (Matte Obsidian), JS & skinview3d UI
+├── src-tauri/
+│   ├── tauri.conf.json     # Tauri v2 konfigurace & NSIS bundle nastavení
+│   ├── capabilities/       # Oprávnění Tauri oken, dialogů a asset protokolu
+│   └── src/
+│       ├── auth.rs         # Microsoft OAuth & offline session logika
+│       ├── config.rs       # Výchozí profily, servery a persistence konfigurace
+│       ├── crash.rs        # Analyzátor pádů a automatické opravy
+│       ├── drm_vblank.rs   # Detekce obnovovací frekvence a DRM na Linuxu
+│       ├── launcher.rs     # Stahování manifestů, knihoven, izolace natives & spuštění JVM
+│       ├── lib.rs          # Tauri v2 příkazy, tray a asynchronní dialogy
+│       ├── mods.rs         # Modrinth API, správa módů/packů a selfnametag/brand sync
+│       ├── ping.rs         # SLP server status ping
+│       ├── profiles.rs     # Profily, klonování, .mrpack/.smppack & zálohy
+│       ├── services.rs     # HW detekce, cache cleaner, Discord RPC & auto-updater
+│       ├── skin.rs         # PNG validace, Mojang API skiny/pláště & offline sync
+│       ├── vault.rs        # Lokální AES-256-GCM úložiště tokenů
+│       └── warden.rs       # Kontrola kompatibility modifikací prostředí
+├── install.sh              # Univerzální Linux instalátor
+├── install-cachyos.sh      # Instalátor pro CachyOS / Arch Linux
+├── install.ps1             # PowerShell instalátor pro Windows
+├── PKGBUILD                # Balíček pro Arch / makepkg
+└── release.sh              # Skript pro synchronizaci verzí a vydání
 ```
 
-#### 2. Manuální instalace & archivy (GitHub Releases)
-* **CachyOS / Arch Linux:** `./install-cachyos.sh` nebo sestavení přes přiložený `PKGBUILD` (`makepkg -si`).
-* **Univerzální Linux archiv:** `mychalsmp-launcher.tar.gz`
+---
+
+## Instalace
+
+### Linux
+
+**Univerzální instalátor (Arch / CachyOS / Fedora / Ubuntu / Debian):**
+```bash
+curl -sSfL https://join.mychalsmp.xyz/install.sh | bash
+```
+
+**Lokální skripty v repozitáři:**
+- CachyOS / Arch Linux: `./install-cachyos.sh` nebo sestavení přes přiložený `PKGBUILD` (`makepkg -si`).
+- Obecný Linux instalátor: `./install.sh`
+
+### Windows 10 / 11
+
+- Spusť instalátor `SMPClient_*_x64-setup.exe` (NSIS) z GitHub Releases nebo instalační skript `install.ps1`.
+- Požaduje systémový Microsoft Edge WebView2 Runtime (součást Windows 11).
 
 ---
 
-### 🪟 Windows 10 & 11
-* **`mychalsmp-launcher-setup.exe` (NSIS Instalátor):** Rychlý nativní instalátor (~8 MB), který využívá systémový Microsoft Edge WebView2, vytvoří zástupce v nabídce Start i na ploše a podporuje automatické aktualizace přímo z prostředí launcheru.
+## Vývoj a sestavení
 
----
+### Požadavky
+- **Rust Toolchain** (`rustup`, `cargo >= 1.77.2`)
+- **Node.js** (`>= 20`) pro `@tauri-apps/cli`
+- **Systémové knihovny na Linuxu:**
+  - *CachyOS / Arch:* `sudo pacman -S webkit2gtk-4.1 base-devel curl wget file openssl appmenu-gtk-module libappindicator-gtk3 librsvg xdotool`
+  - *Fedora:* `sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel`
+  - *Ubuntu / Debian:* `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
-## 🛠️ Vývoj & Sestavení projektu
-
-### Požadavky pro kompilaci
-* **Rust Toolchain** (`rustup`, `cargo` 1.77.2+)
-* **Node.js** (v20+ pro `@tauri-apps/cli`)
-* **Linux systémové knihovny:**
-  * *CachyOS / Arch:* `sudo pacman -S webkit2gtk-4.1 base-devel curl wget file openssl appmenu-gtk-module libappindicator-gtk3 librsvg xdotool`
-  * *Fedora:* `sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel`
-  * *Ubuntu / Debian:* `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
-
-### Spuštění a kompilace
+### Příkazy
 ```bash
 # Instalace Tauri CLI
 npm install
 
-# Spuštění ve vývojovém režimu s hot-reloadem
+# Vývojový režim
 npm start
 
-# Sestavení Linux binárky (pro .tar.gz)
+# Spuštění unit testů Rust backendu
+cargo test --manifest-path src-tauri/Cargo.toml
+
+# Sestavení Linux binárky (--no-bundle)
 npm run build:linux
 
 # Sestavení Windows NSIS instalátoru (.exe)
 npm run build:win
-
-# Vydání nové verze (aktualizuje verze v package.json, tauri.conf.json a Cargo.toml)
-npm run release
 ```
 
 ---
 
-## 🌐 O síti MYCHAL SMP
+## Síť a kontakt
 
-* **Oficiální IP serveru:** `mychalsmp.xyz`
-* **Web a návod k připojení:** [join.mychalsmp.xyz](https://join.mychalsmp.xyz)
-* **Autor & správa projektu:** **mychalVidea** ([admin@mychalsmp.xyz](mailto:admin@mychalsmp.xyz))
-
----
-
-<p align="center">
-  <sub>Vytvořeno s důrazem na nekompromisní výkon, čistý Matte Obsidian design a stabilitu pro hráče <strong>MYCHAL SMP</strong>.</sub>
-</p>
+- **IP adresa herního serveru:** `mychalsmp.xyz`
+- **Web:** [join.mychalsmp.xyz](https://join.mychalsmp.xyz)
+- **Správa projektu:** `mychalVidea` ([admin@mychalsmp.xyz](mailto:admin@mychalsmp.xyz))
