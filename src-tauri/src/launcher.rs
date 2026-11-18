@@ -2024,8 +2024,40 @@ pub fn is_jar_file_valid(file_path: &Path) -> bool {
     zip::ZipArchive::new(zip_file).is_ok()
 }
 
-/// Verifies that the vanilla client JAR exists and has size > 1 MB.
-/// If missing or corrupted/truncated, downloads it automatically.
+pub fn jar_contains_entry(file_path: &Path, entry_name: &str) -> bool {
+    let zip_file = match File::open(file_path) {
+        Ok(zf) => zf,
+        Err(_) => return false,
+    };
+    let mut archive = match zip::ZipArchive::new(zip_file) {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+    let present = archive.by_name(entry_name).is_ok();
+    present
+}
+
+pub fn is_vanilla_client_jar_healthy(file_path: &Path, expected_sha1: Option<&str>) -> bool {
+    let meta = match fs::metadata(file_path) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    if meta.len() < MIN_CLIENT_JAR_SIZE || !is_jar_file_valid(file_path) {
+        return false;
+    }
+    if !jar_contains_entry(file_path, "net/minecraft/client/main/Main.class") {
+        return false;
+    }
+    if let Some(sha1) = expected_sha1 {
+        if !verify_file_sha1(file_path, sha1) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Verifies that the vanilla client JAR exists, contains Main.class, and matches manifest SHA1.
+/// If missing, corrupted/truncated, or hash-mismatched, re-downloads it automatically.
 pub async fn ensure_vanilla_client_jar(
     central_root: &Path,
     target_version: &str,
@@ -2036,37 +2068,58 @@ pub async fn ensure_vanilla_client_jar(
         .join(target_version)
         .join(format!("{}.jar", target_version));
 
-    let is_valid = if client_jar.exists() {
-        if let Ok(meta) = fs::metadata(&client_jar) {
-            meta.len() >= MIN_CLIENT_JAR_SIZE && is_jar_file_valid(&client_jar)
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    if is_valid {
-        return Ok(client_jar);
-    }
-
-    let client_download = manifest
+    let mut fallback_manifest: Option<VersionManifest> = None;
+    let mut expected_sha1 = manifest
         .downloads
         .as_ref()
         .and_then(|d| d.client.as_ref())
+        .and_then(|c| c.sha1.clone());
+    let mut client_url = manifest
+        .downloads
+        .as_ref()
+        .and_then(|d| d.client.as_ref())
+        .and_then(|c| c.url.clone());
+
+    if expected_sha1.is_none() || client_url.is_none() {
+        if let Ok(vm) = fetch_or_cache_mojang_manifest(central_root, target_version).await {
+            if let Some(ref c) = vm.downloads.as_ref().and_then(|d| d.client.as_ref()) {
+                if expected_sha1.is_none() {
+                    expected_sha1 = c.sha1.clone();
+                }
+                if client_url.is_none() {
+                    client_url = c.url.clone();
+                }
+            }
+            fallback_manifest = Some(vm);
+        }
+    }
+
+    if is_vanilla_client_jar_healthy(&client_jar, expected_sha1.as_deref()) {
+        return Ok(client_jar);
+    }
+
+    if client_jar.exists() {
+        eprintln!(
+            "[LAUNCHER] Poškozený nebo neúplný client.jar pro {} — odstraňuji a stahuji znovu.",
+            target_version
+        );
+        let _ = fs::remove_file(&client_jar);
+    }
+
+    let url = client_url
+        .or_else(|| {
+            fallback_manifest
+                .as_ref()
+                .and_then(|m| m.downloads.as_ref())
+                .and_then(|d| d.client.as_ref())
+                .and_then(|c| c.url.clone())
+        })
         .ok_or_else(|| {
             LaunchError::ManifestError(format!(
                 "Manifest for {} does not contain client download URL",
                 target_version
             ))
         })?;
-
-    let url = client_download.url.as_ref().ok_or_else(|| {
-        LaunchError::ManifestError(format!(
-            "Missing client jar download URL for {}",
-            target_version
-        ))
-    })?;
 
     if let Some(parent) = client_jar.parent() {
         fs::create_dir_all(parent)?;
@@ -2075,7 +2128,7 @@ pub async fn ensure_vanilla_client_jar(
     let client = reqwest::Client::builder()
         .user_agent("MYCHALSMP-Launcher")
         .build()?;
-    let res = client.get(url).send().await?;
+    let res = client.get(&url).send().await?;
     if !res.status().is_success() {
         return Err(LaunchError::Custom(format!(
             "Failed to download client jar: HTTP {}",
@@ -2086,14 +2139,12 @@ pub async fn ensure_vanilla_client_jar(
     let bytes = res.bytes().await?;
     fs::write(&client_jar, &bytes)?;
 
-    if let Some(ref expected_sha1) = client_download.sha1 {
-        if !verify_file_sha1(&client_jar, expected_sha1) {
-            let _ = fs::remove_file(&client_jar);
-            return Err(LaunchError::LibraryError(format!(
-                "Downloaded client jar SHA1 mismatch for {}",
-                target_version
-            )));
-        }
+    if !is_vanilla_client_jar_healthy(&client_jar, expected_sha1.as_deref()) {
+        let _ = fs::remove_file(&client_jar);
+        return Err(LaunchError::LibraryError(format!(
+            "Downloaded client jar integrity/SHA1 check failed for {}",
+            target_version
+        )));
     }
 
     Ok(client_jar)
@@ -3063,19 +3114,24 @@ pub fn construct_launch_spec(
         }
     }
 
-    // Add client JAR (either specific profile JAR or inheritsFrom base vanilla JAR)
+    // Add client JAR (for inherited profiles like Fabric, never let a stale/broken profile JAR shadow vanilla parent JAR)
     let client_jar_path = base_dir
         .join("versions")
         .join(&manifest.id)
         .join(format!("{}.jar", manifest.id));
-    if client_jar_path.exists() {
-        classpath_paths.push(client_jar_path);
-    } else if let Some(ref parent) = manifest.inherits_from {
+    if let Some(ref parent) = manifest.inherits_from {
         let parent_jar = base_dir
             .join("versions")
             .join(parent)
             .join(format!("{}.jar", parent));
-        classpath_paths.push(parent_jar);
+        if client_jar_path.exists()
+            && is_jar_file_valid(&client_jar_path)
+            && jar_contains_entry(&client_jar_path, "net/minecraft/client/main/Main.class")
+        {
+            classpath_paths.push(client_jar_path);
+        } else {
+            classpath_paths.push(parent_jar);
+        }
     } else {
         classpath_paths.push(client_jar_path);
     }
@@ -4364,6 +4420,81 @@ mod tests {
         assert!(
             !fabric_spec.jvm_args.iter().any(|a| a.contains("smpclient-brand.jar")),
             "Fabric launch must rely on SelfNametag mixin and omit smpclient-brand.jar bootclasspath"
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_client_jar_health_check_and_broken_fabric_jar_fallback() {
+        use std::io::Write;
+
+        let temp_dir = std::env::temp_dir().join(format!("mychalsmp_test_client_health_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let fabric_dir = temp_dir.join("versions").join("fabric-loader-0.19.5-26.3");
+        let vanilla_dir = temp_dir.join("versions").join("26.3");
+        fs::create_dir_all(&fabric_dir).unwrap();
+        fs::create_dir_all(&vanilla_dir).unwrap();
+
+        // Create a valid ZIP missing Main.class (and < 1MB) -> must NOT be considered healthy
+        let broken_fabric_jar = fabric_dir.join("fabric-loader-0.19.5-26.3.jar");
+        {
+            let file = File::create(&broken_fabric_jar).unwrap();
+            let mut zw = zip::ZipWriter::new(file);
+            let opts = zip::write::SimpleFileOptions::default();
+            zw.start_file("META-INF/MANIFEST.MF", opts).unwrap();
+            zw.write_all(b"Manifest-Version: 1.0\n").unwrap();
+            zw.finish().unwrap();
+        }
+        assert!(!jar_contains_entry(&broken_fabric_jar, "net/minecraft/client/main/Main.class"));
+        assert!(!is_vanilla_client_jar_healthy(&broken_fabric_jar, None));
+
+        // Create a valid ZIP containing Main.class >= 1MB -> jar_contains_entry and health check pass
+        let parent_jar = vanilla_dir.join("26.3.jar");
+        {
+            let file = File::create(&parent_jar).unwrap();
+            let mut zw = zip::ZipWriter::new(file);
+            let opts = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zw.start_file("net/minecraft/client/main/Main.class", opts).unwrap();
+            zw.write_all(&vec![0xCA; 1_050_000]).unwrap();
+            zw.finish().unwrap();
+        }
+        assert!(jar_contains_entry(&parent_jar, "net/minecraft/client/main/Main.class"));
+        assert!(is_vanilla_client_jar_healthy(&parent_jar, None));
+        assert!(!is_vanilla_client_jar_healthy(&parent_jar, Some("0000000000000000000000000000000000000000")));
+
+        // construct_launch_spec must skip broken fabric jar and point classpath to vanilla 26.3.jar
+        let config = json!({});
+        let profile = json!({ "id": "p", "name": "P", "version": "26.3", "loader": "fabric" });
+        let auth = json!({ "name": "Steve", "uuid": "0", "access_token": "x", "user_type": "legacy" });
+        let manifest = VersionManifest {
+            id: "fabric-loader-0.19.5-26.3".to_string(),
+            inherits_from: Some("26.3".to_string()),
+            main_class: "net.fabricmc.loader.impl.launch.knot.KnotClient".to_string(),
+            arguments: None,
+            libraries: vec![],
+            asset_index: None,
+            assets: None,
+            downloads: None,
+        };
+        let spec = construct_launch_spec(
+            &config,
+            &profile,
+            &auth,
+            &manifest,
+            &temp_dir,
+            Path::new("/usr/bin/java"),
+            TargetOs::Linux,
+        )
+        .unwrap();
+        assert!(
+            spec.classpath.iter().any(|p| p == &parent_jar),
+            "Classpath must fall back to vanilla 26.3.jar when fabric jar lacks Main.class"
+        );
+        assert!(
+            !spec.classpath.iter().any(|p| p == &broken_fabric_jar),
+            "Broken fabric jar without Main.class must not be on classpath"
         );
 
         let _ = fs::remove_dir_all(&temp_dir);

@@ -438,9 +438,12 @@ pub fn analyze_crash(
         None
     };
 
-    // 4. Missing / Corrupted Client JAR (ClassNotFoundException: net.minecraft.client.main.Main)
-    if full_text.contains("ClassNotFoundException: net.minecraft.client.main.Main") {
-        let msg = "Základní herní soubor Minecraftu (client.jar) chybí nebo je poškozený. Kliknutím níže jej můžete znovu stáhnout a opravit.";
+    // 4. Missing / Corrupted Client JAR (ClassNotFoundException: net.minecraft.client.main.Main or secondary Fabric GUI Mixin error)
+    if full_text.contains("ClassNotFoundException: net.minecraft.client.main.Main")
+        || full_text.contains("NoClassDefFoundError: net/minecraft/server/packs/resources/PreparableReloadListener")
+        || full_text.contains("ClassNotFoundException: net.minecraft.server.packs.resources.PreparableReloadListener")
+    {
+        let msg = "Základní herní soubor Minecraftu (client.jar) chybí nebo je poškozený. Kliknutím níže jej můžete automaticky opravit a znovu stáhnout.";
         return json!({
             "hasCrash": true,
             "isCleanShutdown": false,
@@ -834,24 +837,77 @@ pub async fn apply_crash_fix(
                 .and_then(|p| p.get("version").and_then(|v| v.as_str()))
                 .or_else(|| cfg.get("version").and_then(|v| v.as_str()))
                 .unwrap_or("26.3");
+            let loader_type = profile
+                .and_then(|p| p.get("loader").and_then(|v| v.as_str()))
+                .unwrap_or("fabric");
 
             let jar_path = base_dir.join("versions").join(mc_ver).join(format!("{}.jar", mc_ver));
             if jar_path.exists() {
                 let _ = fs::remove_file(&jar_path);
             }
 
+            // Remove any stale/corrupted cached Fabric loader profile jars/manifests for this version
+            if !loader_type.eq_ignore_ascii_case("vanilla") {
+                let versions_dir = base_dir.join("versions");
+                if let Ok(entries) = fs::read_dir(&versions_dir) {
+                    let suffix = format!("-{}", mc_ver);
+                    for entry in entries.flatten() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if name.starts_with("fabric-loader-") && name.ends_with(&suffix) {
+                            let stale_jar = entry.path().join(format!("{}.jar", name));
+                            if stale_jar.exists() {
+                                let _ = fs::remove_file(&stale_jar);
+                            }
+                            let stale_json = entry.path().join(format!("{}.json", name));
+                            if stale_json.exists() {
+                                let _ = fs::remove_file(&stale_json);
+                            }
+                        }
+                    }
+                }
+            }
+
             match crate::launcher::fetch_or_cache_mojang_manifest(&base_dir, mc_ver).await {
-                Ok(manifest) => {
-                    match crate::launcher::ensure_vanilla_client_jar(&base_dir, mc_ver, &manifest).await {
-                        Ok(_) => json!({
-                            "success": true,
-                            "message": format!("Herní soubor verze {} byl úspěšně opraven a stažen.", mc_ver)
-                        }),
-                        Err(e) => json!({
+                Ok(vanilla_manifest) => {
+                    let effective_manifest = if loader_type.eq_ignore_ascii_case("vanilla") {
+                        vanilla_manifest.clone()
+                    } else {
+                        match crate::launcher::ensure_fabric_profile(&base_dir, mc_ver).await {
+                            Ok(fm) => fm,
+                            Err(e) => {
+                                return json!({
+                                    "success": false,
+                                    "error": format!("Nepodařilo se obnovit Fabric profil: {}", e)
+                                });
+                            }
+                        }
+                    };
+
+                    if let Err(e) = crate::launcher::ensure_vanilla_client_jar(&base_dir, mc_ver, &effective_manifest).await {
+                        return json!({
                             "success": false,
                             "error": format!("Chyba při stahování herního souboru: {}", e)
-                        }),
+                        });
                     }
+
+                    if let Err(e) = crate::launcher::ensure_libraries(
+                        &base_dir,
+                        &effective_manifest.libraries,
+                        crate::launcher::TargetOs::current(),
+                        |_, _| {},
+                    )
+                    .await
+                    {
+                        return json!({
+                            "success": false,
+                            "error": format!("Chyba při ověřování knihoven: {}", e)
+                        });
+                    }
+
+                    json!({
+                        "success": true,
+                        "message": format!("Herní soubor a knihovny verze {} byly úspěšně opraveny a ověřeny.", mc_ver)
+                    })
                 }
                 Err(e) => json!({
                     "success": false,
@@ -931,6 +987,28 @@ mod tests {
         let gl_res = analyze_crash(&tmp, 1, gl_logs, None);
         assert_eq!(gl_res.get("crashType").and_then(|v| v.as_str()), Some("OPENGL_DRIVER"));
         assert!(gl_res.get("autoFix").map_or(false, |v| v.is_null()));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_analyze_crash_detects_missing_client_main_and_webp_reload_listener() {
+        let tmp = std::env::temp_dir().join(format!("mychalsmp_crash_client_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let logs = "[17:19:30] [main/ERROR]: Failed to start Minecraft!\n\
+                    Caused by: java.lang.ClassNotFoundException: net.minecraft.client.main.Main\n\
+                    Caused by: java.lang.RuntimeException: Mixin transformation of com.twelvemonkeys.imageio.plugins.webp.WebPImageReaderSpi failed\n\
+                    Caused by: java.lang.NoClassDefFoundError: net/minecraft/server/packs/resources/PreparableReloadListener";
+        let res = analyze_crash(&tmp, 1, logs, None);
+        assert_eq!(res.get("crashType").and_then(|v| v.as_str()), Some("CORRUPT_CLIENT_JAR"));
+        assert_eq!(res.pointer("/autoFix/type").and_then(|v| v.as_str()), Some("repair_client_jar"));
+
+        let webp_only = "Caused by: java.lang.NoClassDefFoundError: net/minecraft/server/packs/resources/PreparableReloadListener";
+        let res2 = analyze_crash(&tmp, 1, webp_only, None);
+        assert_eq!(res2.get("crashType").and_then(|v| v.as_str()), Some("CORRUPT_CLIENT_JAR"));
+        assert_eq!(res2.pointer("/autoFix/type").and_then(|v| v.as_str()), Some("repair_client_jar"));
 
         let _ = fs::remove_dir_all(&tmp);
     }
