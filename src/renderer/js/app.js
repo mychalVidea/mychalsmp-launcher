@@ -576,6 +576,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // ── Tab Navigation ──────────────────────────────────────────────────────
+    // Záložka Účet: vytvoření WebGL kontextu (dispose hero + new SkinViewer + loadSkin) je těžké a dřív běželo
+    // synchronně v kliknutí zároveň s fade animací panelu -> celé okno na chvíli cuknulo. Teď se odloží až po doběhnutí
+    // animace panelu (~140 ms), takže přepnutí je plynulé a 3D model naběhne hned za ním.
+    let characterTabWebGLTimer = null;
+    function scheduleCharacterTabWebGL() {
+        if (characterTabWebGLTimer) clearTimeout(characterTabWebGLTimer);
+        characterTabWebGLTimer = setTimeout(() => {
+            characterTabWebGLTimer = null;
+            if (!isTabPaneVisible('character')) return;
+            disposeSkinViewerSafely('hero');
+            updateCharacterTabSkinPreview();
+            if (skinViewer) {
+                skinViewer.renderPaused = isLauncherSuspendedInTray;
+                skinViewer.setSize(200, 235);
+                try { skinViewer.render(); } catch (_) { }
+            }
+        }, 170);
+    }
+
     function switchTab(tabId) {
         if (typeof autoSaveSettings === 'function') {
             autoSaveSettings(true);
@@ -599,9 +618,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Udržet vždy maximálně jeden aktivní WebGL kontext (prevence černých skinů na WebKitGTK/NVIDIA)
         if (tabId !== 'play') {
             cancelHeroReturn();
-            disposeSkinViewerSafely('hero');
+            // Při přechodu na Účet se hero kontext zruší až v odloženém kroku (viz scheduleCharacterTabWebGL)
+            if (tabId !== 'character') {
+                disposeSkinViewerSafely('hero');
+            }
         }
         if (tabId !== 'character') {
+            if (characterTabWebGLTimer) {
+                clearTimeout(characterTabWebGLTimer);
+                characterTabWebGLTimer = null;
+            }
             disposeSkinViewerSafely('character');
         }
 
@@ -624,7 +650,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderServersFullTab();
             pingAllServersLive();
         } else if (tabId === 'character') {
-            updateCharacterTabSkinPreview();
+            scheduleCharacterTabWebGL();
         }
 
         if (tabId === 'play') {

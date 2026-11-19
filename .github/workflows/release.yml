@@ -65,13 +65,22 @@ jobs:
       - name: Install Linux System Dependencies
         if: matrix.os == 'linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
+          # Azure mirror na GitHub runnerech občas vyprší (connection timed out) -> krátký timeout + retry,
+          # aby build nevisel 12 minut a neselhal na jednom výpadku.
+          echo 'Acquire::Retries "5"; Acquire::http::Timeout "15"; Acquire::https::Timeout "15";' | sudo tee /etc/apt/apt.conf.d/80-ci-retries >/dev/null
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+              libwebkit2gtk-4.1-dev \
+              libxdo-dev \
+              libssl-dev \
+              libayatana-appindicator3-dev \
+              librsvg2-dev; then
+              exit 0
+            fi
+            echo "apt pokus $attempt selhal, zkousim znovu za 10 s..."
+            sleep 10
+          done
+          exit 1
 
       - name: Install Node Dependencies
         run: npm ci --prefer-offline --no-audit --no-fund
