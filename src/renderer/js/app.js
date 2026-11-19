@@ -3,6 +3,9 @@
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
+    if (window.__mychalsmpLauncherAppInit) return;
+    window.__mychalsmpLauncherAppInit = true;
+
     function normalizeTextureUrl(url) {
         if (!url || typeof url !== 'string') return '';
         const trimmed = url.trim();
