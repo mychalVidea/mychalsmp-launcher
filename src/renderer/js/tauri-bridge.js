@@ -163,6 +163,8 @@
     maximizeWindow: () => send('window_maximize'),
     closeWindow: () => send('window_close'),
     isMaximized: () => invoke('window_is_maximized'),
+    isTrayAvailable: () => invoke('is_tray_available_cmd'),
+    trimMemory: () => send('trim_memory'),
     onMaximizeChange: (callback) => on('window-maximize-change', callback),
 
     // File Dialogs & Shell

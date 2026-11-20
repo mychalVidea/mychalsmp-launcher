@@ -764,9 +764,16 @@ fn open_keyarts_folder() -> Value {
 // 8. Window Controls Commands
 // ─────────────────────────────────────────────────────────────────────────────
 
+pub static TRAY_AVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn is_tray_available() -> bool {
+    TRAY_AVAILABLE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 #[tauri::command]
 fn window_minimize(window: Window) {
     let _ = window.minimize();
+    let _ = window.emit("window-hidden-to-tray", ());
 }
 
 #[tauri::command]
@@ -782,13 +789,38 @@ fn window_maximize(window: Window) {
 
 #[tauri::command]
 fn window_close(window: Window) {
-    let _ = window.hide();
-    let _ = window.emit("window-hidden-to-tray", ());
+    if is_tray_available() {
+        let _ = window.hide();
+        let _ = window.emit("window-hidden-to-tray", ());
+    } else if crate::launcher::is_game_running() {
+        let _ = window.minimize();
+        let _ = window.emit("window-hidden-to-tray", ());
+    } else {
+        window.app_handle().exit(0);
+    }
 }
 
 #[tauri::command]
 fn window_is_maximized(window: Window) -> bool {
     window.is_maximized().unwrap_or(false)
+}
+
+#[tauri::command]
+fn trim_memory() {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::malloc_trim(0);
+    }
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use windows_sys::Win32::System::Threading::{GetCurrentProcess, SetProcessWorkingSetSize};
+        SetProcessWorkingSetSize(GetCurrentProcess(), usize::MAX, usize::MAX);
+    }
+}
+
+#[tauri::command]
+fn is_tray_available_cmd() -> bool {
+    is_tray_available()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1497,7 +1529,9 @@ pub fn run() {
             open_file_path,
             get_profile_packs,
             toggle_profile_pack,
-            delete_profile_pack
+            delete_profile_pack,
+            trim_memory,
+            is_tray_available_cmd
         ])
         .setup(|app| {
             let cfg = crate::config::load_config();
@@ -1581,15 +1615,33 @@ pub fn run() {
                                 }
                             });
 
-                        if let Some(icon) = app.default_window_icon().cloned() {
+                        let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
+                            .or_else(|_| tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")))
+                            .or_else(|_| {
+                                app.default_window_icon().cloned().ok_or_else(|| {
+                                    tauri::Error::AssetNotFound("No default window icon".into())
+                                })
+                            });
+
+                        if let Ok(icon) = tray_icon {
                             tray_builder = tray_builder.icon(icon);
                         }
 
-                        let _ = tray_builder.build(app);
+                        match tray_builder.build(app) {
+                            Ok(_) => {
+                                eprintln!("[Tray] Native system tray icon successfully initialized.");
+                                TRAY_AVAILABLE.store(true, std::sync::atomic::Ordering::SeqCst);
+                            }
+                            Err(e) => {
+                                eprintln!("[Tray] Failed to initialize system tray icon: {e}");
+                                TRAY_AVAILABLE.store(false, std::sync::atomic::Ordering::SeqCst);
+                            }
+                        }
                     }
                 }
             } else {
                 eprintln!("[Tray] Neither libayatana-appindicator3 nor libappindicator3 found. Tray icon disabled.");
+                TRAY_AVAILABLE.store(false, std::sync::atomic::Ordering::SeqCst);
             }
 
             Ok(())
@@ -1597,9 +1649,15 @@ pub fn run() {
         .on_window_event(|window, event| {
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = window.hide();
-                    let _ = window.emit("window-hidden-to-tray", ());
+                    if is_tray_available() {
+                        api.prevent_close();
+                        let _ = window.hide();
+                        let _ = window.emit("window-hidden-to-tray", ());
+                    } else if crate::launcher::is_game_running() {
+                        api.prevent_close();
+                        let _ = window.minimize();
+                        let _ = window.emit("window-hidden-to-tray", ());
+                    }
                 }
             }
         })

@@ -501,7 +501,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } catch (_) { }
 
-        console.log('[VÝKON] Launcher v Tray liště – 3D renderování, JS intervaly, animace pozastaveny a RAM uvolněna (0% zátěž CPU/GPU).');
+        // 6. Uvolnit paměťový fond procesu v OS (Linux malloc_trim / Windows SetProcessWorkingSetSize)
+        try {
+            if (window.api && typeof window.api.trimMemory === 'function') {
+                window.api.trimMemory();
+            }
+        } catch (_) { }
+
+        console.log('[VÝKON] Launcher v úsporném režimu – 3D renderování, JS intervaly, animace pozastaveny a RAM uvolněna (0% zátěž CPU/GPU).');
     }
 
     function resumeLauncherBackgroundActivity() {
@@ -566,15 +573,34 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (window.api && window.api.onWindowRestoredFromTray) {
         window.api.onWindowRestoredFromTray(() => {
-            resumeLauncherBackgroundActivity();
+            if (!isRunning) {
+                resumeLauncherBackgroundActivity();
+            }
         });
     }
 
+    // Automatický úsporný režim při minimalizaci, skrytí za jiná okna nebo přepnutí plochy
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            pauseLauncherBackgroundActivity();
+        } else if (!isRunning) {
+            resumeLauncherBackgroundActivity();
+        }
+    });
+
+    window.addEventListener('blur', () => {
+        if (isRunning) {
+            pauseLauncherBackgroundActivity();
+        }
+    });
+
     window.addEventListener('focus', () => {
         document.body.classList.remove('launch-handoff');
-        document.body.classList.remove('app-in-tray-paused');
-        if (isLauncherSuspendedInTray) {
-            resumeLauncherBackgroundActivity();
+        if (!isRunning) {
+            document.body.classList.remove('app-in-tray-paused');
+            if (isLauncherSuspendedInTray) {
+                resumeLauncherBackgroundActivity();
+            }
         }
     });
 
@@ -1026,13 +1052,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         let zinkReason = '';
-        if (!hasVulkan) {
+        const hasNvidiaProprietary = !!info?.hasNvidiaProprietary;
+        if (hasNvidiaProprietary) {
+            zinkReason = 'Nedoporučeno pro NVIDIA (nativní ovladač je rychlejší a Zink způsobuje pád Blaze3D).';
+        } else if (!hasVulkan) {
             zinkReason = 'Chybí hardwarový Vulkan ovladač.';
         } else if (isVulkanActive) {
             zinkReason = 'Zbytečné při zapnutém nativním Vulkan backendu.';
         }
         setPerfCardState('cardZink', 'checkZink', 'reasonZink', {
-            available: hasVulkan && !isVulkanActive,
+            available: hasVulkan && !isVulkanActive && !hasNvidiaProprietary,
             reasonText: zinkReason
         });
 
@@ -9640,6 +9669,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             setTimeout(() => {
                 document.body.classList.remove('launch-handoff');
             }, 400);
+            pauseLauncherBackgroundActivity();
             stopClientProgressTicker();
             isRunning = true;
             autoRelaunchAttempts = 0;

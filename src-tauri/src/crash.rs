@@ -599,6 +599,33 @@ pub fn analyze_crash(
         });
     }
 
+    // 7.6 Zink Frame Completion Timeout / Blaze3D Sync Error
+    if full_lower.contains("failed to wait for frame completion")
+        || (full_lower.contains("glcommandencoder.submit") && full_lower.contains("illegalstateexception"))
+    {
+        let msg = "Minecraft selhal při čekání na dokončení grafického snímku (Failed to wait for frame completion). Tato chyba vzniká při použití překladové vrstvy Mesa Zink na integrované grafice namísto dedikované grafiky NVIDIA.";
+        return json!({
+            "hasCrash": true,
+            "isCleanShutdown": false,
+            "fixed": false,
+            "exitCode": exit_code,
+            "crashType": "ZINK_FRAME_TIMEOUT",
+            "title": "Chyba Zink / Synchronizace snímku (Frame Completion Timeout)",
+            "message": msg,
+            "description": msg,
+            "recommendation": "Vypnout překladovou vrstvu Zink a použít nativní dedikovanou grafiku NVIDIA.",
+            "autoFix": {
+                "id": "DISABLE_ZINK_USE_NVIDIA",
+                "type": "disable_zink",
+                "label": "Vypnout Zink a použít dedikovanou grafiku NVIDIA"
+            },
+            "logExcerpt": log_excerpt,
+            "stackExcerpt": log_excerpt,
+            "crashReportPath": report_path_str,
+            "reportPath": report_path_str
+        });
+    }
+
     // 8. OpenGL / Graphics Driver
     if full_lower.contains("glfw error 65542")
         || full_lower.contains("wgl: the driver does not appear to support opengl")
@@ -727,6 +754,16 @@ pub async fn apply_crash_fix(
             json!({
                 "success": true,
                 "message": format!("Paměť RAM byla úspěšně navýšena na {} MB.", target_mb)
+            })
+        }
+        "disable_zink" => {
+            let mut cfg = load_config();
+            cfg["enableZink"] = json!(false);
+            cfg["enableDiscreteGpu"] = json!(true);
+            save_config(&cfg);
+            json!({
+                "success": true,
+                "message": "Překladová vrstva Zink byla zakázána a byla vynucena dedikovaná grafika NVIDIA."
             })
         }
         "disable_mod" => {

@@ -3300,8 +3300,15 @@ pub fn construct_launch_spec(
 fn hide_main_window_to_tray_once<R: Runtime>(app: &AppHandle<R>, tray_hidden: &AtomicBool) {
     if !tray_hidden.swap(true, Ordering::SeqCst) {
         if let Some(win) = app.get_webview_window("main") {
-            let _ = win.hide();
-            let _ = app.emit("window-hidden-to-tray", ());
+            if crate::is_tray_available() {
+                let _ = win.hide();
+                let _ = app.emit("window-hidden-to-tray", ());
+            } else {
+                // Pokud systémová lišta (tray) na daném desktopu/počítači není dostupná,
+                // minimalizovat do hlavní lišty úloh (taskbar), aby okno nezmizelo beze stopy!
+                let _ = win.minimize();
+                let _ = app.emit("window-hidden-to-tray", ());
+            }
         }
     }
 }

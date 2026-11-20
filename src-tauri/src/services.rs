@@ -1427,8 +1427,12 @@ pub fn detect_system_capabilities() -> SystemCapabilities {
             || drm_cards.iter().any(|(v, _, _)| v.as_deref() == Some("nvidia"));
         let nvidia_driver = if has_nvidia_gpu {
             detect_nvidia_driver_from_signals(
-                std::path::Path::new("/proc/driver/nvidia/version").exists(),
-                std::path::Path::new("/sys/module/nvidia").exists(),
+                std::path::Path::new("/proc/driver/nvidia/version").exists()
+                    || std::path::Path::new("/dev/nvidiactl").exists()
+                    || std::path::Path::new("/dev/nvidia0").exists(),
+                std::path::Path::new("/sys/module/nvidia").exists()
+                    || std::path::Path::new("/sys/module/nvidia_drm").exists()
+                    || std::path::Path::new("/sys/module/nvidia_modeset").exists(),
                 std::path::Path::new("/sys/module/nouveau").exists(),
                 &drm_drivers,
             )
