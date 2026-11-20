@@ -10,8 +10,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 use zip::ZipArchive;
 
-pub const CORE_SELFNAMETAG_FILENAME: &str = "selfnametag-1.0.0.jar";
-const BUNDLED_SELFNAMETAG_JAR: &[u8] = include_bytes!("../../assets/mods/selfnametag-1.0.0.jar");
+pub const CORE_SELFNAMETAG_FILENAME: &str = "smpclient.jar";
+const BUNDLED_SELFNAMETAG_JAR: &[u8] = include_bytes!("../../assets/mods/smpclient.jar");
 const BUNDLED_VANILLA_BRAND_JAR: &[u8] = include_bytes!("../../assets/smpclient-brand.jar");
 
 fn resolve_bundled_asset_bytes(
@@ -65,23 +65,29 @@ fn write_jar_bytes_if_changed(target: &Path, expected_bytes: &[u8]) -> Result<bo
     Ok(true)
 }
 
-pub fn ensure_core_selfnametag_in_mods_dir(mods_dir: &Path, jar_bytes: &[u8]) -> Result<bool, String> {
-    fs::create_dir_all(mods_dir)
-        .map_err(|e| format!("Nelze vytvořit složku módů {}: {}", mods_dir.display(), e))?;
-
+fn cleanup_legacy_selfnametag_in_dir(mods_dir: &Path) {
     if let Ok(entries) = fs::read_dir(mods_dir) {
         for entry in entries.flatten() {
             let fname = entry.file_name().to_string_lossy().to_string();
             let lower = fname.to_lowercase();
-            if lower.starts_with("selfnametag")
+            let is_legacy_selfnametag = lower.starts_with("selfnametag")
+                && (lower.ends_with(".jar") || lower.ends_with(".jar.disabled"));
+            let is_stale_or_disabled_smpclient = lower.starts_with("smpclient")
+                && !lower.starts_with("smpclient-brand")
                 && ((lower.ends_with(".jar") && fname != CORE_SELFNAMETAG_FILENAME)
-                    || lower.ends_with(".jar.disabled"))
-            {
+                    || lower.ends_with(".jar.disabled"));
+            if is_legacy_selfnametag || is_stale_or_disabled_smpclient {
                 let _ = resilient_remove_file(&entry.path());
             }
         }
     }
+}
 
+pub fn ensure_core_selfnametag_in_mods_dir(mods_dir: &Path, jar_bytes: &[u8]) -> Result<bool, String> {
+    fs::create_dir_all(mods_dir)
+        .map_err(|e| format!("Nelze vytvořit složku módů {}: {}", mods_dir.display(), e))?;
+
+    cleanup_legacy_selfnametag_in_dir(mods_dir);
     write_jar_bytes_if_changed(&mods_dir.join(CORE_SELFNAMETAG_FILENAME), jar_bytes)
 }
 
@@ -93,9 +99,13 @@ pub fn ensure_core_smpclient_mods(
     if !loader_type.eq_ignore_ascii_case("fabric") && !loader_type.eq_ignore_ascii_case("quilt") {
         return Ok(false);
     }
+    let global_mods = crate::config::get_default_game_dir().join("mods");
+    if global_mods.is_dir() {
+        cleanup_legacy_selfnametag_in_dir(&global_mods);
+    }
     let jar_bytes = resolve_bundled_asset_bytes(
         app,
-        "mods/selfnametag-1.0.0.jar",
+        "mods/smpclient.jar",
         BUNDLED_SELFNAMETAG_JAR,
     );
     ensure_core_selfnametag_in_mods_dir(&prof_dir.join("mods"), &jar_bytes)
@@ -123,9 +133,15 @@ pub fn ensure_smpclient_vanilla_brand_jar(
 }
 
 fn is_core_selfnametag_mod(path: &Path, filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    if lower == CORE_SELFNAMETAG_FILENAME
+        || lower == format!("{}.disabled", CORE_SELFNAMETAG_FILENAME)
+        || lower.starts_with("selfnametag")
+    {
+        return true;
+    }
     let (mod_id, _, _, _, _) = parse_jar_metadata(path, filename);
-    mod_id.eq_ignore_ascii_case("selfnametag")
-        || filename.to_lowercase().starts_with("selfnametag")
+    mod_id.eq_ignore_ascii_case("selfnametag") || mod_id.eq_ignore_ascii_case("smpclient")
 }
 
 pub struct OptimizationModDef {
@@ -1483,7 +1499,7 @@ pub fn get_profile_mods_list(profile_id: Option<&str>) -> Value {
                 "modrinthSlug": reg_entry.and_then(|r| r.get("slug")).cloned().unwrap_or(Value::Null),
                 "iconUrl": icon_val,
                 "iconDataUrl": icon_val,
-                "isCore": mod_id == "selfnametag"
+                "isCore": is_core_selfnametag_mod(&path, &fname)
             }));
         }
     }
@@ -1606,10 +1622,10 @@ pub fn toggle_profile_mod_file(profile_id: Option<&str>, filename: &str) -> Valu
     let (new_name, enabled) = if safe_name.ends_with(".disabled") {
         (safe_name.trim_end_matches(".disabled").to_string(), true)
     } else {
-        if is_core_selfnametag_mod(&current_path, &safe_name) {
+                if is_core_selfnametag_mod(&current_path, &safe_name) {
             return json!({
                 "success": false,
-                "error": "Základní mód SMPClient (Self Nametag) nelze vypnout — zajišťuje detekci klienta a barevný nick."
+                "error": "Základní mód SMPClient (smpclient.jar) nelze vypnout — zajišťuje detekci klienta, HUD editor a barevný nick."
             });
         }
         (format!("{}.disabled", safe_name), false)
@@ -1634,7 +1650,7 @@ pub fn delete_profile_mod_file(profile_id: Option<&str>, filename: &str) -> Valu
         if is_core_selfnametag_mod(&target, &safe_name) {
             return json!({
                 "success": false,
-                "error": "Základní mód SMPClient (Self Nametag) nelze smazat — zajišťuje detekci klienta a barevný nick."
+                "error": "Základní mód SMPClient (smpclient.jar) nelze smazat — zajišťuje detekci klienta, HUD editor a barevný nick."
             });
         }
         if let Err(e) = resilient_remove_file(&target) {
@@ -1665,9 +1681,16 @@ pub fn resolve_profile_mod_collisions(profile_id: Option<&str>) -> Value {
                         (fname, mtime)
                     })
                     .collect();
-                // Sort newest first, keep the newest, delete older duplicates
-                file_infos.sort_by(|a, b| b.1.cmp(&a.1));
+                // Keep core smpclient.jar first, otherwise sort newest first and delete older duplicates
+                file_infos.sort_by(|a, b| {
+                    let a_core = a.0.eq_ignore_ascii_case(CORE_SELFNAMETAG_FILENAME);
+                    let b_core = b.0.eq_ignore_ascii_case(CORE_SELFNAMETAG_FILENAME);
+                    b_core.cmp(&a_core).then_with(|| b.1.cmp(&a.1))
+                });
                 for (old_file, _) in file_infos.into_iter().skip(1) {
+                    if old_file.eq_ignore_ascii_case(CORE_SELFNAMETAG_FILENAME) {
+                        continue;
+                    }
                     if fs::remove_file(mods_dir.join(&old_file)).is_ok() {
                         removed.push(old_file);
                     }
@@ -2305,13 +2328,18 @@ mod tests {
         let _ = fs::remove_dir_all(&tmp);
         let mods_dir = tmp.join("mods");
         fs::create_dir_all(&mods_dir).unwrap();
+        fs::write(mods_dir.join("selfnametag-1.0.0.jar"), b"legacy-active").unwrap();
         fs::write(mods_dir.join("selfnametag-1.0.0.jar.disabled"), b"old-disabled").unwrap();
         fs::write(mods_dir.join("selfnametag-0.9.0.jar"), b"old-version").unwrap();
+        fs::write(mods_dir.join("smpclient.jar.disabled"), b"old-smp-disabled").unwrap();
+        fs::write(mods_dir.join(CORE_SELFNAMETAG_FILENAME), b"outdated-smpclient").unwrap();
 
         let installed = ensure_core_selfnametag_in_mods_dir(&mods_dir, BUNDLED_SELFNAMETAG_JAR).unwrap();
-        assert!(installed, "Expected selfnametag-1.0.0.jar to be written");
+        assert!(installed, "Expected smpclient.jar to be written");
+        assert!(!mods_dir.join("selfnametag-1.0.0.jar").exists());
         assert!(!mods_dir.join("selfnametag-1.0.0.jar.disabled").exists());
         assert!(!mods_dir.join("selfnametag-0.9.0.jar").exists());
+        assert!(!mods_dir.join("smpclient.jar.disabled").exists());
         assert_eq!(
             fs::read(mods_dir.join(CORE_SELFNAMETAG_FILENAME)).unwrap(),
             BUNDLED_SELFNAMETAG_JAR

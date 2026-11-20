@@ -162,6 +162,7 @@ pub fn extract_incompatible_mod_filename(text: &str) -> Option<String> {
             && !lower.starts_with("fabric-api")
             && !lower.starts_with("minecraft")
             && !lower.starts_with("selfnametag")
+            && !lower.starts_with("smpclient")
         {
             return Some(fname);
         }
@@ -181,6 +182,7 @@ const PROTECTED_CORE_MOD_IDS: &[&str] = &[
     "sodium",
     "lithium",
     "selfnametag",
+    "smpclient",
 ];
 
 fn is_protected_mod_id(mod_id: &str) -> bool {

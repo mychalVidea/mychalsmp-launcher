@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
-use tokio::io::{AsyncBufReadExt, BufReader as TokioBufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
 
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const DEFAULT_MIN_RAM_MB: u64 = 2048;
@@ -3592,6 +3592,58 @@ fn signal_game_window_ready<R: Runtime>(
     }
 }
 
+const LAUNCHER_GATE_SALT: &str = "MYCHALSMP_GATE_V1:";
+
+fn compute_launcher_gate_proof(nonce: &str) -> String {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(LAUNCHER_GATE_SALT.as_bytes());
+    hasher.update(nonce.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+async fn spawn_one_shot_launcher_gate() -> Option<String> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.ok()?;
+    let port = listener.local_addr().ok()?.port();
+
+    let mut random_bytes = [0u8; 16];
+    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut random_bytes);
+    let nonce = hex::encode(random_bytes);
+    let expected_nonce = nonce.clone();
+    let expected_proof = compute_launcher_gate_proof(&nonce);
+
+    tokio::spawn(async move {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+        loop {
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                break;
+            }
+            let remaining = deadline - now;
+            match tokio::time::timeout(remaining, listener.accept()).await {
+                Ok(Ok((socket, _addr))) => {
+                    let (read_half, mut write_half) = socket.into_split();
+                    let mut reader = TokioBufReader::new(read_half);
+                    let mut line = String::new();
+                    if let Ok(Ok(_n)) =
+                        tokio::time::timeout(Duration::from_secs(2), reader.read_line(&mut line)).await
+                    {
+                        if line.trim() == expected_nonce {
+                            let _ = write_half.write_all(expected_proof.as_bytes()).await;
+                            let _ = write_half.write_all(b"\n").await;
+                            let _ = write_half.flush().await;
+                            let _ = write_half.shutdown().await;
+                            break;
+                        }
+                    }
+                }
+                _ => break,
+            }
+        }
+    });
+
+    Some(format!("{}:{}", port, nonce))
+}
+
 pub async fn spawn_game_process<R: Runtime>(
     app: &AppHandle<R>,
     spec: LaunchSpec,
@@ -3641,6 +3693,12 @@ pub async fn spawn_game_process<R: Runtime>(
 
     for (k, v) in &spec.env_vars {
         cmd.env(k, v);
+    }
+
+    if !loader_type.eq_ignore_ascii_case("vanilla") {
+        if let Some(gate_token) = spawn_one_shot_launcher_gate().await {
+            cmd.env("SMPCLIENT_GATE", gate_token);
+        }
     }
 
     cmd.stdout(std::process::Stdio::piped());
@@ -4498,6 +4556,32 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_launcher_gate_handshake_one_shot() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let gate = spawn_one_shot_launcher_gate().await.expect("gate should bind");
+            let (port_str, nonce) = gate.split_once(':').expect("format port:nonce");
+            let port: u16 = port_str.parse().unwrap();
+
+            let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .expect("client connects once");
+            stream.write_all(format!("{}\n", nonce).as_bytes()).await.unwrap();
+            stream.flush().await.unwrap();
+
+            let mut reader = TokioBufReader::new(stream);
+            let mut reply = String::new();
+            reader.read_line(&mut reply).await.unwrap();
+            assert_eq!(reply.trim(), compute_launcher_gate_proof(nonce));
+
+            // Yield so listener drops after one-shot response
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            let second = tokio::net::TcpStream::connect(("127.0.0.1", port)).await;
+            assert!(second.is_err(), "Gate must close immediately after single valid handshake");
+        });
     }
 }
 

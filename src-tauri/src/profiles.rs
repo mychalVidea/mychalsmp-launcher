@@ -977,7 +977,7 @@ pub async fn upgrade_profile(
                 .and_then(|v| v.as_str())
                 .unwrap_or("fabric");
 
-            if slug.eq_ignore_ascii_case("selfnametag") {
+            if slug.eq_ignore_ascii_case("selfnametag") || slug.eq_ignore_ascii_case("smpclient") {
                 if crate::mods::ensure_core_smpclient_mods(app, &target_game_dir, loader).is_ok() {
                     upgraded_mods.push(json!({
                         "oldFile": file,

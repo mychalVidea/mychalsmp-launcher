@@ -5191,7 +5191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 </div>
                 <div class="mod-row-actions">
                     ${m.isCore
-                    ? `<span style="color: var(--brand-gray); font-size: 12px; font-weight: 500;">Jádro SMPClient</span>`
+                    ? `<span class="mod-core-lock" style="display:inline-flex;align-items:center;gap:5px;color:#94a3b8;font-size:12px;font-weight:500;padding:4px 8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);border-radius:6px;" title="Vestavěný jádrový mód SMPClient nelze vypnout ani smazat"><svg class="ui-icon-svg ui-icon-svg--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Vestavěný mód</span>`
                     : `<button type="button" class="btn-mod-toggle ${m.enabled ? 'btn-disable' : 'btn-enable'}"
                             data-filename="${escapeHtml(m.filename)}"
                             title="${m.enabled ? 'Deaktivovat mód' : 'Aktivovat mód'}">

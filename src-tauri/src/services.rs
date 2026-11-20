@@ -2851,7 +2851,7 @@ mod tests {
         fs::write(dir.join("SMPClient"), b"tauri-bin").unwrap();
         fs::write(dir.join("resources/logo.png"), b"png").unwrap();
         fs::write(dir.join("assets/indexes/26.3.json"), b"{}").unwrap();
-        fs::write(dir.join("mods/selfnametag-1.0.0.jar"), b"jar").unwrap();
+        fs::write(dir.join("mods/smpclient.jar"), b"jar").unwrap();
 
         // Obsolete Electron files (must be deleted)
         fs::write(dir.join("icudtl.dat"), vec![1u8; 64]).unwrap();
@@ -2874,7 +2874,7 @@ mod tests {
         assert!(dir.join("SMPClient").exists());
         assert!(dir.join("resources/logo.png").exists());
         assert!(dir.join("assets/indexes/26.3.json").exists());
-        assert!(dir.join("mods/selfnametag-1.0.0.jar").exists());
+        assert!(dir.join("mods/smpclient.jar").exists());
 
         assert!(!dir.join("icudtl.dat").exists());
         assert!(!dir.join("libGLESv2.so").exists());
