@@ -789,11 +789,8 @@ fn window_maximize(window: Window) {
 
 #[tauri::command]
 fn window_close(window: Window) {
-    if is_tray_available() {
+    if is_tray_available() || crate::launcher::is_game_running() {
         let _ = window.hide();
-        let _ = window.emit("window-hidden-to-tray", ());
-    } else if crate::launcher::is_game_running() {
-        let _ = window.minimize();
         let _ = window.emit("window-hidden-to-tray", ());
     } else {
         window.app_handle().exit(0);
@@ -1416,20 +1413,8 @@ fn delete_profile_pack(
 
 #[cfg(target_os = "linux")]
 fn is_tray_supported_on_linux() -> bool {
-    let libs = [
-        b"libayatana-appindicator3.so.1\0".as_ptr() as *const libc::c_char,
-        b"libayatana-appindicator3.so\0".as_ptr() as *const libc::c_char,
-        b"libappindicator3.so.1\0".as_ptr() as *const libc::c_char,
-        b"libappindicator3.so\0".as_ptr() as *const libc::c_char,
-    ];
-    for &lib in &libs {
-        let handle = unsafe { libc::dlopen(lib, libc::RTLD_LAZY | libc::RTLD_LOCAL) };
-        if !handle.is_null() {
-            unsafe { libc::dlclose(handle) };
-            return true;
-        }
-    }
-    false
+    // Vždy nechat Tauri v2 pokusit se sestavit tray ikonu (Tauri si knihovny načítá dynamicky)
+    true
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -1634,13 +1619,14 @@ pub fn run() {
                             }
                             Err(e) => {
                                 eprintln!("[Tray] Failed to initialize system tray icon: {e}");
+                                eprintln!("[Tray] TIP (Arch Linux / CachyOS): Pro zobrazení ikony v liště nainstalujte: sudo pacman -S libayatana-appindicator");
                                 TRAY_AVAILABLE.store(false, std::sync::atomic::Ordering::SeqCst);
                             }
                         }
                     }
                 }
             } else {
-                eprintln!("[Tray] Neither libayatana-appindicator3 nor libappindicator3 found. Tray icon disabled.");
+                eprintln!("[Tray] Tray initialization skipped.");
                 TRAY_AVAILABLE.store(false, std::sync::atomic::Ordering::SeqCst);
             }
 
@@ -1649,13 +1635,9 @@ pub fn run() {
         .on_window_event(|window, event| {
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    if is_tray_available() {
+                    if is_tray_available() || crate::launcher::is_game_running() {
                         api.prevent_close();
                         let _ = window.hide();
-                        let _ = window.emit("window-hidden-to-tray", ());
-                    } else if crate::launcher::is_game_running() {
-                        api.prevent_close();
-                        let _ = window.minimize();
                         let _ = window.emit("window-hidden-to-tray", ());
                     }
                 }
