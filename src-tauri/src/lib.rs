@@ -307,22 +307,48 @@ async fn launch_game(
                 }
             };
             if ms_account.is_object() {
-                json!({
-                    "name": ms_account
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Player"),
-                    "uuid": ms_account
-                        .get("uuid")
-                        .or_else(|| ms_account.get("id"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("00000000-0000-0000-0000-000000000000"),
-                    "access_token": ms_account
-                        .get("accessToken")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("offline"),
-                    "user_type": "msa",
-                })
+                let expires_at = ms_account.get("expiresAt").and_then(|v| v.as_u64()).unwrap_or(0);
+                let now = crate::auth::now_ms();
+                let has_token = ms_account
+                    .get("accessToken")
+                    .and_then(|v| v.as_str())
+                    .map(|s| !s.is_empty())
+                    .unwrap_or(false);
+                let is_expired = !has_token || (expires_at > 0 && expires_at <= now);
+                let player_name = ms_account
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Player");
+
+                if is_expired {
+                    // Token vypršel a Microsoft servery jsou nedostupné (např. pomalá či blokovaná školní síť).
+                    // Spustíme hru v offline režimu s nickem hráče, aby se mohl připojit na server přes /login
+                    // a hra nespadla na Mojang chybě "Invalid session"!
+                    let _ = app_clone.emit(
+                        "auth-status",
+                        "Microsoft relace vypršela (offline/blokováno). Spouštím v offline režimu s heslem...",
+                    );
+                    json!({
+                        "name": player_name,
+                        "uuid": crate::auth::generate_offline_uuid(player_name),
+                        "access_token": "offline",
+                        "user_type": "legacy",
+                    })
+                } else {
+                    json!({
+                        "name": player_name,
+                        "uuid": ms_account
+                            .get("uuid")
+                            .or_else(|| ms_account.get("id"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("00000000-0000-0000-0000-000000000000"),
+                        "access_token": ms_account
+                            .get("accessToken")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("offline"),
+                        "user_type": "msa",
+                    })
+                }
             } else {
                 let uname = cfg
                     .get("username")

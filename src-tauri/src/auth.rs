@@ -72,7 +72,7 @@ pub fn create_offline_auth(username: &str) -> Result<Value, String> {
     }))
 }
 
-fn now_ms() -> u64 {
+pub fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -209,6 +209,13 @@ async fn exchange_ms_token_to_minecraft(
     let dashed_uuid = format_dashed_uuid(raw_uuid);
     let expires_at = now_ms() + expires_in * 1000;
 
+    let skins = profile_json.get("skins").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let capes = profile_json.get("capes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let active_skin = skins.iter().find(|s| s.get("state").and_then(|v| v.as_str()) == Some("ACTIVE")).or_else(|| skins.first()).cloned().unwrap_or(Value::Null);
+    let active_cape = capes.iter().find(|c| c.get("state").and_then(|v| v.as_str()) == Some("ACTIVE")).cloned().unwrap_or(Value::Null);
+    let skin_url = active_skin.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let skin_variant = active_skin.get("variant").and_then(|v| v.as_str()).unwrap_or("classic").to_lowercase();
+
     Ok(json!({
         "name": name,
         "uuid": dashed_uuid,
@@ -217,6 +224,12 @@ async fn exchange_ms_token_to_minecraft(
         "refreshToken": ms_refresh_token,
         "expiresAt": expires_at,
         "type": "microsoft",
+        "skinUrl": skin_url,
+        "skinVariant": skin_variant,
+        "activeSkin": active_skin,
+        "activeCape": active_cape,
+        "capes": capes,
+        "cachedProfile": profile_json.clone(),
         "mclcAuth": {
             "access_token": mc_access_token,
             "client_token": dashed_uuid,
@@ -365,8 +378,8 @@ pub async fn refresh_microsoft_session(force: bool) -> Result<Value, String> {
         .map(|s| !s.is_empty())
         .unwrap_or(false);
 
-    // If not forced and still valid for > 15 minutes, verify quickly against profile endpoint
-    if !force && has_token && expires_at > now_ms() + 15 * 60 * 1000 {
+    // If not forced and still valid for > 5 minutes, keep existing session without risking slow-network failure
+    if !force && has_token && expires_at > now_ms() + 5 * 60 * 1000 {
         return Ok(ms);
     }
 
@@ -382,11 +395,11 @@ pub async fn refresh_microsoft_session(force: bool) -> Result<Value, String> {
     }
 
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
+        .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let token_resp = client
+    let token_resp = match client
         .post("https://login.live.com/oauth20_token.srf")
         .form(&[
             ("client_id", MS_CLIENT_ID),
@@ -397,7 +410,16 @@ pub async fn refresh_microsoft_session(force: bool) -> Result<Value, String> {
         ])
         .send()
         .await
-        .map_err(|e| format!("Obnova Microsoft relace selhala: {}", e))?;
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            if has_token && expires_at > now_ms() {
+                eprintln!("[AUTH] Síťová chyba při obnově Microsoft relace, ale token je stále platný: {}", e);
+                return Ok(ms);
+            }
+            return Err(format!("Obnova Microsoft relace selhala (síťová chyba): {}", e));
+        }
+    };
 
     if !token_resp.status().is_success() {
         if has_token && expires_at > now_ms() {

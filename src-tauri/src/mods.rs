@@ -42,6 +42,19 @@ fn resolve_bundled_asset_bytes(
             }
         }
     }
+
+    // Pro smpclient.jar: pokud uživatel nebo build skript aktualizoval ~/.mychalsmp/mods/smpclient.jar,
+    // použijeme přednostně tuto aktuální verzi namísto starších vložených bajtů v binárce.
+    if rel_subpath == "mods/smpclient.jar" {
+        let local_mod = crate::config::get_default_game_dir().join("mods").join("smpclient.jar");
+        if local_mod.is_file() {
+            if let Ok(bytes) = fs::read(&local_mod) {
+                if bytes.len() >= 128 && bytes.starts_with(b"PK\x03\x04") {
+                    return bytes;
+                }
+            }
+        }
+    }
     embedded.to_vec()
 }
 

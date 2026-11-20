@@ -185,38 +185,97 @@ pub async fn get_mojang_profile_data() -> Result<Value, String> {
     let auth_type = cfg.get("authType").and_then(|v| v.as_str()).unwrap_or("offline");
 
     if auth_type == "microsoft" {
-        if let Ok(ms) = refresh_microsoft_session(false).await {
-            if let Some(token) = ms.get("accessToken").and_then(|v| v.as_str()) {
-                let client = reqwest::Client::builder()
-                    .timeout(Duration::from_secs(12))
-                    .build()
-                    .map_err(|e| e.to_string())?;
-                if let Ok(resp) = client
-                    .get("https://api.minecraftservices.com/minecraft/profile")
-                    .bearer_auth(token)
-                    .send()
-                    .await
-                {
-                    if resp.status().is_success() {
-                        if let Ok(profile) = resp.json::<Value>().await {
-                            let skins = profile.get("skins").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-                            let capes = profile.get("capes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-                            let active_skin = skins.iter().find(|s| s.get("state").and_then(|v| v.as_str()) == Some("ACTIVE")).or_else(|| skins.first()).cloned().unwrap_or(Value::Null);
-                            let active_cape = capes.iter().find(|c| c.get("state").and_then(|v| v.as_str()) == Some("ACTIVE")).cloned().unwrap_or(Value::Null);
-                            return Ok(json!({
-                                "success": true,
-                                "mode": "microsoft",
-                                "id": profile.get("id").cloned().unwrap_or(Value::Null),
-                                "name": profile.get("name").cloned().unwrap_or(Value::Null),
-                                "profile": profile.clone(),
-                                "activeSkin": active_skin,
-                                "activeCape": active_cape,
-                                "capes": capes
-                            }));
+        let ms_account = cfg.get("microsoftAccount").cloned();
+        if let Some(ref ms) = ms_account {
+            let token_opt = if let Ok(refreshed) = refresh_microsoft_session(false).await {
+                refreshed.get("accessToken").and_then(|v| v.as_str()).map(|s| s.to_string())
+            } else {
+                ms.get("accessToken").and_then(|v| v.as_str()).map(|s| s.to_string())
+            };
+
+            if let Some(token) = token_opt {
+                if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(12)).build() {
+                    if let Ok(resp) = client
+                        .get("https://api.minecraftservices.com/minecraft/profile")
+                        .bearer_auth(&token)
+                        .send()
+                        .await
+                    {
+                        if resp.status().is_success() {
+                            if let Ok(profile) = resp.json::<Value>().await {
+                                let skins = profile.get("skins").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                                let capes = profile.get("capes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                                let active_skin = skins.iter().find(|s| s.get("state").and_then(|v| v.as_str()) == Some("ACTIVE")).or_else(|| skins.first()).cloned().unwrap_or(Value::Null);
+                                let active_cape = capes.iter().find(|c| c.get("state").and_then(|v| v.as_str()) == Some("ACTIVE")).cloned().unwrap_or(Value::Null);
+                                let s_url = active_skin.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                let s_var = active_skin.get("variant").and_then(|v| v.as_str()).unwrap_or("classic").to_lowercase();
+
+                                // Uložíme profil i skin do mezipaměti v config.json pro offline zobrazení
+                                let _ = save_config(&json!({
+                                    "microsoftAccount": {
+                                        "skinUrl": s_url,
+                                        "skinVariant": s_var,
+                                        "activeSkin": active_skin,
+                                        "activeCape": active_cape,
+                                        "capes": capes,
+                                        "cachedProfile": profile.clone()
+                                    }
+                                }));
+
+                                return Ok(json!({
+                                    "success": true,
+                                    "mode": "microsoft",
+                                    "cached": false,
+                                    "id": profile.get("id").cloned().unwrap_or(Value::Null),
+                                    "name": profile.get("name").cloned().unwrap_or(Value::Null),
+                                    "profile": profile.clone(),
+                                    "activeSkin": active_skin,
+                                    "activeCape": active_cape,
+                                    "capes": capes
+                                }));
+                            }
                         }
                     }
                 }
             }
+
+            // FALLBACK PŘI POMALÉM / NEDOSTUPNÉM INTERNETU:
+            // Vrátíme uložená data profilu z mezipaměti, aby 3D model i pláště fungovaly okamžitě bez čekání na Mojang.
+            let cached_skin_url = ms.get("skinUrl").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let cached_variant = ms.get("skinVariant").and_then(|v| v.as_str()).unwrap_or("classic").to_string();
+            let cached_profile = ms.get("cachedProfile").cloned().unwrap_or_else(|| json!({
+                "id": ms.get("uuid").or_else(|| ms.get("id")),
+                "name": ms.get("name"),
+                "skins": if !cached_skin_url.is_empty() {
+                    json!([{ "state": "ACTIVE", "url": cached_skin_url, "variant": cached_variant }])
+                } else {
+                    json!([])
+                },
+                "capes": ms.get("capes").cloned().unwrap_or(json!([]))
+            }));
+
+            let skins = cached_profile.get("skins").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            let capes = cached_profile.get("capes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            let active_skin = skins.iter().find(|s| s.get("state").and_then(|v| v.as_str()) == Some("ACTIVE")).or_else(|| skins.first()).cloned().unwrap_or_else(|| {
+                if !cached_skin_url.is_empty() {
+                    json!({ "state": "ACTIVE", "url": cached_skin_url, "variant": cached_variant })
+                } else {
+                    Value::Null
+                }
+            });
+            let active_cape = capes.iter().find(|c| c.get("state").and_then(|v| v.as_str()) == Some("ACTIVE")).cloned().unwrap_or(Value::Null);
+
+            return Ok(json!({
+                "success": true,
+                "mode": "microsoft",
+                "cached": true,
+                "id": cached_profile.get("id").cloned().unwrap_or_else(|| ms.get("uuid").or_else(|| ms.get("id")).cloned().unwrap_or(Value::Null)),
+                "name": cached_profile.get("name").cloned().unwrap_or_else(|| ms.get("name").cloned().unwrap_or(Value::Null)),
+                "profile": cached_profile,
+                "activeSkin": active_skin,
+                "activeCape": active_cape,
+                "capes": capes
+            }));
         }
     }
 

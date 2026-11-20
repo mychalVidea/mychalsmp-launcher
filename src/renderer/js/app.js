@@ -7755,6 +7755,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     function applySkinAndCapeToViewer(viewer, { skinUrl, capeUrl, isSlim = false, backEquipment = 'cape', force = false, onSkinLoaded, onSkinError } = {}) {
         if (!viewer || viewer._disposed) return;
         const model = isSlim ? 'slim' : 'default';
+        const defaultFallbackSkin = isSlim ? 'assets/default_alex.png' : 'assets/default_steve.png';
+
         if (skinUrl) {
             const normSkin = toAssetSafeUrl(skinUrl);
             if (normSkin) {
@@ -7769,22 +7771,52 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 } else {
                     viewer._appliedSkinUrl = normSkin;
-                    if (viewer.playerObject && !viewer.skinTexture) {
-                        viewer.playerObject.visible = false;
+                    // Bleskový fallback pro pomalé sítě: pokud ještě nemáme texturu a načítáme vzdálené URL,
+                    // okamžitě vykreslíme vestavěný asset Steve/Alex, aby plátno nezůstalo černé.
+                    if (normSkin.startsWith('http') && !viewer.skinTexture) {
+                        try {
+                            viewer.loadSkin(defaultFallbackSkin, { model });
+                            if (viewer.playerObject) {
+                                viewer.playerObject.visible = true;
+                                if (viewer.playerObject.skin) viewer.playerObject.skin.visible = true;
+                            }
+                        } catch (_) {}
                     }
                     const pSkin = viewer.loadSkin(normSkin, { model });
                     if (pSkin && typeof pSkin.then === 'function') {
                         pSkin.then(() => {
                             if (viewer._disposed || viewer._appliedSkinUrl !== normSkin) return;
+                            if (viewer.playerObject) {
+                                viewer.playerObject.visible = true;
+                                if (viewer.playerObject.skin) viewer.playerObject.skin.visible = true;
+                            }
                             if (typeof onSkinLoaded === 'function') onSkinLoaded();
                             try { viewer.render(); } catch (_) { }
                         }).catch(err => {
+                            console.warn('[3D VIEWER] loadSkin failed, falling back to local asset:', err);
                             if (viewer._appliedSkinUrl === normSkin) viewer._appliedSkinUrl = undefined;
+                            if (normSkin !== defaultFallbackSkin) {
+                                try { viewer.loadSkin(defaultFallbackSkin, { model }); } catch (_) {}
+                            }
+                            if (viewer.playerObject) {
+                                viewer.playerObject.visible = true;
+                                if (viewer.playerObject.skin) viewer.playerObject.skin.visible = true;
+                            }
                             if (typeof onSkinError === 'function') onSkinError(err);
+                            try { viewer.render(); } catch (_) { }
                         });
                     }
                 }
             }
+        } else {
+            // Žádné URL nebylo zadáno: okamžitě načteme vestavěný skin
+            try {
+                viewer.loadSkin(defaultFallbackSkin, { model });
+                if (viewer.playerObject) {
+                    viewer.playerObject.visible = true;
+                    if (viewer.playerObject.skin) viewer.playerObject.skin.visible = true;
+                }
+            } catch (_) {}
         }
 
         if (capeUrl !== undefined) {
@@ -8574,7 +8606,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 if (countPill) countPill.style.display = 'none';
                 if (btnHideCape) btnHideCape.style.display = 'none';
-                container.innerHTML = `<div class="cape-loading-hint">Pláště nelze načíst (${res?.error || 'Nepřihlášen'}).</div>`;
+                const errText = res?.error || (currentConfig.authType === 'microsoft' ? 'Offline režim / pomalé spojení' : 'Nepřihlášen');
+                container.innerHTML = `<div class="cape-loading-hint">Pláště nelze načíst (${escapeHtml(errText)}).</div>`;
             }
         } catch (e) {
             if (countPill) countPill.style.display = 'none';
