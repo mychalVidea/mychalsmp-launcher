@@ -80,16 +80,13 @@ fi
 chmod +x "$INSTALL_DIR/mychalsmp-launcher"
 [ -f "$INSTALL_DIR/SMPClient" ] && chmod +x "$INSTALL_DIR/SMPClient" || true
 
-# Kontrola a automatická doinstalace systémových knihoven (přímo přes ldd na binárku + ldconfig fallback)
+# Kontrola a automatická doinstalace systémových knihoven (přímo přes ldd na binárku)
 check_missing_libs() {
-    if command -v ldd >/dev/null 2>&1 && ldd "$INSTALL_DIR/mychalsmp-launcher" 2>/dev/null | grep -q "not found"; then
-        return 0
-    fi
-    if ! ldconfig -p 2>/dev/null | grep -q "libwebkit2gtk-4.1.so"; then
-        return 0
-    fi
-    if ! ldconfig -p 2>/dev/null | grep -qE "libayatana-appindicator3\.so|libappindicator3\.so"; then
-        return 0
+    if command -v ldd >/dev/null 2>&1; then
+        if ldd "$INSTALL_DIR/mychalsmp-launcher" 2>/dev/null | grep -q "not found"; then
+            return 0
+        fi
+        return 1
     fi
     return 1
 }
