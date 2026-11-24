@@ -94,6 +94,34 @@ pub fn read_latest_log_tail(game_dir: &Path, max_lines: usize) -> String {
     }
 }
 
+const NON_MOD_WORDS: &[&str] = &[
+    "minecraft",
+    "java",
+    "fabricloader",
+    "fabric-loader",
+    "fabric",
+    "quilt_loader",
+    "quiltloader",
+    "version",
+    "versions",
+    "any",
+    "mod",
+    "mods",
+    "the",
+    "a",
+    "an",
+    "to",
+    "for",
+    "of",
+    "between",
+    "with",
+    "which",
+];
+
+fn is_valid_dep_candidate(dep_lower: &str) -> bool {
+    !dep_lower.is_empty() && !NON_MOD_WORDS.contains(&dep_lower)
+}
+
 /// Extracts missing mod dependencies from logs.
 pub fn extract_missing_dependency(text: &str) -> Option<(String, String)> {
     let lower = text.to_lowercase();
@@ -106,8 +134,7 @@ pub fn extract_missing_dependency(text: &str) -> Option<(String, String)> {
     if let Some(caps) = re_hard.captures(text) {
         let mod_id = caps[1].to_string();
         let dep_id = caps[2].to_string();
-        let dep_lower = dep_id.to_lowercase();
-        if !["minecraft", "java", "fabricloader", "fabric-loader", "fabric", "quilt_loader", "quiltloader"].contains(&dep_lower.as_str()) {
+        if is_valid_dep_candidate(&dep_id.to_lowercase()) {
             return Some((dep_id, mod_id));
         }
     }
@@ -116,9 +143,21 @@ pub fn extract_missing_dependency(text: &str) -> Option<(String, String)> {
     let re_fix = Regex::new(r"(?i)Fix:\s*add\s*\[add:([a-zA-Z0-9_\-]+)").unwrap();
     if let Some(caps) = re_fix.captures(text) {
         let dep_id = caps[1].to_string();
-        let dep_lower = dep_id.to_lowercase();
-        if !["minecraft", "java", "fabricloader", "fabric-loader", "fabric"].contains(&dep_lower.as_str()) {
+        if is_valid_dep_candidate(&dep_id.to_lowercase()) {
             return Some((dep_id, "Nainstalovaný mód".to_string()));
+        }
+    }
+
+    // 2.5 Fabric formatted: "Mod 'Name' (mod_id) ... of mod 'Dep Name' (dep_id), which is missing!"
+    let re_missing_mod = Regex::new(
+        r"(?i)Mod\s+'[^']+'\s+\(([a-zA-Z0-9_\-]+)\)[^\n]*(?:requires|depends\s+on)[^\n]*of\s+mod\s+'[^']+'\s+\(([a-zA-Z0-9_\-]+)\),?\s*which\s+is\s+missing",
+    )
+    .unwrap();
+    if let Some(caps) = re_missing_mod.captures(text) {
+        let mod_id = caps[1].to_string();
+        let dep_id = caps[2].to_string();
+        if is_valid_dep_candidate(&dep_id.to_lowercase()) {
+            return Some((dep_id, mod_id));
         }
     }
 
@@ -126,8 +165,7 @@ pub fn extract_missing_dependency(text: &str) -> Option<(String, String)> {
     let re_req = Regex::new(r"(?i)requires\s+([a-zA-Z0-9_\-]+)").unwrap();
     if let Some(caps) = re_req.captures(text) {
         let dep_id = caps[1].to_string();
-        let dep_lower = dep_id.to_lowercase();
-        if !["minecraft", "java", "fabricloader", "fabric-loader", "fabric"].contains(&dep_lower.as_str()) {
+        if is_valid_dep_candidate(&dep_id.to_lowercase()) {
             return Some((dep_id, "Nainstalovaný mód".to_string()));
         }
     }
@@ -140,11 +178,205 @@ pub fn extract_missing_dependency(text: &str) -> Option<(String, String)> {
             .next()
             .unwrap_or("")
             .trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
-        let dep_lower = dep.to_lowercase();
-        if !dep.is_empty()
-            && !["minecraft", "java", "fabricloader", "fabric-loader", "fabric"].contains(&dep_lower.as_str())
-        {
+        if is_valid_dep_candidate(&dep.to_lowercase()) {
             return Some((dep.to_string(), "Nainstalovaný mód".to_string()));
+        }
+    }
+
+    None
+}
+
+/// Returns true when the Fabric crash log describes a version/compatibility conflict
+/// rather than a simple missing third-party library mod.
+fn is_mod_incompatibility_crash(full_lower: &str) -> bool {
+    if full_lower.contains("is incompatible with")
+        || full_lower.contains("replace mod '")
+        || full_lower.contains("remove mod '")
+    {
+        return true;
+    }
+
+    let mentions_runtime_dep = (full_lower.contains("requires version")
+        || full_lower.contains("requires any version")
+        || full_lower.contains("depends on"))
+        && (full_lower.contains("'minecraft'")
+            || full_lower.contains("'fabricloader'")
+            || full_lower.contains("'fabric-loader'")
+            || full_lower.contains("'java'"));
+    if mentions_runtime_dep {
+        return true;
+    }
+
+    full_lower.contains("incompatible mods found!")
+        && !full_lower.contains("which is missing")
+        && !full_lower.contains("fix: add [add:")
+}
+
+/// Extracts candidate mod IDs involved in an incompatible-mods error (excluding core/protected IDs).
+fn extract_incompatible_mod_candidates(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut push_id = |id: &str| {
+        let clean = id.trim();
+        if !clean.is_empty()
+            && !is_protected_mod_id(clean)
+            && !out.iter().any(|existing: &String| existing.eq_ignore_ascii_case(clean))
+        {
+            out.push(clean.to_string());
+        }
+    };
+
+    // 1. Explicit Replace/Remove suggestions by Fabric Loader
+    let re_action =
+        Regex::new(r"(?i)(?:Replace|Remove)\s+mod\s+'[^']+'\s+\(([a-zA-Z0-9_\-]+)\)").unwrap();
+    for caps in re_action.captures_iter(text) {
+        push_id(&caps[1]);
+    }
+
+    // 2. Hard dependency / incompatibility culprit lines
+    let re_hard = Regex::new(
+        r"(?i)\[HARD_DEP(?:_NO_CANDIDATE)?\s+([a-zA-Z0-9_\-]+)\s+[^{]*\{depends\s+([a-zA-Z0-9_\-]+)",
+    )
+    .unwrap();
+    for caps in re_hard.captures_iter(text) {
+        push_id(&caps[1]);
+        push_id(&caps[2]);
+    }
+
+    // 3. Detailed Fabric Mod 'Name' (mod_id) entries
+    let re_mod_entry = Regex::new(r"(?i)Mod\s+'[^']+'\s+\(([a-zA-Z0-9_\-]+)\)").unwrap();
+    for caps in re_mod_entry.captures_iter(text) {
+        push_id(&caps[1]);
+    }
+
+    out
+}
+
+fn fabric_json_matches_id(json_str: &str, candidate_lower: &str) -> bool {
+    let Ok(val) = serde_json::from_str::<Value>(json_str) else {
+        return false;
+    };
+    if let Some(id) = val.get("id").and_then(|v| v.as_str()) {
+        if id.eq_ignore_ascii_case(candidate_lower) {
+            return true;
+        }
+    }
+    if let Some(provides) = val.get("provides").and_then(|v| v.as_array()) {
+        for p in provides {
+            if p.as_str().map(|s| s.eq_ignore_ascii_case(candidate_lower)).unwrap_or(false) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn jar_contains_mod_id(path: &Path, candidate_lower: &str) -> bool {
+    let Ok(file) = File::open(path) else {
+        return false;
+    };
+    let Ok(mut archive) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+
+    if let Ok(mut entry) = archive.by_name("fabric.mod.json") {
+        let mut content = String::new();
+        if entry.read_to_string(&mut content).is_ok()
+            && fabric_json_matches_id(&content, candidate_lower)
+        {
+            return true;
+        }
+    }
+
+    // Check nested Jar-in-Jar submods (e.g. *_bundle inside META-INF/jars/*.jar)
+    let nested_names: Vec<String> = (0..archive.len())
+        .filter_map(|i| {
+            let f = archive.by_index(i).ok()?;
+            let name = f.name().to_string();
+            if name.starts_with("META-INF/jars/") && name.ends_with(".jar") {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for nested_name in nested_names {
+        let Ok(mut nested_entry) = archive.by_name(&nested_name) else {
+            continue;
+        };
+        let mut bytes = Vec::new();
+        if nested_entry.read_to_end(&mut bytes).is_err() {
+            continue;
+        }
+        let cursor = std::io::Cursor::new(bytes);
+        if let Ok(mut nested_zip) = zip::ZipArchive::new(cursor) {
+            if let Ok(mut sub_fmj) = nested_zip.by_name("fabric.mod.json") {
+                let mut content = String::new();
+                if sub_fmj.read_to_string(&mut content).is_ok()
+                    && fabric_json_matches_id(&content, candidate_lower)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+fn normalize_mod_token(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
+}
+
+/// Finds an installed active `.jar` in `mods_dir` matching any candidate mod ID
+/// (via filename, `fabric.mod.json`, or nested `META-INF/jars/*.jar` sub-mods).
+fn find_installed_mod_jar_by_ids(mods_dir: &Path, candidates: &[String]) -> Option<(String, String)> {
+    let entries: Vec<String> = fs::read_dir(mods_dir)
+        .ok()?
+        .flatten()
+        .filter_map(|e| {
+            let fname = e.file_name().to_string_lossy().to_string();
+            let lower = fname.to_lowercase();
+            if e.path().is_file()
+                && lower.ends_with(".jar")
+                && !lower.starts_with("fabric-loader")
+                && !lower.starts_with("fabric-api")
+                && !lower.starts_with("minecraft")
+                && !lower.starts_with("selfnametag")
+                && !lower.starts_with("smpclient")
+            {
+                Some(fname)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for cand in candidates {
+        let cand_lower = cand.to_lowercase();
+        if is_protected_mod_id(&cand_lower) {
+            continue;
+        }
+        let cand_norm = normalize_mod_token(&cand_lower);
+
+        // 1. Exact JAR fabric.mod.json / nested JiJ match (most accurate)
+        for fname in &entries {
+            if jar_contains_mod_id(&mods_dir.join(fname), &cand_lower) {
+                return Some((fname.clone(), cand.clone()));
+            }
+        }
+
+        // 2. Filename prefix / substring match
+        if !cand_norm.is_empty() {
+            for fname in &entries {
+                let f_norm = normalize_mod_token(fname.trim_end_matches(".jar"));
+                if f_norm.starts_with(&cand_norm) || fname.to_lowercase().contains(&cand_lower) {
+                    return Some((fname.clone(), cand.clone()));
+                }
+            }
         }
     }
 
@@ -384,39 +616,46 @@ pub fn analyze_crash(
         });
     }
 
-    // 3. Missing Mod Dependency
-    if full_lower.contains("[hard_dep")
-        || full_lower.contains("requires {")
-        || full_lower.contains("fix: add [add:")
-        || full_lower.contains("missing dependency")
-        || full_lower.contains("depends on")
+    // 3. Missing Mod Dependency (only when NOT an incompatibility crash and dependency isn't already installed)
+    let mods_dir = game_dir.join("mods");
+    if !is_mod_incompatibility_crash(&full_lower)
+        && (full_lower.contains("[hard_dep")
+            || full_lower.contains("requires {")
+            || full_lower.contains("fix: add [add:")
+            || full_lower.contains("missing dependency")
+            || full_lower.contains("depends on")
+            || full_lower.contains("which is missing"))
     {
         if let Some((dep_id, mod_name)) = extract_missing_dependency(&full_text) {
-            let msg = format!(
-                "Mód '{}' vyžaduje pro spuštění doplněk '{}'. Můžete jej nainstalovat jedním kliknutím.",
-                mod_name, dep_id
-            );
-            return json!({
-                "hasCrash": true,
-                "isCleanShutdown": false,
-                "fixed": false,
-                "exitCode": exit_code,
-                "crashType": "MISSING_DEPENDENCY",
-                "title": "Chybějící závislost módu",
-                "message": msg,
-                "description": msg,
-                "recommendation": format!("Automaticky stáhnout a nainstalovat závislost '{}' z Modrinthu.", dep_id),
-                "autoFix": {
-                    "id": "INSTALL_DEP",
-                    "type": "install_mod",
-                    "label": format!("Nainstalovat chybějící mód '{}'", dep_id),
-                    "modId": dep_id
-                },
-                "logExcerpt": log_excerpt,
-                "stackExcerpt": log_excerpt,
-                "crashReportPath": report_path_str,
-                "reportPath": report_path_str
-            });
+            let dep_already_installed =
+                find_installed_mod_jar_by_ids(&mods_dir, &[dep_id.clone()]).is_some();
+            if !dep_already_installed {
+                let msg = format!(
+                    "Mód '{}' vyžaduje pro spuštění doplněk '{}'. Můžete jej nainstalovat jedním kliknutím.",
+                    mod_name, dep_id
+                );
+                return json!({
+                    "hasCrash": true,
+                    "isCleanShutdown": false,
+                    "fixed": false,
+                    "exitCode": exit_code,
+                    "crashType": "MISSING_DEPENDENCY",
+                    "title": "Chybějící závislost módu",
+                    "message": msg,
+                    "description": msg,
+                    "recommendation": format!("Automaticky stáhnout a nainstalovat závislost '{}' z Modrinthu.", dep_id),
+                    "autoFix": {
+                        "id": "INSTALL_DEP",
+                        "type": "install_mod",
+                        "label": format!("Nainstalovat chybějící mód '{}'", dep_id),
+                        "modId": dep_id
+                    },
+                    "logExcerpt": log_excerpt,
+                    "stackExcerpt": log_excerpt,
+                    "crashReportPath": report_path_str,
+                    "reportPath": report_path_str
+                });
+            }
         }
     }
 
@@ -535,7 +774,7 @@ pub fn analyze_crash(
         }
     }
 
-    // 7. Incompatible Mods / Duplicate Mods (Never auto-disable random jars!)
+    // 7. Incompatible Mods / Duplicate Mods
     if full_lower.contains("incompatible mods found!")
         || full_lower.contains("duplicate mod")
         || full_lower.contains("duplicate files found for mod")
@@ -546,15 +785,44 @@ pub fn analyze_crash(
         let mods_dir = game_dir.join("mods");
         let conflicting_file = extract_incompatible_mod_filename(&full_text)
             .filter(|fname| mods_dir.join(fname).exists());
-        let auto_fix = conflicting_file.as_ref().map(|fname| {
-            json!({
+        let matched_by_id = if conflicting_file.is_none() {
+            let candidates = extract_incompatible_mod_candidates(&full_text);
+            find_installed_mod_jar_by_ids(&mods_dir, &candidates)
+        } else {
+            None
+        };
+
+        let (disable_filename, disable_mod_id) = match (conflicting_file, matched_by_id) {
+            (Some(fname), _) => (Some(fname), None),
+            (None, Some((fname, mod_id))) => (Some(fname), Some(mod_id)),
+            _ => (None, None),
+        };
+
+        let auto_fix = disable_filename.as_ref().map(|fname| {
+            let mut fix = json!({
                 "id": "DISABLE_MOD",
                 "type": "disable_mod",
-                "label": format!("Zakázat duplicitní soubor {}", fname),
+                "label": format!("Zakázat nekompatibilní mód {}", fname),
                 "filename": fname
-            })
+            });
+            if let Some(ref mid) = disable_mod_id {
+                fix["modId"] = json!(mid);
+            }
+            fix
         });
-        let msg = "Detekován konflikt mezi nainstalovanými módy nebo chybějící závislost pro vybranou verzi Minecraftu. Zkontrolujte výpis chyby níže.";
+        let msg = if let Some(ref fname) = disable_filename {
+            format!(
+                "Mód '{}' je nekompatibilní s touto verzí Minecraftu nebo ostatními módy. SMPClient jej zakáže (.disabled).",
+                fname
+            )
+        } else {
+            "Detekován konflikt mezi nainstalovanými módy nebo nekompatibilní verze módu pro vybranou verzi Minecraftu. Zkontrolujte výpis chyby níže.".to_string()
+        };
+        let rec = if let Some(ref fname) = disable_filename {
+            format!("Zakázat nekompatibilní mód '{}'.", fname)
+        } else {
+            "Zkontrolujte kompatibilitu nainstalovaných módů s touto verzí Minecraftu ve Správci módů.".to_string()
+        };
 
         return json!({
             "hasCrash": true,
@@ -562,10 +830,10 @@ pub fn analyze_crash(
             "fixed": false,
             "exitCode": exit_code,
             "crashType": "INCOMPATIBLE_MODS",
-            "title": "Konflikt mezi módy",
+            "title": "Nekompatibilní mód",
             "message": msg,
             "description": msg,
-            "recommendation": "Zkontrolujte kompatibilitu nainstalovaných módů s touto verzí Minecraftu ve Správci módů.",
+            "recommendation": rec,
             "autoFix": auto_fix,
             "logExcerpt": log_excerpt,
             "stackExcerpt": log_excerpt,
@@ -777,39 +1045,19 @@ pub async fn apply_crash_fix(
             let game_dir = resolve_profile_dir(&cfg, profile_id);
             let mods_dir = game_dir.join("mods");
 
-            let target_filename = if let Some(f) = filename {
-                if mods_dir.join(f).exists() {
-                    f.to_string()
-                } else if let Some(m) = mod_id {
-                    let mut found = None;
-                    if let Ok(entries) = fs::read_dir(&mods_dir) {
-                        for entry in entries.flatten() {
-                            let name = entry.file_name().to_string_lossy().to_string();
-                            if name.to_lowercase().contains(&m.to_lowercase()) && name.ends_with(".jar") {
-                                found = Some(name);
-                                break;
-                            }
-                        }
-                    }
-                    found.unwrap_or_else(|| f.to_string())
-                } else {
-                    f.to_string()
-                }
+            let target_filename = if let Some(f) = filename.filter(|f| mods_dir.join(f).exists()) {
+                f.to_string()
             } else if let Some(m) = mod_id {
-                let mut found = None;
-                if let Ok(entries) = fs::read_dir(&mods_dir) {
-                    for entry in entries.flatten() {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        if name.to_lowercase().contains(&m.to_lowercase()) && name.ends_with(".jar") {
-                            found = Some(name);
-                            break;
-                        }
-                    }
-                }
-                found.unwrap_or_else(|| format!("{}.jar", m))
+                find_installed_mod_jar_by_ids(&mods_dir, &[m.to_string()])
+                    .map(|(fname, _)| fname)
+                    .unwrap_or_else(|| filename.unwrap_or("").to_string())
             } else {
-                return json!({ "success": false, "error": "Chybí název souboru k zakázání." });
+                filename.unwrap_or("").to_string()
             };
+
+            if target_filename.is_empty() {
+                return json!({ "success": false, "error": "Chybí název souboru k zakázání." });
+            }
 
             let src_file = mods_dir.join(&target_filename);
             if !src_file.exists() {
@@ -817,10 +1065,13 @@ pub async fn apply_crash_fix(
             }
 
             let dest_file = mods_dir.join(format!("{}.disabled", target_filename.replace(".disabled", "")));
+            if dest_file.exists() {
+                let _ = fs::remove_file(&dest_file);
+            }
             match crate::mods::resilient_rename(&src_file, &dest_file) {
                 Ok(_) => json!({
                     "success": true,
-                    "message": format!("Konfliktní mód '{}' byl zakázán.", target_filename)
+                    "message": format!("Nekompatibilní mód '{}' byl v SMPClientu zakázán.", target_filename)
                 }),
                 Err(e) => json!({
                     "success": false,
@@ -960,6 +1211,30 @@ pub async fn apply_crash_fix(
                 None => return json!({ "success": false, "error": "Chybí identifikátor módu." }),
             };
 
+            let cfg = load_config();
+            let game_dir = resolve_profile_dir(&cfg, profile_id);
+            let mods_dir = game_dir.join("mods");
+            if let Some((existing_fname, _)) =
+                find_installed_mod_jar_by_ids(&mods_dir, &[mod_id.to_string()])
+            {
+                let src_file = mods_dir.join(&existing_fname);
+                let dest_file =
+                    mods_dir.join(format!("{}.disabled", existing_fname.replace(".disabled", "")));
+                if dest_file.exists() {
+                    let _ = fs::remove_file(&dest_file);
+                }
+                return match crate::mods::resilient_rename(&src_file, &dest_file) {
+                    Ok(_) => json!({
+                        "success": true,
+                        "message": format!("Nekompatibilní mód '{}' už existuje a byl v SMPClientu zakázán.", existing_fname)
+                    }),
+                    Err(e) => json!({
+                        "success": false,
+                        "error": format!("Nelze zakázat nekompatibilní mód: {}", e)
+                    }),
+                };
+            }
+
             if let Some(a) = app {
                 let opts = json!({
                     "id": mod_id,
@@ -1010,6 +1285,7 @@ pub async fn apply_crash_fix(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     #[test]
     fn test_analyze_crash_prioritizes_lwjgl_natives_mismatch_over_driver_dll() {
@@ -1048,6 +1324,67 @@ mod tests {
         let res2 = analyze_crash(&tmp, 1, webp_only, None);
         assert_eq!(res2.get("crashType").and_then(|v| v.as_str()), Some("CORRUPT_CLIENT_JAR"));
         assert_eq!(res2.pointer("/autoFix/type").and_then(|v| v.as_str()), Some("repair_client_jar"));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_analyze_crash_disables_incompatible_mod_instead_of_downloading() {
+        let tmp = std::env::temp_dir().join(format!("mychalsmp_crash_incompat_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let mods_dir = tmp.join("mods");
+        fs::create_dir_all(&mods_dir).unwrap();
+
+        // Build a zip simulating a mod jar containing clientsidecrystals_bundle metadata
+        let jar_path = mods_dir.join("ClientSideCrystals-1.21.jar");
+        {
+            let file = File::create(&jar_path).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let opts = zip::write::SimpleFileOptions::default();
+            zip.start_file("fabric.mod.json", opts).unwrap();
+            zip.write_all(br#"{"id":"clientsidecrystals_bundle","version":"1.0.0"}"#).unwrap();
+            zip.finish().unwrap();
+        }
+
+        let logs = "[00:50:41] [main/ERROR]: Incompatible mods found!\n\
+                    net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!\n\
+                    \tat net.fabricmc.loader.impl.FormattedException.ofLocalized(FormattedException.java:51)\n\
+                    A potential solution has been determined, this may resolve your problem:\n\
+                    \t - Replace mod 'clientsidecrystals' (clientsidecrystals) 1.0.0 with any version that is compatible with:\n\
+                    \t\t - minecraft 26.3\n\
+                    More details:\n\
+                    [HARD_DEP clientsidecrystals_bundle {depends clientsidecrystals}]\n\
+                    \t - Mod 'clientsidecrystals_bundle' (clientsidecrystals_bundle) 1.0.0 requires version 1.21.4 of 'minecraft'.";
+
+        let res = analyze_crash(&tmp, 1, logs, None);
+        assert_eq!(res.get("crashType").and_then(|v| v.as_str()), Some("INCOMPATIBLE_MODS"));
+        assert_eq!(res.pointer("/autoFix/type").and_then(|v| v.as_str()), Some("disable_mod"));
+        assert_eq!(
+            res.pointer("/autoFix/filename").and_then(|v| v.as_str()),
+            Some("ClientSideCrystals-1.21.jar")
+        );
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_analyze_crash_still_installs_truly_missing_library_dependency() {
+        let tmp = std::env::temp_dir().join(format!("mychalsmp_crash_missing_dep_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let mods_dir = tmp.join("mods");
+        fs::create_dir_all(&mods_dir).unwrap();
+
+        let logs = "[00:50:41] [main/ERROR]: Incompatible mods found!\n\
+                    net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!\n\
+                    A potential solution has been determined, this may resolve your problem:\n\
+                    \t - Install fzzy_config, any version.\n\
+                    More details:\n\
+                    \t - Mod 'Particle Core' (particle_core) 0.3.0 depends on any version of mod 'Fzzy Config' (fzzy_config), which is missing!";
+
+        let res = analyze_crash(&tmp, 1, logs, None);
+        assert_eq!(res.get("crashType").and_then(|v| v.as_str()), Some("MISSING_DEPENDENCY"));
+        assert_eq!(res.pointer("/autoFix/type").and_then(|v| v.as_str()), Some("install_mod"));
+        assert_eq!(res.pointer("/autoFix/modId").and_then(|v| v.as_str()), Some("fzzy_config"));
 
         let _ = fs::remove_dir_all(&tmp);
     }

@@ -1,6 +1,6 @@
 [package]
 name = "mychalsmp-launcher"
-version = "1.8.8"
+version = "1.8.9"
 description = "MYCHAL SMP Official Launcher (SMPClient) — Pure Rust & Tauri v2"
 authors = ["mychalVidea"]
 license = "MIT"
